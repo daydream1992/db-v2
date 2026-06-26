@@ -1,0 +1,904 @@
+     1→     1→#!/usr/bin/env python3
+     2→     2→# -*- coding: utf-8 -*-
+     3→     3→"""
+     4→     4→run.py — 数据库入库统一入口（包工头）
+     5→     5→
+     6→     6→用法:
+     7→     7→  python run.py all [--weekly|--full]   执行入库
+     8→     8→  python run.py 10                      按编号执行
+     9→     9→  python run.py kline                   按关键字匹配执行
+    10→    10→  python run.py scan                    红绿扫描
+    11→    11→  python run.py check 表名              深度检查
+    12→    12→  python run.py get 表名 [--code X] [--days N]  导出数据
+    13→    13→  python run.py add 表名                新增表
+    14→    14→  python run.py remove 表名             删除表
+    15→    15→  python run.py fix 表名 [--date DATE]  补数(force=True)
+    16→    16→  python run.py backup                  备份数据库
+    17→    17→
+    18→    18→元数据来源：脚本头部 @meta（优先）> tables.json（备用）
+    19→    19→"""
+    20→    20→import sys
+    21→    21→import re
+    22→    22→import json
+    23→    23→import shutil
+    24→    24→import importlib.util
+    25→    25→import argparse
+    26→    26→from datetime import datetime
+    27→    27→from pathlib import Path
+    28→    28→
+    29→    29→import duckdb
+    30→    30→import pandas as pd
+    31→    31→from loguru import logger
+    32→    32→from rich.console import Console
+    33→    33→from rich.table import Table
+    34→    34→
+    35→    35→# ========== 常量区 ==========
+    36→    36→BASE_DIR = Path(__file__).parent.resolve()
+    37→    37→CONFIG_PATH = BASE_DIR / 'config' / 'tables.json'
+    38→    38→DB_PATH = Path(r'K:\DB数据库_v2\db\profit_radar.duckdb')
+    39→    39→LOG_DIR = BASE_DIR / 'logs'
+    40→    40→BACKUP_DIR = BASE_DIR / 'archive'
+    41→    41→OUTPUT_DIR = BASE_DIR / 'output'
+    42→    42→
+    43→    43→DIR_ORDER = ['1_入库', '2_计算']
+    44→    44→SCHEDULE_TIERS = {
+    45→    45→    'daily': ['daily'],
+    46→    46→    'weekly': ['daily', 'weekly'],
+    47→    47→    'full': ['daily', 'weekly', 'monthly', 'once'],
+    48→    48→}
+    49→    49→
+    50→    50→# ========== 日志配置 ==========
+    51→    51→def setup_logger():
+    52→    52→    LOG_DIR.mkdir(exist_ok=True)
+    53→    53→    ts = datetime.now().strftime('%Y%m%d')
+    54→    54→    log_file = LOG_DIR / f'run_{ts}.log'
+    55→    55→    logger.remove()
+    56→    56→    logger.add(sys.stderr, level='INFO', format='{time:HH:mm:ss} | {level:<7} | {message}')
+    57→    57→    logger.add(str(log_file), level='DEBUG', encoding='utf-8',
+    58→    58→               format='{time:YYYY-MM-DD HH:mm:ss} | {level:<7} | {message}')
+    59→    59→
+    60→    60→
+    61→    61→# ========== @meta 解析 ==========
+    62→    62→def parse_meta(script_path: Path) -> dict:
+    63→    63→    """从脚本头部解析 @meta 元数据"""
+    64→    64→    try:
+    65→    65→        content = script_path.read_text(encoding='utf-8')
+    66→    66→    except Exception:
+    67→    67→        return {}
+    68→    68→
+    69→    69→    meta = {}
+    70→    70→    # 解析一行中的多个 # @meta key=value
+    71→    71→    for line in content.split('\n'):
+    72→    72→        # 匹配整行：# @meta key=value key=value ...
+    73→    73→        m = re.match(r'#\s*@meta\s+(.*)', line)
+    74→    74→        if m:
+    75→    75→            # 解析所有 key=value
+    76→    76→            for kv in m.group(1).split():
+    77→    77→                parts = kv.split('=', 1)
+    78→    78→                if len(parts) == 2:
+    79→    79→                    meta[parts[0].strip()] = parts[1].strip()
+    80→    80→    return meta
+    81→    81→
+    82→    82→
+    83→    83→def get_all_scripts_meta() -> dict:
+    84→    84→    """扫描所有脚本，返回 {table_name: meta}"""
+    85→    85→    result = {}
+    86→    86→
+    87→    87→    for dir_name in DIR_ORDER:
+    88→    88→        dir_path = BASE_DIR / dir_name
+    89→    89→        if not dir_path.exists():
+    90→    90→            continue
+    91→    91→
+    92→    92→        for script_path in dir_path.glob('*.py'):
+    93→    93→            meta = parse_meta(script_path)
+    94→    94→            table_name = meta.get('table')
+    95→    95→            if table_name:
+    96→    96→                meta['_script_path'] = script_path
+    97→    97→                meta['_dir'] = dir_name
+    98→    98→                result[table_name] = meta
+    99→    99→
+   100→   100→    return result
+   101→   101→
+   102→   102→
+   103→   103→# ========== 配置读写（备用） ==========
+   104→   104→def load_tables() -> dict:
+   105→   105→    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+   106→   106→        return json.load(f)
+   107→   107→
+   108→   108→
+   109→   109→def save_tables(tables: dict):
+   110→   110→    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+   111→   111→        json.dump(tables, f, ensure_ascii=False, indent=2)
+   112→   112→
+   113→   113→
+   114→   114→# ========== 脚本发现与加载 ==========
+   115→   115→def find_script_path(table_name: str, scripts_meta: dict) -> Path:
+   116→   116→    """从已扫描的脚本元数据中找脚本路径"""
+   117→   117→    if table_name in scripts_meta:
+   118→   118→        return scripts_meta[table_name].get('_script_path')
+   119→   119→    return None
+   120→   120→
+   121→   121→
+   122→   122→def load_script_module(table_name: str, scripts_meta: dict):
+   123→   123→    """加载脚本模块"""
+   124→   124→    script_path = find_script_path(table_name, scripts_meta)
+   125→   125→    if not script_path or not script_path.exists():
+   126→   126→        return None
+   127→   127→
+   128→   128→    spec = importlib.util.spec_from_file_location(table_name, str(script_path))
+   129→   129→    if not spec or not spec.loader:
+   130→   130→        return None
+   131→   131→
+   132→   132→    mod = importlib.util.module_from_spec(spec)
+   133→   133→    spec.loader.exec_module(mod)
+   134→   134→    return mod
+   135→   135→
+   136→   136→
+   137→   137→# ========== 表过滤与匹配 ==========
+   138→   138→def filter_by_schedule(scripts_meta: dict, schedules: list) -> list:
+   139→   139→    """按schedule过滤，先1_入库再2_计算，按sort排"""
+   140→   140→    result = []
+   141→   141→    for d in DIR_ORDER:
+   142→   142→        items = [(name, meta) for name, meta in scripts_meta.items()
+   143→   143→                 if meta.get('_dir') == d and meta.get('schedule', 'once') in schedules]
+   144→   144→        items.sort(key=lambda x: int(x[1].get('sort', 999)))
+   145→   145→        result.extend([name for name, _ in items])
+   146→   146→    return result
+   147→   147→
+   148→   148→
+   149→   149→def match_keyword(scripts_meta: dict, keyword: str) -> list:
+   150→   150→    """按关键字匹配表名/中文名/sort编号"""
+   151→   151→    kw = keyword.lower()
+   152→   152→    result = []
+   153→   153→    for d in DIR_ORDER:
+   154→   154→        items = []
+   155→   155→        for name, meta in scripts_meta.items():
+   156→   156→            if meta.get('_dir') != d:
+   157→   157→                continue
+   158→   158→            sort_raw = meta.get('sort', '')
+   159→   159→            sort = str(int(sort_raw)) if sort_raw else ''
+   160→   160→            if (name == kw or kw in name
+   161→   161→                    or kw in meta.get('cn', '').lower()
+   162→   162→                    or sort.startswith(kw)):
+   163→   163→                items.append((name, int(meta.get('sort', 999))))
+   164→   164→        items.sort(key=lambda x: x[1])
+   165→   165→        result.extend([n for n, _ in items])
+   166→   166→    return list(dict.fromkeys(result))  # 去重保序
+   167→   167→
+   168→   168→
+   169→   169→# ========== 命令实现 ==========
+   170→   170→
+   171→   171→def cmd_all(scripts_meta: dict, tier: str):
+   172→   172→    """批量执行入库"""
+   173→   173→    schedules = SCHEDULE_TIERS.get(tier, SCHEDULE_TIERS['daily'])
+   174→   174→    table_list = filter_by_schedule(scripts_meta, schedules)
+   175→   175→    if not table_list:
+   176→   176→        logger.warning('没有匹配的表')
+   177→   177→        return
+   178→   178→
+   179→   179→    logger.info(f'共 {len(table_list)} 张表 (schedule={schedules})')
+   180→   180→
+   181→   181→    results = []
+   182→   182→    for name in table_list:
+   183→   183→        meta = scripts_meta.get(name, {})
+   184→   184→        sort = meta.get('sort', '?')
+   185→   185→        cn = meta.get('cn', '')
+   186→   186→        logger.info(f'[{sort}] {name} ({cn})')
+   187→   187→
+   188→   188→        mod = load_script_module(name, scripts_meta)
+   189→   189→        if mod is None:
+   190→   190→            logger.warning(f'  SKIP: 脚本不存在')
+   191→   191→            results.append((name, 'SKIP'))
+   192→   192→            continue
+   193→   193→
+   194→   194→        try:
+   195→   195→            ok = mod.run(force=False)
+   196→   196→            results.append((name, 'OK' if ok else 'FAIL'))
+   197→   197→        except Exception as e:
+   198→   198→            logger.error(f'  ERROR: {e}')
+   199→   199→            results.append((name, 'ERROR'))
+   200→   200→
+   201→   201→    _print_summary(results)
+   202→   202→
+   203→   203→
+   204→   204→def cmd_run_tables(scripts_meta: dict, keywords: list, force: bool = False):
+   205→   205→    """按关键字执行指定表"""
+   206→   206→    all_matched = []
+   207→   207→    for kw in keywords:
+   208→   208→        all_matched.extend(match_keyword(scripts_meta, kw))
+   209→   209→    unique = list(dict.fromkeys(all_matched))
+   210→   210→
+   211→   211→    if not unique:
+   212→   212→        logger.warning(f'未匹配到表: {keywords}')
+   213→   213→        return
+   214→   214→
+   215→   215→    logger.info(f'匹配 {len(unique)} 张表: {unique}')
+   216→   216→    results = []
+   217→   217→    for name in unique:
+   218→   218→        mod = load_script_module(name, scripts_meta)
+   219→   219→        if mod is None:
+   220→   220→            logger.warning(f'{name}: 脚本不存在')
+   221→   221→            results.append((name, 'SKIP'))
+   222→   222→            continue
+   223→   223→        try:
+   224→   224→            ok = mod.run(force=force)
+   225→   225→            results.append((name, 'OK' if ok else 'FAIL'))
+   226→   226→        except Exception as e:
+   227→   227→            logger.error(f'{name}: {e}')
+   228→   228→            results.append((name, 'ERROR'))
+   229→   229→
+   230→   230→    _print_summary(results)
+   231→   231→
+   232→   232→
+   233→   233→def cmd_scan(scripts_meta: dict):
+   234→   234→    """红绿扫描"""
+   235→   235→    tables_json = load_tables()
+   236→   236→    con = duckdb.connect(str(DB_PATH), read_only=True)
+   237→   237→
+   238→   238→    table = Table(title='Data Scan')
+   239→   239→    table.add_column('#', width=4)
+   240→   240→    table.add_column('Table', style='cyan', width=30)
+   241→   241→    table.add_column('Status', width=6)
+   242→   242→    table.add_column('Rows', justify='right', width=12)
+   243→   243→    table.add_column('Date Range', width=28)
+   244→   244→    table.add_column('Script', width=6)
+   245→   245→
+   246→   246→    # 按目录+sort排序
+   247→   247→    sorted_items = sorted(scripts_meta.items(),
+   248→   248→                          key=lambda x: (DIR_ORDER.index(x[1].get('_dir', '1_入库'))
+   249→   249→                                        if x[1].get('_dir', '1_入库') in DIR_ORDER else 9,
+   250→   250→                                        int(x[1].get('sort', 999))))
+   251→   251→
+   252→   252→    for i, (name, meta) in enumerate(sorted_items, 1):
+   253→   253→        # 行数
+   254→   254→        try:
+   255→   255→            row_count = con.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0]
+   256→   256→        except Exception:
+   257→   257→            row_count = -1
+   258→   258→
+   259→   259→        # 日期范围
+   260→   260→        date_range = '-'
+   261→   261→        if row_count > 0:
+   262→   262→            for col in ['date', 'trade_date', 'lhb_date', 'stat_date', 'report_date',
+   263→   263→                        'snapshot_date', 'update_date', 'trade_time', 'ex_date']:
+   264→   264→                try:
+   265→   265→                    r = con.execute(f"SELECT MIN({col}), MAX({col}) FROM {name}").fetchone()
+   266→   266→                    if r[0] and r[1]:
+   267→   267→                        date_range = f'{str(r[0])[:10]} ~ {str(r[1])[:10]}'
+   268→   268→                        break
+   269→   269→                except Exception:
+   270→   270→                    continue
+   271→   271→
+   272→   272→        # 脚本
+   273→   273→        script_path = meta.get('_script_path')
+   274→   274→        has_script = 'Y' if script_path and script_path.exists() else 'N'
+   275→   275→
+   276→   276→        # 状态（从 tables.json 读）
+   277→   277→        json_meta = tables_json.get(name, {})
+   278→   278→        status = json_meta.get('status', '-')
+   279→   279→
+   280→   280→        # 颜色
+   281→   281→        if row_count == 0:
+   282→   282→            status_color = '[red]0[/red]'
+   283→   283→        elif row_count < 0:
+   284→   284→            status_color = '[yellow]?[/yellow]'
+   285→   285→        else:
+   286→   286→            status_color = '[green]OK[/green]'
+   287→   287→
+   288→   288→        table.add_row(str(i), name, status_color, f'{row_count:,}', date_range, has_script)
+   289→   289→
+   290→   290→    con.close()
+   291→   291→    Console().print(table)
+   292→   292→
+   293→   293→
+   294→   294→def cmd_check(table_name: str, scripts_meta: dict):
+   295→   295→    """深度检查"""
+   296→   296→    if table_name not in scripts_meta:
+   297→   297→        logger.error(f'{table_name}: 未找到脚本')
+   298→   298→        return
+   299→   299→
+   300→   300→    meta = scripts_meta[table_name]
+   301→   301→    tables_json = load_tables()
+   302→   302→    json_meta = tables_json.get(table_name, {})
+   303→   303→
+   304→   304→    con = duckdb.connect(str(DB_PATH), read_only=True)
+   305→   305→
+   306→   306→    logger.info(f'Table: {table_name}')
+   307→   307→    logger.info(f'CN: {meta.get("cn", "-")}')
+   308→   308→    logger.info(f'Source: {meta.get("source", "-")}')
+   309→   309→    logger.info(f'Schedule: {meta.get("schedule", "-")}')
+   310→   310→    logger.info(f'Mode: {meta.get("mode", "-")}')
+   311→   311→    logger.info(f'Status: {json_meta.get("status", "-")}')
+   312→   312→
+   313→   313→    # 字段
+   314→   314→    try:
+   315→   315→        cols = con.execute(f"DESCRIBE {table_name}").df()
+   316→   316→        # 字段中文从数据字典 SSOT 取 (FIELD_MAP > dim > 通达信映射 > COMMON_CN)
+   317→   317→        from config.gen_data_dict import build_data_dict
+   318→   318→        col_cn = {c['name']: c.get('cn', '')
+   319→   319→                  for c in build_data_dict().get(table_name, {}).get('columns', [])}
+   320→   320→        logger.info(f'Columns ({len(cols)}):')
+   321→   321→        for _, row in cols.iterrows():
+   322→   322→            cn = col_cn.get(row['column_name'], '')
+   323→   323→            logger.info(f'  {row["column_name"]:<25} {row["column_type"]:<14} {cn}')
+   324→   324→    except Exception as e:
+   325→   325→        logger.error(f'DESCRIBE failed: {e}')
+   326→   326→
+   327→   327→    # 行数
+   328→   328→    try:
+   329→   329→        cnt = con.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+   330→   330→        logger.info(f'Rows: {cnt:,}')
+   331→   331→    except Exception:
+   332→   332→        pass
+   333→   333→
+   334→   334→    # 脚本路径
+   335→   335→    script_path = meta.get('_script_path')
+   336→   336→    logger.info(f'Script: {script_path} {"[exists]" if script_path and script_path.exists() else "[MISSING]"}')
+   337→   337→
+   338→   338→    con.close()
+   339→   339→
+   340→   340→
+   341→   341→# ========== 类型分类 & 新鲜度（catalog/health/join 共用）=========
+   342→   342→
+   343→   343→# 顺序敏感: 前面优先。日期列候选（健康度/新鲜度用）。
+   344→   344→# HqDate/hq_date: 快照表(如 sjb_api_plhqL2kz_88zd)的日期列, 存 YYYYMMDD 紧凑串
+   345→   345→_DATE_COLS = ('date', 'trade_date', 'lhb_date', 'stat_date', 'report_date',
+   346→   346→              'snapshot_date', 'update_date', 'trade_time', 'ex_date',
+   347→   347→              'HqDate', 'hq_date')
+   348→   348→
+   349→   349→# join key 优先级（cmd_join 选关联键用）
+   350→   350→_JOIN_KEY_PRIORITY = ('code', 'date', 'bk_code', 'gp_code', 'sc_code', 'industry_code')
+   351→   351→
+   352→   352→
+   353→   353→def _normalize_datestr(val) -> str:
+   354→   354→    """把任何日期值统一成 'YYYY-MM-DD'，保证 _freshness 词法比较正确。
+   355→   355→
+   356→   356→    DuckDB DATE 列返回 datetime.date → str 已是 ISO; 但快照表的 HqDate 是
+   357→   357→    VARCHAR 存 'YYYYMMDD' 紧凑串, 不规范会误判新鲜度。
+   358→   358→    """
+   359→   359→    if val is None:
+   360→   360→        return ''
+   361→   361→    s = str(val)
+   362→   362→    if len(s) >= 10 and s[4] in '-/':
+   363→   363→        return s[:10]            # 已是 ISO / 带分隔符
+   364→   364→    if len(s) == 8 and s.isdigit():
+   365→   365→        return f'{s[0:4]}-{s[4:6]}-{s[6:8]}'   # YYYYMMDD → YYYY-MM-DD
+   366→   366→    return s[:10]
+   367→   367→
+   368→   368→
+   369→   369→def _classify_type(entry: dict, table_name: str) -> tuple:
+   370→   370→    """按 data_dict 条目分类，返回 (类型标签, rich颜色名)。
+   371→   371→
+   372→   372→    优先级: 孤儿 > 测试 > 多表产物 > 视图 > 维度 > 事实。
+   373→   373→    (用颜色标签而非 emoji — Windows GBK 控制台渲染不了 4 字节 emoji)
+   374→   374→    """
+   375→   375→    if entry.get('orphan'):
+   376→   376→        return ('孤儿', 'red bold')
+   377→   377→    if entry.get('is_test'):
+   378→   378→        return ('测试', 'grey50')
+   379→   379→    if entry.get('multi_table'):
+   380→   380→        return ('多表', 'cyan')
+   381→   381→    if entry.get('is_view') or table_name.endswith('_labeled'):
+   382→   382→        return ('视图', 'yellow')
+   383→   383→    if entry.get('is_dim') or table_name.startswith('dim_') or table_name.endswith('_indicator'):
+   384→   384→        return ('维度', 'magenta')
+   385→   385→    return ('事实', 'blue')
+   386→   386→
+   387→   387→
+   388→   388→def _last_trading_day(con) -> object:
+   389→   389→    """最近一个交易日(is_trading=1 且 <= 今天); 查不到回退到跳过周末的启发式。"""
+   390→   390→    try:
+   391→   391→        r = con.execute(
+   392→   392→            "SELECT MAX(date) FROM trading_calendar WHERE is_trading=1 AND date <= CURRENT_DATE"
+   393→   393→        ).fetchone()
+   394→   394→        if r and r[0]:
+   395→   395→            return r[0]
+   396→   396→    except Exception:
+   397→   397→        pass
+   398→   398→    from datetime import timedelta
+   399→   399→    d = datetime.now().date()
+   400→   400→    while d.weekday() >= 5:  # 5=周六 6=周日
+   401→   401→        d -= timedelta(days=1)
+   402→   402→    return d
+   403→   403→
+   404→   404→
+   405→   405→def _table_maxdate(con, table_name: str) -> tuple:
+   406→   406→    """返回 (命中的日期列名, 规范化后的 'YYYY-MM-DD' 最大日期); 无日期列返回 (None, None)。"""
+   407→   407→    for col in _DATE_COLS:
+   408→   408→        try:
+   409→   409→            r = con.execute(f'SELECT MAX({col}) FROM {table_name}').fetchone()
+   410→   410→            if r and r[0]:
+   411→   411→                return col, _normalize_datestr(r[0])
+   412→   412→        except Exception:
+   413→   413→            continue
+   414→   414→    return None, None
+   415→   415→
+   416→   416→
+   417→   417→def _freshness(schedule: str, max_date, last_td, row_count: int) -> tuple:
+   418→   418→    """按 schedule 判新鲜度，返回 (rich 颜色, 文案)。"""
+   419→   419→    if row_count == 0:
+   420→   420→        return ('red', '空表')
+   421→   421→    sched = (schedule or '').lower()
+   422→   422→    if sched in ('', 'once'):
+   423→   423→        return ('white', '—')
+   424→   424→    if max_date is None:
+   425→   425→        return ('yellow', '无日期列')
+   426→   426→    md = str(max_date)[:10]
+   427→   427→    from datetime import timedelta
+   428→   428→    if sched == 'daily':
+   429→   429→        if last_td is not None and md < str(last_td)[:10]:
+   430→   430→            return ('red', f'滞后{md}')
+   431→   431→        return ('green', '最新')
+   432→   432→    if sched == 'weekly':
+   433→   433→        cutoff = (datetime.now() - timedelta(days=7)).date()
+   434→   434→        return ('red' if md < str(cutoff) else 'green', '滞后' if md < str(cutoff) else '最新')
+   435→   435→    if sched == 'monthly':
+   436→   436→        cutoff = (datetime.now() - timedelta(days=35)).date()
+   437→   437→        return ('yellow' if md < str(cutoff) else 'green', '滞后' if md < str(cutoff) else '最新')
+   438→   438→    return ('white', '—')
+   439→   439→
+   440→   440→
+   441→   441→# ========== 总目录 / 健康度 / 关联发现 ==========
+   442→   442→
+   443→   443→def _rerun_table(name: str, scripts_meta: dict) -> bool:
+   444→   444→    """重跑某表入库 (force=True)，返回是否成功。复用脚本契约 run(force)->bool。"""
+   445→   445→    mod = load_script_module(name, scripts_meta)
+   446→   446→    if mod is None:
+   447→   447→        logger.error(f'{name}: 脚本加载失败')
+   448→   448→        return False
+   449→   449→    try:
+   450→   450→        return bool(mod.run(force=True))
+   451→   451→    except Exception as e:
+   452→   452→        logger.error(f'{name}: 重跑出错 {e}')
+   453→   453→        return False
+   454→   454→
+   455→   455→
+   456→   456→def _health_autofix(red_tables: list, scripts_meta: dict, yes: bool):
+   457→   457→    """对 health 标红的表逐个重跑补数 (force=True)。
+   458→   458→
+   459→   459→    安全: 默认逐表 [y/N] 确认 (默认 N=跳过); --yes 跳过确认批量重跑。
+   460→   460→    大表(>5千万行)额外提示耗时。属敏感操作, 故默认不自动执行。
+   461→   461→    """
+   462→   462→    if not red_tables:
+   463→   463→        logger.info('无滞后/空表，无需补数')
+   464→   464→        return
+   465→   465→    BIG = 50_000_000
+   466→   466→    logger.info(f'开始补数（{len(red_tables)} 张滞后/空表）')
+   467→   467→    results = []
+   468→   468→    for name, cnt in red_tables:
+   469→   469→        if not yes:
+   470→   470→            tag = f' [大表 {cnt:,} 行, 重跑耗时长]' if cnt >= BIG else f' [{cnt:,} 行]'
+   471→   471→            ans = input(f'[fix?] {name}{tag} 重跑? [y/N]: ').strip().lower()
+   472→   472→            if ans != 'y':
+   473→   473→                logger.info(f'{name}: 跳过')
+   474→   474→                results.append((name, 'SKIP'))
+   475→   475→                continue
+   476→   476→        logger.info(f'重跑 {name} (force=True) ...')
+   477→   477→        ok = _rerun_table(name, scripts_meta)
+   478→   478→        results.append((name, 'OK' if ok else 'FAIL'))
+   479→   479→    _print_summary(results)
+   480→   480→
+   481→   481→
+   482→   482→def cmd_catalog(scripts_meta: dict):
+   483→   483→    """总目录 — 一张表看清所有对象的 类型 + 脚本↔表↔中文 映射 + 行数。
+   484→   484→
+   485→   485→    解决: 脚本名表名对不上、不知道哪些是维度/视图表。
+   486→   486→    """
+   487→   487→    from config.gen_data_dict import build_data_dict
+   488→   488→    data_dict = build_data_dict()
+   489→   489→    con = duckdb.connect(str(DB_PATH), read_only=True)
+   490→   490→
+   491→   491→    def _row(name, meta_or_entry, script_name, sort, sched):
+   492→   492→        entry = data_dict.get(name, {})
+   493→   493→        try:
+   494→   494→            cnt = con.execute(f'SELECT COUNT(*) FROM {name}').fetchone()[0]
+   495→   495→        except Exception:
+   496→   496→            cnt = -1
+   497→   497→        label, color = _classify_type(entry, name)
+   498→   498→        return {'label': label, 'color': color, 'sort': sort,
+   499→   499→                'name': name, 'cn': entry.get('cn') or meta_or_entry.get('cn', ''),
+   500→   500→                'script': script_name, 'sched': sched, 'rows': cnt}
+   501→   501→
+   502→   502→    rows = []
+   503→   503→    seen = set()
+   504→   504→    # 1) 有脚本的表 (scripts_meta)
+   505→   505→    for name, meta in scripts_meta.items():
+   506→   506→        seen.add(name)
+   507→   507→        sp = meta.get('_script_path')
+   508→   508→        rows.append(_row(name, meta, sp.name if sp else '-', meta.get('sort', ''), meta.get('schedule', '')))
+   509→   509→    # 2) data_dict 里脚本没覆盖的 (孤儿/dim/view/test/多表产物)
+   510→   510→    for name, entry in data_dict.items():
+   511→   511→        if name == '_meta' or name in seen:
+   512→   512→            continue
+   513→   513→        sp = entry.get('source_script', '')
+   514→   514→        rows.append(_row(name, entry, Path(sp).name if sp else '-', '', ''))
+   515→   515→
+   516→   516→    con.close()
+   517→   517→
+   518→   518→    type_order = {'事实': 0, '维度': 1, '视图': 2, '多表': 3, '测试': 4, '孤儿': 5}
+   519→   519→    rows.sort(key=lambda r: (type_order.get(r['label'], 9), str(r['sort']).zfill(4)))
+   520→   520→
+   521→   521→    table = Table(title=f'数据目录（共 {len(rows)} 个对象）')
+   522→   522→    table.add_column('类', width=6)
+   523→   523→    table.add_column('表名', style='cyan', width=30)
+   524→   524→    table.add_column('中文名', width=24)
+   525→   525→    table.add_column('脚本', width=30)
+   526→   526→    table.add_column('行数', justify='right', width=13)
+   527→   527→    for r in rows:
+   528→   528→        cnt = f'{r["rows"]:,}' if r['rows'] >= 0 else '?'
+   529→   529→        type_cell = f'[{r["color"]}]{r["label"]}[/{r["color"]}]'
+   530→   530→        table.add_row(type_cell, r['name'], r['cn'], r['script'], cnt)
+   531→   531→    Console().print(table)
+   532→   532→    Console().print('[dim]图例: 事实(蓝) 维度(紫) 视图(黄) 多表产物(青) 测试(灰) 孤儿(红) — 脚本名≠表名时以「表名」列为准[/dim]')
+   533→   533→
+   534→   534→
+   535→   535→def cmd_health(scripts_meta: dict, fix: bool = False, yes: bool = False):
+   536→   536→    """健康总览 — scan + integrity + 新鲜度，一张红绿灯。
+   537→   537→
+   538→   538→    解决: 一眼看清哪张表该更新了、一致性是否 0 异常。
+   539→   539→    fix=True 时对标红的滞后/空表逐个补数 (默认逐表确认)。
+   540→   540→    """
+   541→   541→    from config.gen_data_dict import build_data_dict, check_integrity
+   542→   542→    data_dict = build_data_dict()
+   543→   543→    con = duckdb.connect(str(DB_PATH), read_only=True)
+   544→   544→    last_td = _last_trading_day(con)
+   545→   545→    db_tables = set(con.execute("SHOW TABLES").fetchdf()['name'].tolist())
+   546→   546→
+   547→   547→    # 一致性计数 (与 check_integrity.py 同口径)
+   548→   548→    n_red_orphan = sum(1 for k, v in data_dict.items() if k != '_meta' and v.get('orphan'))
+   549→   549→    n_yel_dead = sum(1 for name in scripts_meta if name not in db_tables)
+   550→   550→    n_todo = sum(1 for i in check_integrity(data_dict) if i.startswith('[YEL]'))
+   551→   551→
+   552→   552→    table = Table(title=f'入库健康度（最近交易日 {last_td}）')
+   553→   553→    table.add_column('表名', style='cyan', width=30)
+   554→   554→    table.add_column('类型', width=5)
+   555→   555→    table.add_column('sched', width=7)
+   556→   556→    table.add_column('行数', justify='right', width=11)
+   557→   557→    table.add_column('最新日期', width=12)
+   558→   558→    table.add_column('新鲜度', width=16)
+   559→   559→
+   560→   560→    n_green = n_yel_f = n_red_f = 0
+   561→   561→    red_tables = []  # (name, row_count) 待补数候选 (freshness=red)
+   562→   562→    items = sorted(scripts_meta.items(),
+   563→   563→                   key=lambda x: (DIR_ORDER.index(x[1].get('_dir', '1_入库'))
+   564→   564→                                  if x[1].get('_dir', '1_入库') in DIR_ORDER else 9,
+   565→   565→                                  int(x[1].get('sort', 999))))
+   566→   566→    for name, meta in items:
+   567→   567→        entry = data_dict.get(name, {})
+   568→   568→        tlabel, tcolor = _classify_type(entry, name)
+   569→   569→        try:
+   570→   570→            cnt = con.execute(f'SELECT COUNT(*) FROM {name}').fetchone()[0]
+   571→   571→        except Exception:
+   572→   572→            cnt = -1
+   573→   573→        _, md = _table_maxdate(con, name) if cnt > 0 else (None, None)
+   574→   574→        color, text = _freshness(meta.get('schedule', ''), md, last_td, cnt)
+   575→   575→        n_green += color == 'green'
+   576→   576→        n_yel_f += color == 'yellow'
+   577→   577→        n_red_f += color == 'red'
+   578→   578→        if color == 'red':
+   579→   579→            red_tables.append((name, cnt))
+   580→   580→        type_cell = f'[{tcolor}]{tlabel}[/{tcolor}]'
+   581→   581→        table.add_row(name, type_cell, meta.get('schedule', ''),
+   582→   582→                      f'{cnt:,}' if cnt >= 0 else '?',
+   583→   583→                      str(md)[:10] if md else '-',
+   584→   584→                      f'[{color}]{text}[/{color}]')
+   585→   585→    con.close()
+   586→   586→    Console().print(table)
+   587→   587→    logger.info(f'新鲜度 → 最新={n_green}  待查={n_yel_f}  滞后或空={n_red_f}')
+   588→   588→    logger.info(f'一致性 → 孤儿={n_red_orphan}  死脚本={n_yel_dead}  字段中文TODO={n_todo}')
+   589→   589→    if n_red_orphan or n_yel_dead:
+   590→   590→        logger.warning('存在一致性问题，跑 `python run.py integrity` 看详情')
+   591→   591→    if n_red_f and not fix:
+   592→   592→        logger.warning(f'{n_red_f} 张表滞后或空，用 `python run.py health --fix` 补数 (逐表确认) 或 `python run.py fix <表>`')
+   593→   593→    if fix:
+   594→   594→        _health_autofix(red_tables, scripts_meta, yes)
+   595→   595→
+   596→   596→
+   597→   597→def cmd_join(table_name: str):
+   598→   598→    """关联发现 — 找该表的 _labeled 视图 + 可 join 的 dim 表 + 推荐 join key + JOIN 模板。
+   599→   599→
+   600→   600→    解决: 取数时不知道这张表能 join 谁、用什么 key。
+   601→   601→    """
+   602→   602→    from config.gen_data_dict import build_data_dict
+   603→   603→    con = duckdb.connect(str(DB_PATH), read_only=True)
+   604→   604→    db_tables = set(con.execute("SHOW TABLES").fetchdf()['name'].tolist())
+   605→   605→    if table_name not in db_tables:
+   606→   606→        logger.error(f'{table_name}: DB 无此表')
+   607→   607→        con.close()
+   608→   608→        return
+   609→   609→
+   610→   610→    try:
+   611→   611→        target_cols = set(con.execute(f'DESCRIBE {table_name}').fetchdf()['column_name'].tolist())
+   612→   612→    except Exception as e:
+   613→   613→        logger.error(f'DESCRIBE {table_name} 失败: {e}')
+   614→   614→        con.close()
+   615→   615→        return
+   616→   616→
+   617→   617→    logger.info(f'目标表: {table_name}（{len(target_cols)} 列）')
+   618→   618→
+   619→   619→    # 1) _labeled 视图 (字段含义已 JOIN, 取数首选)
+   620→   620→    labeled = f'{table_name}_labeled'
+   621→   621→    if labeled in db_tables:
+   622→   622→        logger.info(f'已有取数视图: {labeled}  (字段含义已 JOIN，直接查它即可)')
+   623→   623→    else:
+   624→   624→        logger.info(f'无 {labeled} 视图')
+   625→   625→
+   626→   626→    # 2) 候选 dim 表 (列名能交上的才有 join 可能)
+   627→   627→    data_dict = build_data_dict()
+   628→   628→    dim_tables = [t for t, v in data_dict.items()
+   629→   629→                  if t != '_meta' and (v.get('is_dim') or t.startswith('dim_') or t.endswith('_indicator'))]
+   630→   630→
+   631→   631→    candidates = []
+   632→   632→    for dt in dim_tables:
+   633→   633→        try:
+   634→   634→            dcols = set(con.execute(f'DESCRIBE {dt}').fetchdf()['column_name'].tolist())
+   635→   635→        except Exception:
+   636→   636→            continue
+   637→   637→        shared = target_cols & dcols
+   638→   638→        if not shared:
+   639→   639→            continue
+   640→   640→        key = next((k for k in _JOIN_KEY_PRIORITY if k in shared), sorted(shared)[0])
+   641→   641→        candidates.append((dt, key, sorted(shared), data_dict.get(dt, {}).get('cn', '')))
+   642→   642→
+   643→   643→    if candidates:
+   644→   644→        logger.info(f'可关联的维度表（{len(candidates)}）:')
+   645→   645→        for dt, key, shared, cn in candidates:
+   646→   646→            Console().print(f'   • [cyan]{dt:<30}[/cyan] join key=[green]{key}[/green]  共有列={shared}  {cn}')
+   647→   647→        best_dt, best_key, _, _ = candidates[0]
+   648→   648→        Console().print('\n   [dim]JOIN 模板（复制即用）:[/dim]')
+   649→   649→        Console().print(f'   [green]SELECT t.*, d.*[/green]')
+   650→   650→        Console().print(f'   [green]FROM {table_name} t[/green]')
+   651→   651→        Console().print(f'   [green]LEFT JOIN {best_dt} d ON t.{best_key} = d.{best_key}[/green]')
+   652→   652→    else:
+   653→   653→        logger.warning('没有列名能匹配上的 dim 表（可能需先建 dim_*_indicator 维度表，或在脚本里加 FIELD_MAP）')
+   654→   654→
+   655→   655→    con.close()
+   656→   656→
+   657→   657→
+   658→   658→def cmd_get(table_name: str, code: str = None, days: int = 30):
+   659→   659→    """导出数据"""
+   660→   660→    scripts_meta = get_all_scripts_meta()
+   661→   661→    if table_name not in scripts_meta:
+   662→   662→        logger.error(f'{table_name}: 未找到脚本')
+   663→   663→        return
+   664→   664→
+   665→   665→    OUTPUT_DIR.mkdir(exist_ok=True)
+   666→   666→    con = duckdb.connect(str(DB_PATH), read_only=True)
+   667→   667→
+   668→   668→    conditions = []
+   669→   669→    if code:
+   670→   670→        conditions.append(f"code = '{code}'")
+   671→   671→    if days > 0:
+   672→   672→        for col in ['date', 'trade_date']:
+   673→   673→            try:
+   674→   674→                con.execute(f"SELECT {col} FROM {table_name} LIMIT 1").fetchone()
+   675→   675→                conditions.append(f"{col} >= CURRENT_DATE - INTERVAL '{days} DAYS'")
+   676→   676→                break
+   677→   677→            except Exception:
+   678→   678→                continue
+   679→   679→
+   680→   680→    where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
+   681→   681→    query = f"SELECT * FROM {table_name}{where} ORDER BY 1, 2 LIMIT 10000"
+   682→   682→
+   683→   683→    try:
+   684→   684→        df = con.execute(query).df()
+   685→   685→        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+   686→   686→        path = OUTPUT_DIR / f'{table_name}_{ts}.csv'
+   687→   687→        df.to_csv(path, index=False, encoding='utf-8-sig')
+   688→   688→        logger.info(f'Exported {len(df)} rows -> {path}')
+   689→   689→    except Exception as e:
+   690→   690→        logger.error(f'Export failed: {e}')
+   691→   691→
+   692→   692→    con.close()
+   693→   693→
+   694→   694→
+   695→   695→def cmd_add(table_name: str):
+   696→   696→    """新增表（交互式）"""
+   697→   697→    tables = load_tables()
+   698→   698→    if table_name in tables:
+   699→   699→        logger.error(f'{table_name} already exists')
+   700→   700→        return
+   701→   701→
+   702→   702→    cn = input('CN: ').strip() or table_name
+   703→   703→    source = input('Source (API/SQL): ').strip() or 'API(TQ)'
+   704→   704→    period = input('Period: ').strip() or 'daily'
+   705→   705→
+   706→   706→    schedule_map = {'daily': 'daily', 'weekly': 'weekly', 'monthly': 'monthly'}
+   707→   707→    schedule = schedule_map.get(period, 'once')
+   708→   708→    d = '2_计算' if 'SQL' in source else '1_入库'
+   709→   709→    mode = 'increment' if schedule in ('daily', 'weekly') else 'full'
+   710→   710→    sort = max((int(t.get('sort', 0)) for t in tables.values()), default=0) + 1
+   711→   711→
+   712→   712→    tables[table_name] = {
+   713→   713→        'cn': cn, 'source': source, 'period': period,
+   714→   714→        'schedule': schedule, 'mode': mode, 'dir': d, 'sort': sort,
+   715→   715→    }
+   716→   716→    save_tables(tables)
+   717→   717→    logger.info(f'Added {table_name} -> tables.json (dir={d}, sort={sort})')
+   718→   718→
+   719→   719→    # 提示创建脚本
+   720→   720→    logger.info(f'请创建 {d}/{sort:03d}_{table_name}.py')
+   721→   721→
+   722→   722→
+   723→   723→def cmd_remove(table_name: str):
+   724→   724→    """删除表"""
+   725→   725→    tables = load_tables()
+   726→   726→    if table_name not in tables:
+   727→   727→        logger.error(f'{table_name} not in tables.json')
+   728→   728→        return
+   729→   729→
+   730→   730→    confirm = input(f'Remove {table_name}? [y/N]: ').strip().lower()
+   731→   731→    if confirm != 'y':
+   732→   732→        logger.info('Cancelled')
+   733→   733→        return
+   734→   734→
+   735→   735→    # 删除脚本
+   736→   736→    scripts_meta = get_all_scripts_meta()
+   737→   737→    script_path = scripts_meta.get(table_name, {}).get('_script_path')
+   738→   738→    if script_path and script_path.exists():
+   739→   739→        script_path.unlink()
+   740→   740→        logger.info(f'Deleted: {script_path}')
+   741→   741→
+   742→   742→    del tables[table_name]
+   743→   743→    save_tables(tables)
+   744→   744→    logger.info(f'Removed {table_name} from tables.json')
+   745→   745→
+   746→   746→
+   747→   747→def cmd_fix(table_name: str, scripts_meta: dict):
+   748→   748→    """补数（force=True）"""
+   749→   749→    if table_name not in scripts_meta:
+   750→   750→        logger.error(f'{table_name}: 未找到脚本')
+   751→   751→        return
+   752→   752→
+   753→   753→    logger.info(f'Fix {table_name} (force=True)')
+   754→   754→    mod = load_script_module(table_name, scripts_meta)
+   755→   755→    if mod is None:
+   756→   756→        logger.error(f'Script not found for {table_name}')
+   757→   757→        return
+   758→   758→
+   759→   759→    try:
+   760→   760→        mod.run(force=True)
+   761→   761→    except Exception as e:
+   762→   762→        logger.error(f'Fix failed: {e}')
+   763→   763→
+   764→   764→
+   765→   765→def cmd_backup():
+   766→   766→    """备份数据库"""
+   767→   767→    BACKUP_DIR.mkdir(exist_ok=True)
+   768→   768→    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+   769→   769→    dst = BACKUP_DIR / f'profit_radar_{ts}.duckdb'
+   770→   770→    logger.info(f'Backup -> {dst}')
+   771→   771→    shutil.copy2(str(DB_PATH), str(dst))
+   772→   772→    size_mb = dst.stat().st_size / 1024 / 1024
+   773→   773→    logger.info(f'Done ({size_mb:.0f} MB)')
+   774→   774→
+   775→   775→
+   776→   776→# ========== 汇总打印 ==========
+   777→   777→def _print_summary(results: list):
+   778→   778→    ok = sum(1 for _, s in results if s == 'OK')
+   779→   779→    fail = sum(1 for _, s in results if s == 'FAIL')
+   780→   780→    skip = sum(1 for _, s in results if s == 'SKIP')
+   781→   781→    err = sum(1 for _, s in results if s == 'ERROR')
+   782→   782→
+   783→   783→    table = Table(title=f'Summary (OK={ok} FAIL={fail} SKIP={skip} ERROR={err})')
+   784→   784→    table.add_column('Table', style='cyan', width=30)
+   785→   785→    table.add_column('Status', width=8)
+   786→   786→
+   787→   787→    color = {'OK': 'green', 'FAIL': 'red', 'SKIP': 'yellow', 'ERROR': 'red'}
+   788→   788→    for name, status in results:
+   789→   789→        table.add_row(name, f'[{color.get(status, "white")}]{status}[/{color.get(status, "white")}]')
+   790→   790→
+   791→   791→    Console().print(table)
+   792→   792→
+   793→   793→
+   794→   794→# ========== 入口 ==========
+   795→   795→def main():
+   796→   796→    setup_logger()
+   797→   797→
+   798→   798→    # 扫描所有脚本的 @meta
+   799→   799→    scripts_meta = get_all_scripts_meta()
+   800→   800→    logger.debug(f'扫描到 {len(scripts_meta)} 个脚本')
+   801→   801→
+   802→   802→    # 如果第一个参数不是已知子命令，当作关键字匹配执行
+   803→   803→    known_commands = {'all', 'scan', 'catalog', 'health', 'join', 'check', 'get', 'add', 'remove', 'fix', 'backup', 'integrity', 'sync-dict'}
+   804→   804→    if len(sys.argv) > 1 and sys.argv[1] not in known_commands and not sys.argv[1].startswith('-'):
+   805→   805→        cmd_run_tables(scripts_meta, sys.argv[1:])
+   806→   806→        return
+   807→   807→
+   808→   808→    parser = argparse.ArgumentParser(description='DB v2 Runner')
+   809→   809→    sub = parser.add_subparsers(dest='command')
+   810→   810→
+   811→   811→    # all
+   812→   812→    p_all = sub.add_parser('all', help='Run ingestion')
+   813→   813→    p_all.add_argument('--weekly', action='store_true')
+   814→   814→    p_all.add_argument('--full', action='store_true')
+   815→   815→
+   816→   816→    # scan
+   817→   817→    sub.add_parser('scan', help='Health scan')
+   818→   818→
+   819→   819→    # check
+   820→   820→    p_check = sub.add_parser('check', help='Deep check')
+   821→   821→    p_check.add_argument('table')
+   822→   822→
+   823→   823→    # get
+   824→   824→    p_get = sub.add_parser('get', help='Export data')
+   825→   825→    p_get.add_argument('table')
+   826→   826→    p_get.add_argument('--code', default=None)
+   827→   827→    p_get.add_argument('--days', type=int, default=30)
+   828→   828→
+   829→   829→    # add
+   830→   830→    p_add = sub.add_parser('add', help='Add table')
+   831→   831→    p_add.add_argument('table')
+   832→   832→
+   833→   833→    # remove
+   834→   834→    p_rm = sub.add_parser('remove', help='Remove table')
+   835→   835→    p_rm.add_argument('table')
+   836→   836→
+   837→   837→    # fix
+   838→   838→    p_fix = sub.add_parser('fix', help='Fix (force=True)')
+   839→   839→    p_fix.add_argument('table')
+   840→   840→    p_fix.add_argument('--date', default=None)
+   841→   841→
+   842→   842→    # backup
+   843→   843→    sub.add_parser('backup', help='Backup database')
+   844→   844→
+   845→   845→    # integrity (一致性健康检查)
+   846→   846→    sub.add_parser('integrity', help='Check DB/script/dict consistency')
+   847→   847→
+   848→   848→    # sync-dict (重新生成数据字典)
+   849→   849→    sub.add_parser('sync-dict', help='Regenerate data dictionary')
+   850→   850→
+   851→   851→    # catalog (总目录: 类型+脚本↔表↔中文+行数)
+   852→   852→    sub.add_parser('catalog', help='Show full table catalog (type/script/cn/rows)')
+   853→   853→
+   854→   854→    # health (健康总览: scan+integrity+新鲜度; --fix 自动补数)
+   855→   855→    p_health = sub.add_parser('health', help='Health board: freshness + consistency')
+   856→   856→    p_health.add_argument('--fix', action='store_true', help='Re-run stale/empty tables (confirm each, or --yes)')
+   857→   857→    p_health.add_argument('--yes', action='store_true', help='With --fix, skip per-table confirmation')
+   858→   858→
+   859→   859→    # join (关联发现: dim + _labeled + join key)
+   860→   860→    p_join = sub.add_parser('join', help='Discover joinable dim tables & keys')
+   861→   861→    p_join.add_argument('table')
+   862→   862→
+   863→   863→    args = parser.parse_args()
+   864→   864→
+   865→   865→    if args.command == 'all':
+   866→   866→        tier = 'full' if args.full else ('weekly' if args.weekly else 'daily')
+   867→   867→        cmd_all(scripts_meta, tier)
+   868→   868→    elif args.command == 'scan':
+   869→   869→        cmd_scan(scripts_meta)
+   870→   870→    elif args.command == 'check':
+   871→   871→        cmd_check(args.table, scripts_meta)
+   872→   872→    elif args.command == 'get':
+   873→   873→        cmd_get(args.table, args.code, args.days)
+   874→   874→    elif args.command == 'add':
+   875→   875→        cmd_add(args.table)
+   876→   876→    elif args.command == 'remove':
+   877→   877→        cmd_remove(args.table)
+   878→   878→    elif args.command == 'fix':
+   879→   879→        cmd_fix(args.table, scripts_meta)
+   880→   880→    elif args.command == 'backup':
+   881→   881→        cmd_backup()
+   882→   882→    elif args.command == 'integrity':
+   883→   883→        from config.check_integrity import main as integrity_main
+   884→   884→        sys.exit(integrity_main())
+   885→   885→    elif args.command == 'sync-dict':
+   886→   886→        from config.gen_data_dict import main as sync_main
+   887→   887→        sys.argv = [sys.argv[0], '--sync']  # 隔离子参数
+   888→   888→        sync_main()
+   889→   889→    elif args.command == 'catalog':
+   890→   890→        cmd_catalog(scripts_meta)
+   891→   891→    elif args.command == 'health':
+   892→   892→        cmd_health(scripts_meta, fix=args.fix, yes=args.yes)
+   893→   893→    elif args.command == 'join':
+   894→   894→        cmd_join(args.table)
+   895→   895→    else:
+   896→   896→        # 无子命令时当作关键字匹配执行
+   897→   897→        if len(sys.argv) > 1:
+   898→   898→            cmd_run_tables(scripts_meta, sys.argv[1:])
+   899→   899→        else:
+   900→   900→            parser.print_help()
+   901→   901→
+   902→   902→
+   903→   903→if __name__ == '__main__':
+   904→   904→    main()
