@@ -1,0 +1,26 @@
+# Large files (>100MB)
+*.duckdb
+*.duckdb.bak_*
+*.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data
+db/*.parquet
+output/
+logs/

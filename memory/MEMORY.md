@@ -1,0 +1,3 @@
+- [kline-table-schema](kline-table-schema.md) — K线表架构：股票/指数/ETF/板块列名差异
+- [sensitive-ops-confirmation](sensitive-ops-confirmation.md) — 敏感操作须用户确认的模式（踩坑记录）
+- [kline-coverage-investigation](kline-coverage-investigation.md) — K线覆盖率探测方法论：区分退市/到期/本地下载不全

@@ -1,0 +1,2752 @@
+[
+  {
+    "table": "data_sync_log",
+    "cn": "数据同步日志",
+    "source": "自动记录",
+    "schedule": "once",
+    "dir": "1_入库",
+    "sort": 160,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 18995,
+    "columns": [
+      [
+        "id",
+        "INTEGER"
+      ],
+      [
+        "data_type",
+        "VARCHAR"
+      ],
+      [
+        "start_date",
+        "DATE"
+      ],
+      [
+        "end_date",
+        "DATE"
+      ],
+      [
+        "sync_time",
+        "TIMESTAMP"
+      ],
+      [
+        "record_count",
+        "INTEGER"
+      ],
+      [
+        "status",
+        "VARCHAR"
+      ],
+      [
+        "error_message",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 8,
+    "date_columns": [
+      "start_date",
+      "end_date"
+    ],
+    "min_date": "2000-01-04",
+    "max_date": "2026-06-02",
+    "days_span": 9646,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量可接受(18,995)",
+      "历史长(26年)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 80
+  },
+  {
+    "table": "dim_fn_meta",
+    "cn": "财务指标元数据",
+    "source": "手动",
+    "schedule": "once",
+    "dir": "1_入库",
+    "sort": 150,
+    "status": "pending",
+    "exists": true,
+    "row_count": 584,
+    "columns": [
+      [
+        "fn_index",
+        "INTEGER"
+      ],
+      [
+        "fn_name",
+        "VARCHAR"
+      ],
+      [
+        "fn_col",
+        "VARCHAR"
+      ],
+      [
+        "is_mapped",
+        "BOOLEAN"
+      ],
+      [
+        "unit_hint",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 5,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(584)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 55
+  },
+  {
+    "table": "dim_sector_tree",
+    "cn": "板块层级树",
+    "source": "文件导入",
+    "schedule": "once",
+    "dir": "1_入库",
+    "sort": 151,
+    "status": "pending",
+    "exists": true,
+    "row_count": 925,
+    "columns": [
+      [
+        "sector_code",
+        "VARCHAR"
+      ],
+      [
+        "sector_name",
+        "VARCHAR"
+      ],
+      [
+        "sector_type",
+        "VARCHAR"
+      ],
+      [
+        "level",
+        "INTEGER"
+      ],
+      [
+        "parent_sector_code",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 5,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(925)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 55
+  },
+  {
+    "table": "dwd_stock_capital_flow",
+    "cn": "资金流向",
+    "source": "API(TDX)",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 120,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 906797,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "trade_date",
+        "DATE"
+      ],
+      [
+        "main_net_inflow",
+        "DOUBLE"
+      ],
+      [
+        "active_buy_net",
+        "DOUBLE"
+      ],
+      [
+        "seal_amount",
+        "DOUBLE"
+      ],
+      [
+        "is_limit_up",
+        "BOOLEAN"
+      ],
+      [
+        "attack_wave",
+        "DOUBLE"
+      ],
+      [
+        "pullback_wave",
+        "DOUBLE"
+      ],
+      [
+        "vwap",
+        "DOUBLE"
+      ],
+      [
+        "first_limit_up_time",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 10,
+    "date_columns": [
+      "trade_date"
+    ],
+    "min_date": "2025-05-26",
+    "max_date": "2026-05-28",
+    "days_span": 367,
+    "has_data": true,
+    "null_warnings": [
+      "active_buy_net: 100.0%空",
+      "seal_amount: 99.9%空"
+    ],
+    "zero_warnings": [],
+    "quality": "WARNING",
+    "issues": [
+      "active_buy_net: 100.0%空",
+      "seal_amount: 99.9%空"
+    ],
+    "value_reasons": [
+      "数据量中等(906,797)",
+      "1年以上(367天)",
+      "有空值/零值问题"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 55
+  },
+  {
+    "table": "dwd_stock_intraday_feature",
+    "cn": "日内特征",
+    "source": "SQL",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 121,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 471676,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "trade_date",
+        "DATE"
+      ],
+      [
+        "attack_wave",
+        "DOUBLE"
+      ],
+      [
+        "pullback_wave",
+        "DOUBLE"
+      ],
+      [
+        "amplitude",
+        "DOUBLE"
+      ],
+      [
+        "vwap",
+        "DOUBLE"
+      ],
+      [
+        "first_limit_up_time",
+        "VARCHAR"
+      ],
+      [
+        "limit_up_count",
+        "INTEGER"
+      ],
+      [
+        "open_limit_count",
+        "INTEGER"
+      ]
+    ],
+    "column_count": 9,
+    "date_columns": [
+      "trade_date"
+    ],
+    "min_date": "2026-01-16",
+    "max_date": "2026-05-29",
+    "days_span": 133,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量中等(471,676)",
+      "133天数据"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 70
+  },
+  {
+    "table": "dwd_stock_limit_up_feature",
+    "cn": "涨停特征",
+    "source": "API(TDX)",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 122,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 382549,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "trade_date",
+        "DATE"
+      ],
+      [
+        "is_limit_up",
+        "BOOLEAN"
+      ],
+      [
+        "con_board_days",
+        "INTEGER"
+      ],
+      [
+        "first_board_date",
+        "DATE"
+      ],
+      [
+        "limit_up_type",
+        "VARCHAR"
+      ],
+      [
+        "seal_ratio",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 7,
+    "date_columns": [
+      "trade_date",
+      "first_board_date"
+    ],
+    "min_date": "2008-02-04",
+    "max_date": "2026-06-02",
+    "days_span": 6693,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量中等(382,549)",
+      "历史长(18年)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 85
+  },
+  {
+    "table": "dws_sector_emotion",
+    "cn": "板块情绪",
+    "source": "SQL",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 130,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 259604,
+    "columns": [
+      [
+        "sector_code",
+        "VARCHAR"
+      ],
+      [
+        "trade_date",
+        "DATE"
+      ],
+      [
+        "limit_up_num",
+        "INTEGER"
+      ],
+      [
+        "limit_down_num",
+        "INTEGER"
+      ],
+      [
+        "up_ratio",
+        "DOUBLE"
+      ],
+      [
+        "total_mv",
+        "DOUBLE"
+      ],
+      [
+        "flow_mv",
+        "DOUBLE"
+      ],
+      [
+        "pe_ttm",
+        "DOUBLE"
+      ],
+      [
+        "pb_mrq",
+        "DOUBLE"
+      ],
+      [
+        "sector_amount",
+        "DOUBLE"
+      ],
+      [
+        "sector_turnover",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 11,
+    "date_columns": [
+      "trade_date"
+    ],
+    "min_date": "2025-05-29",
+    "max_date": "2026-06-03",
+    "days_span": 370,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量中等(259,604)",
+      "1年以上(370天)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 75
+  },
+  {
+    "table": "etf_daily_kline",
+    "cn": "ETF日K线",
+    "source": "二进制",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 50,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 1616864,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "open",
+        "DOUBLE"
+      ],
+      [
+        "high",
+        "DOUBLE"
+      ],
+      [
+        "low",
+        "DOUBLE"
+      ],
+      [
+        "close",
+        "DOUBLE"
+      ],
+      [
+        "volume",
+        "BIGINT"
+      ],
+      [
+        "amount",
+        "DOUBLE"
+      ],
+      [
+        "change_pct",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 9,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "2020-01-02",
+    "max_date": "2026-06-02",
+    "days_span": 2343,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(1,616,864)",
+      "1年以上(2343天)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 80
+  },
+  {
+    "table": "etf_derived_indicator",
+    "cn": "ETF衍生指标",
+    "source": "SQL派生",
+    "schedule": "daily",
+    "dir": "2_计算",
+    "sort": 55,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 131395,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "tracking_error_20d",
+        "DOUBLE"
+      ],
+      [
+        "tracking_error_60d",
+        "DOUBLE"
+      ],
+      [
+        "excess_return_1d",
+        "DOUBLE"
+      ],
+      [
+        "excess_return_5d",
+        "DOUBLE"
+      ],
+      [
+        "excess_return_20d",
+        "DOUBLE"
+      ],
+      [
+        "liquidity_score",
+        "DOUBLE"
+      ],
+      [
+        "avg_daily_amount_20d",
+        "DOUBLE"
+      ],
+      [
+        "avg_daily_volume_20d",
+        "BIGINT"
+      ],
+      [
+        "bid_ask_spread",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 11,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "2026-02-02",
+    "max_date": "2026-05-29",
+    "days_span": 116,
+    "has_data": true,
+    "null_warnings": [
+      "tracking_error_20d: 89.5%空",
+      "tracking_error_60d: 89.5%空",
+      "excess_return_1d: 89.5%空"
+    ],
+    "zero_warnings": [],
+    "quality": "WARNING",
+    "issues": [
+      "tracking_error_20d: 89.5%空",
+      "tracking_error_60d: 89.5%空",
+      "excess_return_1d: 89.5%空"
+    ],
+    "value_reasons": [
+      "数据量中等(131,395)",
+      "116天数据",
+      "有空值/零值问题"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 50
+  },
+  {
+    "table": "etf_index_tracking",
+    "cn": "ETF跟踪指数",
+    "source": "API(TDX)",
+    "schedule": "weekly",
+    "dir": "1_入库",
+    "sort": 60,
+    "status": "pending",
+    "exists": true,
+    "row_count": 1209,
+    "columns": [
+      [
+        "etf_code",
+        "VARCHAR"
+      ],
+      [
+        "index_code",
+        "VARCHAR"
+      ],
+      [
+        "index_name",
+        "VARCHAR"
+      ],
+      [
+        "is_primary",
+        "BOOLEAN"
+      ]
+    ],
+    "column_count": 4,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(1,209)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 55
+  },
+  {
+    "table": "etf_product",
+    "cn": "ETF产品信息",
+    "source": "API(TQ)",
+    "schedule": "once",
+    "dir": "1_入库",
+    "sort": 58,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 2017,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR"
+      ],
+      [
+        "market",
+        "VARCHAR"
+      ],
+      [
+        "track_index",
+        "VARCHAR"
+      ],
+      [
+        "track_index_name",
+        "VARCHAR"
+      ],
+      [
+        "fund_company",
+        "VARCHAR"
+      ],
+      [
+        "management_fee",
+        "DOUBLE"
+      ],
+      [
+        "custody_fee",
+        "DOUBLE"
+      ],
+      [
+        "etf_type",
+        "VARCHAR"
+      ],
+      [
+        "category_l1",
+        "VARCHAR"
+      ],
+      [
+        "category_l2",
+        "VARCHAR"
+      ],
+      [
+        "list_date",
+        "DATE"
+      ],
+      [
+        "delist_date",
+        "DATE"
+      ],
+      [
+        "is_active",
+        "BOOLEAN"
+      ],
+      [
+        "updated_at",
+        "TIMESTAMP"
+      ]
+    ],
+    "column_count": 15,
+    "date_columns": [
+      "list_date",
+      "delist_date",
+      "updated_at"
+    ],
+    "min_date": "2004-11-29",
+    "max_date": "2026-05-13",
+    "days_span": 7835,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(2,017)",
+      "历史长(21年)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 75
+  },
+  {
+    "table": "fact_finance_report",
+    "cn": "财务报告",
+    "source": "二进制",
+    "schedule": "weekly",
+    "dir": "1_入库",
+    "sort": 110,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 298614,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "report_period",
+        "DATE"
+      ],
+      [
+        "eps",
+        "DOUBLE"
+      ],
+      [
+        "eps_adjusted",
+        "DOUBLE"
+      ],
+      [
+        "bvps",
+        "DOUBLE"
+      ],
+      [
+        "roe",
+        "DOUBLE"
+      ],
+      [
+        "ocfps",
+        "DOUBLE"
+      ],
+      [
+        "total_assets",
+        "DOUBLE"
+      ],
+      [
+        "total_liabilities",
+        "DOUBLE"
+      ],
+      [
+        "share_capital",
+        "DOUBLE"
+      ],
+      [
+        "total_equity",
+        "DOUBLE"
+      ],
+      [
+        "net_profit_parent",
+        "DOUBLE"
+      ],
+      [
+        "operating_cf",
+        "DOUBLE"
+      ],
+      [
+        "investing_cf",
+        "DOUBLE"
+      ],
+      [
+        "financing_cf",
+        "DOUBLE"
+      ],
+      [
+        "net_profit_parent2",
+        "DOUBLE"
+      ],
+      [
+        "total_shares",
+        "DOUBLE"
+      ],
+      [
+        "total_revenue_wan",
+        "DOUBLE"
+      ],
+      [
+        "raw_fields",
+        "JSON"
+      ]
+    ],
+    "column_count": 19,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量中等(298,614)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 65
+  },
+  {
+    "table": "financial_data",
+    "cn": "财务数据",
+    "source": "二进制",
+    "schedule": "weekly",
+    "dir": "1_入库",
+    "sort": 111,
+    "status": "in_progress",
+    "exists": true,
+    "row_count": 826760,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "report_type",
+        "VARCHAR"
+      ],
+      [
+        "field_name",
+        "VARCHAR"
+      ],
+      [
+        "field_value",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 5,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "2025-06-30",
+    "max_date": "2026-03-31",
+    "days_span": 274,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量中等(826,760)",
+      "274天数据"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 70
+  },
+  {
+    "table": "go_data",
+    "cn": "国债数据",
+    "source": "二进制",
+    "schedule": "once",
+    "dir": "1_入库",
+    "sort": 141,
+    "status": "pending",
+    "exists": true,
+    "row_count": 259816,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "field_name",
+        "VARCHAR"
+      ],
+      [
+        "field_desc",
+        "VARCHAR"
+      ],
+      [
+        "value",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 5,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "2026-05-30",
+    "max_date": "2026-05-30",
+    "days_span": 0,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量中等(259,816)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 65
+  },
+  {
+    "table": "gpsz_daily",
+    "cn": "GPSZ日线",
+    "source": "二进制解析",
+    "schedule": "once",
+    "dir": "1_入库",
+    "sort": 140,
+    "status": "pending",
+    "exists": true,
+    "row_count": 48114666,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "trade_date",
+        "DATE"
+      ],
+      [
+        "data_type",
+        "INTEGER"
+      ],
+      [
+        "type_name",
+        "VARCHAR"
+      ],
+      [
+        "value1",
+        "DOUBLE"
+      ],
+      [
+        "value2",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 6,
+    "date_columns": [
+      "trade_date"
+    ],
+    "min_date": "1990-02-28",
+    "max_date": "2026-06-08",
+    "days_span": 13249,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(48,114,666)",
+      "历史长(36年)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 90
+  },
+  {
+    "table": "lhb_broker_detail",
+    "cn": "龙虎榜券商明细",
+    "source": "tdx_reader.read_broker()",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 103,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 24224,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "lhb_date",
+        "DATE"
+      ],
+      [
+        "flag",
+        "VARCHAR"
+      ],
+      [
+        "seq",
+        "INTEGER"
+      ],
+      [
+        "broker_name",
+        "VARCHAR"
+      ],
+      [
+        "buy_amount",
+        "DOUBLE"
+      ],
+      [
+        "buy_ratio",
+        "DOUBLE"
+      ],
+      [
+        "sell_amount",
+        "DOUBLE"
+      ],
+      [
+        "sell_ratio",
+        "DOUBLE"
+      ],
+      [
+        "net_amount",
+        "DOUBLE"
+      ],
+      [
+        "reason",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 11,
+    "date_columns": [
+      "lhb_date"
+    ],
+    "min_date": "2025-06-03",
+    "max_date": "2026-06-03",
+    "days_span": 365,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量可接受(24,224)",
+      "365天数据"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 65
+  },
+  {
+    "table": "lhb_broker_stat",
+    "cn": "龙虎榜券商统计",
+    "source": "待确认",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 101,
+    "status": "pending",
+    "exists": true,
+    "row_count": 716,
+    "columns": [
+      [
+        "broker_name",
+        "VARCHAR"
+      ],
+      [
+        "stat_date",
+        "DATE"
+      ],
+      [
+        "appear_count",
+        "INTEGER"
+      ],
+      [
+        "cum_buy",
+        "DOUBLE"
+      ],
+      [
+        "buy_seats",
+        "INTEGER"
+      ],
+      [
+        "cum_sell",
+        "DOUBLE"
+      ],
+      [
+        "sell_seats",
+        "INTEGER"
+      ],
+      [
+        "top_stocks",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 8,
+    "date_columns": [
+      "stat_date"
+    ],
+    "min_date": "2026-06-01",
+    "max_date": "2026-06-01",
+    "days_span": 0,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(716)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 55
+  },
+  {
+    "table": "lhb_daily",
+    "cn": "龙虎榜日常",
+    "source": "API(TDX)",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 108,
+    "status": "pending",
+    "exists": true,
+    "row_count": 43943,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "trade_date",
+        "DATE"
+      ],
+      [
+        "buy_total",
+        "DOUBLE"
+      ],
+      [
+        "sell_total",
+        "DOUBLE"
+      ],
+      [
+        "buy_inst_count",
+        "INTEGER"
+      ],
+      [
+        "buy_inst_amount",
+        "DOUBLE"
+      ],
+      [
+        "sell_inst_count",
+        "INTEGER"
+      ],
+      [
+        "sell_inst_amount",
+        "DOUBLE"
+      ],
+      [
+        "buy_broker",
+        "DOUBLE"
+      ],
+      [
+        "sell_broker",
+        "DOUBLE"
+      ],
+      [
+        "buy_connect",
+        "DOUBLE"
+      ],
+      [
+        "sell_connect",
+        "DOUBLE"
+      ],
+      [
+        "list_type",
+        "INTEGER"
+      ],
+      [
+        "list_days",
+        "INTEGER"
+      ]
+    ],
+    "column_count": 14,
+    "date_columns": [
+      "trade_date"
+    ],
+    "min_date": "2023-07-17",
+    "max_date": "2026-06-01",
+    "days_span": 1050,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量可接受(43,943)",
+      "1年以上(1050天)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 70
+  },
+  {
+    "table": "lhb_daily_summary",
+    "cn": "龙虎榜汇总",
+    "source": "API(TDX)",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 100,
+    "status": "pending",
+    "exists": true,
+    "row_count": 16764,
+    "columns": [
+      [
+        "seq",
+        "INTEGER"
+      ],
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR"
+      ],
+      [
+        "lhb_date",
+        "DATE"
+      ],
+      [
+        "解读",
+        "VARCHAR"
+      ],
+      [
+        "close_price",
+        "DOUBLE"
+      ],
+      [
+        "change_pct",
+        "DOUBLE"
+      ],
+      [
+        "net_buy",
+        "DOUBLE"
+      ],
+      [
+        "buy_amount",
+        "DOUBLE"
+      ],
+      [
+        "sell_amount",
+        "DOUBLE"
+      ],
+      [
+        "total_amount",
+        "DOUBLE"
+      ],
+      [
+        "market_total",
+        "DOUBLE"
+      ],
+      [
+        "net_buy_ratio",
+        "DOUBLE"
+      ],
+      [
+        "amount_ratio",
+        "DOUBLE"
+      ],
+      [
+        "turnover_rate",
+        "DOUBLE"
+      ],
+      [
+        "float_mkt_cap",
+        "DOUBLE"
+      ],
+      [
+        "reason",
+        "VARCHAR"
+      ],
+      [
+        "after_1d",
+        "DOUBLE"
+      ],
+      [
+        "after_2d",
+        "DOUBLE"
+      ],
+      [
+        "after_5d",
+        "DOUBLE"
+      ],
+      [
+        "after_10d",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 21,
+    "date_columns": [
+      "lhb_date"
+    ],
+    "min_date": "2025-06-03",
+    "max_date": "2026-06-03",
+    "days_span": 365,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量可接受(16,764)",
+      "365天数据"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 65
+  },
+  {
+    "table": "lhb_daily_summary_sina",
+    "cn": "龙虎榜新浪",
+    "source": "爬虫",
+    "schedule": "once",
+    "dir": "1_入库",
+    "sort": 107,
+    "status": "pending",
+    "exists": true,
+    "row_count": 6829,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR"
+      ],
+      [
+        "lhb_date",
+        "DATE"
+      ],
+      [
+        "close_price",
+        "DOUBLE"
+      ],
+      [
+        "change_pct",
+        "DOUBLE"
+      ],
+      [
+        "volume",
+        "DOUBLE"
+      ],
+      [
+        "amount",
+        "DOUBLE"
+      ],
+      [
+        "reason",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 8,
+    "date_columns": [
+      "lhb_date"
+    ],
+    "min_date": "2025-12-31",
+    "max_date": "2026-05-29",
+    "days_span": 149,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(6,829)",
+      "149天数据"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 60
+  },
+  {
+    "table": "lhb_institution_detail",
+    "cn": "龙虎榜机构明细",
+    "source": "待确认",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 104,
+    "status": "pending",
+    "exists": true,
+    "row_count": 264,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR"
+      ],
+      [
+        "lhb_date",
+        "DATE"
+      ],
+      [
+        "buy_amount",
+        "DOUBLE"
+      ],
+      [
+        "sell_amount",
+        "DOUBLE"
+      ],
+      [
+        "reason",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 6,
+    "date_columns": [
+      "lhb_date"
+    ],
+    "min_date": "2026-05-25",
+    "max_date": "2026-06-01",
+    "days_span": 7,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(264)",
+      "仅7天"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 55
+  },
+  {
+    "table": "lhb_institution_increase",
+    "cn": "龙虎榜机构增仓",
+    "source": "待确认",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 105,
+    "status": "pending",
+    "exists": true,
+    "row_count": 174,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR"
+      ],
+      [
+        "stat_date",
+        "DATE"
+      ],
+      [
+        "cum_buy",
+        "DOUBLE"
+      ],
+      [
+        "buy_count",
+        "INTEGER"
+      ],
+      [
+        "cum_sell",
+        "DOUBLE"
+      ],
+      [
+        "sell_count",
+        "INTEGER"
+      ],
+      [
+        "net_amount",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 8,
+    "date_columns": [
+      "stat_date"
+    ],
+    "min_date": "2026-06-01",
+    "max_date": "2026-06-01",
+    "days_span": 0,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(174)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 55
+  },
+  {
+    "table": "lhb_stock_stat",
+    "cn": "龙虎榜股票统计",
+    "source": "待确认",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 102,
+    "status": "pending",
+    "exists": true,
+    "row_count": 268,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR"
+      ],
+      [
+        "stat_date",
+        "DATE"
+      ],
+      [
+        "appear_count",
+        "INTEGER"
+      ],
+      [
+        "cum_buy",
+        "DOUBLE"
+      ],
+      [
+        "cum_sell",
+        "DOUBLE"
+      ],
+      [
+        "net_amount",
+        "DOUBLE"
+      ],
+      [
+        "buy_seats",
+        "INTEGER"
+      ],
+      [
+        "sell_seats",
+        "INTEGER"
+      ]
+    ],
+    "column_count": 9,
+    "date_columns": [
+      "stat_date"
+    ],
+    "min_date": "2026-06-01",
+    "max_date": "2026-06-01",
+    "days_span": 0,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(268)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 55
+  },
+  {
+    "table": "lhb_yyb_activity",
+    "cn": "游资活跃度",
+    "source": "待确认",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 106,
+    "status": "pending",
+    "exists": true,
+    "row_count": 1028,
+    "columns": [
+      [
+        "seq",
+        "INTEGER"
+      ],
+      [
+        "broker_name",
+        "VARCHAR"
+      ],
+      [
+        "lhb_date",
+        "DATE"
+      ],
+      [
+        "buy_stock_cnt",
+        "INTEGER"
+      ],
+      [
+        "sell_stock_cnt",
+        "INTEGER"
+      ],
+      [
+        "buy_total",
+        "DOUBLE"
+      ],
+      [
+        "sell_total",
+        "DOUBLE"
+      ],
+      [
+        "net_total",
+        "DOUBLE"
+      ],
+      [
+        "buy_stocks",
+        "VARCHAR"
+      ],
+      [
+        "broker_code",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 10,
+    "date_columns": [
+      "lhb_date"
+    ],
+    "min_date": "2026-05-27",
+    "max_date": "2026-06-01",
+    "days_span": 5,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(1,028)",
+      "仅5天"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 55
+  },
+  {
+    "table": "market_trading_data",
+    "cn": "市场交易数据",
+    "source": "API(TQ)",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 90,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 53678,
+    "columns": [
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "field_name",
+        "VARCHAR"
+      ],
+      [
+        "value_0",
+        "DOUBLE"
+      ],
+      [
+        "value_1",
+        "DOUBLE"
+      ],
+      [
+        "market",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 5,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "2016-01-26",
+    "max_date": "2026-05-29",
+    "days_span": 3776,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量可接受(53,678)",
+      "历史长(10年)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 80
+  },
+  {
+    "table": "sector_daily_data",
+    "cn": "板块日行情",
+    "source": "API(TQ)",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 30,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 259604,
+    "columns": [
+      [
+        "sector_code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "name",
+        "VARCHAR"
+      ],
+      [
+        "sector_type",
+        "VARCHAR"
+      ],
+      [
+        "change_pct",
+        "DOUBLE"
+      ],
+      [
+        "amount",
+        "DOUBLE"
+      ],
+      [
+        "turnover",
+        "DOUBLE"
+      ],
+      [
+        "advance",
+        "INTEGER"
+      ],
+      [
+        "decline",
+        "INTEGER"
+      ],
+      [
+        "total_stocks",
+        "INTEGER"
+      ],
+      [
+        "pe_ttm",
+        "DOUBLE"
+      ],
+      [
+        "pb_mrq",
+        "DOUBLE"
+      ],
+      [
+        "total_market_cap",
+        "DOUBLE"
+      ],
+      [
+        "limit_up",
+        "INTEGER"
+      ],
+      [
+        "limit_down",
+        "INTEGER"
+      ],
+      [
+        "flow_mv",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 16,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "2025-05-29",
+    "max_date": "2026-06-03",
+    "days_span": 370,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量中等(259,604)",
+      "1年以上(370天)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 75
+  },
+  {
+    "table": "sector_hierarchy",
+    "cn": "板块层级",
+    "source": "二进制",
+    "schedule": "once",
+    "dir": "1_入库",
+    "sort": 35,
+    "status": "pending",
+    "exists": true,
+    "row_count": 925,
+    "columns": [
+      [
+        "sector_code",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR"
+      ],
+      [
+        "category",
+        "VARCHAR"
+      ],
+      [
+        "ind1_code",
+        "VARCHAR"
+      ],
+      [
+        "ind2_code",
+        "VARCHAR"
+      ],
+      [
+        "ind3_code",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 6,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(925)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 55
+  },
+  {
+    "table": "sector_list",
+    "cn": "板块列表",
+    "source": "二进制",
+    "schedule": "once",
+    "dir": "1_入库",
+    "sort": 32,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 925,
+    "columns": [
+      [
+        "sector_code",
+        "VARCHAR"
+      ],
+      [
+        "name",
+        "VARCHAR"
+      ],
+      [
+        "sector_type",
+        "VARCHAR"
+      ],
+      [
+        "stock_count",
+        "INTEGER"
+      ],
+      [
+        "update_date",
+        "DATE"
+      ]
+    ],
+    "column_count": 5,
+    "date_columns": [
+      "update_date"
+    ],
+    "min_date": "2026-05-30",
+    "max_date": "2026-05-30",
+    "days_span": 0,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(925)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 55
+  },
+  {
+    "table": "sector_stocks",
+    "cn": "板块成份股",
+    "source": "二进制",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 33,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 91564,
+    "columns": [
+      [
+        "sector_code",
+        "VARCHAR"
+      ],
+      [
+        "stock_code",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 2,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量可接受(91,564)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 60
+  },
+  {
+    "table": "sector_trading_data",
+    "cn": "板块交易数据",
+    "source": "API(TQ)",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 34,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 4964469,
+    "columns": [
+      [
+        "sector_code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "field_type",
+        "VARCHAR"
+      ],
+      [
+        "field_name",
+        "VARCHAR"
+      ],
+      [
+        "value_0",
+        "DOUBLE"
+      ],
+      [
+        "value_1",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 6,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "2025-01-02",
+    "max_date": "2026-05-29",
+    "days_span": 512,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(4,964,469)",
+      "1年以上(512天)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 80
+  },
+  {
+    "table": "stock_daily_kline",
+    "cn": "股票日K线",
+    "source": "二进制",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 10,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 28810370,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "open",
+        "DOUBLE"
+      ],
+      [
+        "high",
+        "DOUBLE"
+      ],
+      [
+        "low",
+        "DOUBLE"
+      ],
+      [
+        "close",
+        "DOUBLE"
+      ],
+      [
+        "volume",
+        "BIGINT"
+      ],
+      [
+        "amount",
+        "DOUBLE"
+      ],
+      [
+        "change_pct",
+        "DOUBLE"
+      ],
+      [
+        "turnover",
+        "DOUBLE"
+      ],
+      [
+        "forward_factor",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 11,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "1990-12-19",
+    "max_date": "2026-06-08",
+    "days_span": 12955,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(28,810,370)",
+      "历史长(35年)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 90
+  },
+  {
+    "table": "stock_dividend_data",
+    "cn": "分红送配",
+    "source": "二进制",
+    "schedule": "weekly",
+    "dir": "1_入库",
+    "sort": 15,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 60901,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "ex_date",
+        "DATE"
+      ],
+      [
+        "record_date",
+        "DATE"
+      ],
+      [
+        "dividend_cash",
+        "DOUBLE"
+      ],
+      [
+        "dividend_share",
+        "DOUBLE"
+      ],
+      [
+        "right_issue_price",
+        "DOUBLE"
+      ],
+      [
+        "right_issue_ratio",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 7,
+    "date_columns": [
+      "ex_date",
+      "record_date"
+    ],
+    "min_date": "1990-03-01",
+    "max_date": "2026-06-08",
+    "days_span": 13248,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量可接受(60,901)",
+      "历史长(36年)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 80
+  },
+  {
+    "table": "stock_extended_info",
+    "cn": "股票扩展信息",
+    "source": "SQL派生",
+    "schedule": "daily",
+    "dir": "2_计算",
+    "sort": 11,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 565521,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "zt_price",
+        "DOUBLE"
+      ],
+      [
+        "dt_price",
+        "DOUBLE"
+      ],
+      [
+        "total_market_cap",
+        "DOUBLE"
+      ],
+      [
+        "float_market_cap",
+        "DOUBLE"
+      ],
+      [
+        "pe_ttm",
+        "DOUBLE"
+      ],
+      [
+        "pb_mrq",
+        "DOUBLE"
+      ],
+      [
+        "dy_ratio",
+        "DOUBLE"
+      ],
+      [
+        "turnover_rate",
+        "DOUBLE"
+      ],
+      [
+        "volume_ratio",
+        "DOUBLE"
+      ],
+      [
+        "zaf",
+        "DOUBLE"
+      ],
+      [
+        "beta_value",
+        "DOUBLE"
+      ],
+      [
+        "free_float_shares",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 14,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "2026-01-05",
+    "max_date": "2026-06-02",
+    "days_span": 148,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量中等(565,521)",
+      "148天数据"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 70
+  },
+  {
+    "table": "stock_kline_15m",
+    "cn": "股票分钟K线15m",
+    "source": "SQL聚合",
+    "schedule": "daily",
+    "dir": "2_计算",
+    "sort": 82,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 73386633,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "trade_time",
+        "TIMESTAMP"
+      ],
+      [
+        "open",
+        "DOUBLE"
+      ],
+      [
+        "high",
+        "DOUBLE"
+      ],
+      [
+        "low",
+        "DOUBLE"
+      ],
+      [
+        "close",
+        "DOUBLE"
+      ],
+      [
+        "volume",
+        "BIGINT"
+      ],
+      [
+        "amount",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 8,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(73,386,633)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 70
+  },
+  {
+    "table": "stock_kline_1m",
+    "cn": "股票分钟K线1m",
+    "source": "二进制",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 80,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 202332261,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "open",
+        "DOUBLE"
+      ],
+      [
+        "high",
+        "DOUBLE"
+      ],
+      [
+        "low",
+        "DOUBLE"
+      ],
+      [
+        "close",
+        "DOUBLE"
+      ],
+      [
+        "volume",
+        "BIGINT"
+      ],
+      [
+        "amount",
+        "DOUBLE"
+      ],
+      [
+        "trade_time",
+        "TIMESTAMP"
+      ]
+    ],
+    "column_count": 8,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(202,332,261)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 70
+  },
+  {
+    "table": "stock_kline_30m",
+    "cn": "股票分钟K线30m",
+    "source": "SQL聚合",
+    "schedule": "daily",
+    "dir": "2_计算",
+    "sort": 83,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 40769561,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "trade_time",
+        "TIMESTAMP"
+      ],
+      [
+        "open",
+        "DOUBLE"
+      ],
+      [
+        "high",
+        "DOUBLE"
+      ],
+      [
+        "low",
+        "DOUBLE"
+      ],
+      [
+        "close",
+        "DOUBLE"
+      ],
+      [
+        "volume",
+        "BIGINT"
+      ],
+      [
+        "amount",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 8,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(40,769,561)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 70
+  },
+  {
+    "table": "stock_kline_5m",
+    "cn": "股票分钟K线5m",
+    "source": "二进制",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 81,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 195995567,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "trade_time",
+        "TIMESTAMP"
+      ],
+      [
+        "open",
+        "DOUBLE"
+      ],
+      [
+        "high",
+        "DOUBLE"
+      ],
+      [
+        "low",
+        "DOUBLE"
+      ],
+      [
+        "close",
+        "DOUBLE"
+      ],
+      [
+        "volume",
+        "BIGINT"
+      ],
+      [
+        "amount",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 8,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(195,995,567)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 70
+  },
+  {
+    "table": "stock_kline_60m",
+    "cn": "股票小时K线",
+    "source": "SQL聚合",
+    "schedule": "daily",
+    "dir": "2_计算",
+    "sort": 84,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 24463237,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "trade_time",
+        "TIMESTAMP"
+      ],
+      [
+        "open",
+        "DOUBLE"
+      ],
+      [
+        "high",
+        "DOUBLE"
+      ],
+      [
+        "low",
+        "DOUBLE"
+      ],
+      [
+        "close",
+        "DOUBLE"
+      ],
+      [
+        "volume",
+        "BIGINT"
+      ],
+      [
+        "amount",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 8,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(24,463,237)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 70
+  },
+  {
+    "table": "stock_kline_monthly",
+    "cn": "股票月K线",
+    "source": "SQL聚合",
+    "schedule": "monthly",
+    "dir": "2_计算",
+    "sort": 18,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 1467263,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "open",
+        "DOUBLE"
+      ],
+      [
+        "high",
+        "DOUBLE"
+      ],
+      [
+        "low",
+        "DOUBLE"
+      ],
+      [
+        "close",
+        "DOUBLE"
+      ],
+      [
+        "volume",
+        "BIGINT"
+      ],
+      [
+        "amount",
+        "DOUBLE"
+      ],
+      [
+        "change_pct",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 9,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "1990-12-19",
+    "max_date": "2026-06-08",
+    "days_span": 12955,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(1,467,263)",
+      "历史长(35年)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 90
+  },
+  {
+    "table": "stock_kline_weekly",
+    "cn": "股票周K线",
+    "source": "SQL聚合",
+    "schedule": "weekly",
+    "dir": "2_计算",
+    "sort": 17,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 6156416,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "open",
+        "DOUBLE"
+      ],
+      [
+        "high",
+        "DOUBLE"
+      ],
+      [
+        "low",
+        "DOUBLE"
+      ],
+      [
+        "close",
+        "DOUBLE"
+      ],
+      [
+        "volume",
+        "BIGINT"
+      ],
+      [
+        "amount",
+        "DOUBLE"
+      ],
+      [
+        "change_pct",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 9,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "1990-12-19",
+    "max_date": "2026-06-08",
+    "days_span": 12955,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(6,156,416)",
+      "历史长(35年)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 90
+  },
+  {
+    "table": "stock_sector_relation",
+    "cn": "股票板块关系",
+    "source": "二进制",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 16,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 91564,
+    "columns": [
+      [
+        "stock_code",
+        "VARCHAR"
+      ],
+      [
+        "sector_code",
+        "VARCHAR"
+      ],
+      [
+        "sector_type",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 3,
+    "date_columns": [],
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量可接受(91,564)"
+    ],
+    "value_tag": "REVIEW",
+    "value_score": 60
+  },
+  {
+    "table": "stock_technical_indicators",
+    "cn": "技术指标",
+    "source": "API(TQ)",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 19,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 1004986,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "formula_name",
+        "VARCHAR"
+      ],
+      [
+        "output_key",
+        "VARCHAR"
+      ],
+      [
+        "value",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 5,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "2026-01-12",
+    "max_date": "2026-06-02",
+    "days_span": 141,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(1,004,986)",
+      "141天数据"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 75
+  },
+  {
+    "table": "stock_trading_data",
+    "cn": "股票交易数据",
+    "source": "API(TQ)",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 12,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 5964214,
+    "columns": [
+      [
+        "code",
+        "VARCHAR"
+      ],
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "field_type",
+        "VARCHAR"
+      ],
+      [
+        "field_name",
+        "VARCHAR"
+      ],
+      [
+        "value_0",
+        "DOUBLE"
+      ],
+      [
+        "value_1",
+        "DOUBLE"
+      ]
+    ],
+    "column_count": 6,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "2025-05-26",
+    "max_date": "2026-06-02",
+    "days_span": 372,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量大(5,964,214)",
+      "1年以上(372天)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 80
+  },
+  {
+    "table": "trading_calendar",
+    "cn": "交易日历",
+    "source": "API(TQ)",
+    "schedule": "daily",
+    "dir": "1_入库",
+    "sort": 91,
+    "status": "implemented",
+    "exists": true,
+    "row_count": 6401,
+    "columns": [
+      [
+        "date",
+        "DATE"
+      ],
+      [
+        "is_trading",
+        "BOOLEAN"
+      ],
+      [
+        "market",
+        "VARCHAR"
+      ]
+    ],
+    "column_count": 3,
+    "date_columns": [
+      "date"
+    ],
+    "min_date": "2000-01-04",
+    "max_date": "2026-06-05",
+    "days_span": 9649,
+    "has_data": true,
+    "null_warnings": [],
+    "zero_warnings": [],
+    "quality": "OK",
+    "value_reasons": [
+      "数据量较少(6,401)",
+      "历史长(26年)"
+    ],
+    "value_tag": "KEEP",
+    "value_score": 75
+  }
+]
