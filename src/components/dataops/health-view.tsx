@@ -257,32 +257,88 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
         </CardContent>
       </Card>
 
-      {/* 红表示例详情 */}
+      {/* 红表示例详情 - 异常自动归因 */}
       {redTables.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2 text-rose-600">
-              <AlertTriangle className="h-4 w-4" />异常表详情 ({redTables.length})
+              <AlertTriangle className="h-4 w-4" />异常表自动归因 ({redTables.length})
+              <Badge variant="outline" className="text-[10px] text-rose-600 border-rose-300 ml-1">ROOT CAUSE</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {redTables.map(t => (
-              <div key={t.table} className="p-3 rounded-md border border-rose-200 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20">
-                <div className="flex items-center justify-between mb-1">
-                  <div>
-                    <span className="font-mono font-medium text-sm">{t.table}</span>
-                    <span className="text-xs text-zinc-500 ml-2">{t.cn}</span>
+            {redTables.map(t => {
+              const attribution = getAttribution(t.table)
+              return (
+                <div key={t.table} className="p-3 rounded-md border border-rose-200 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono font-medium text-sm">{t.table}</span>
+                      <span className="text-xs text-zinc-500">{t.cn}</span>
+                      <Badge variant="outline" className={`text-[9px] py-0 px-1.5 ${attribution.severity === 'critical' ? 'text-rose-600 border-rose-400 bg-rose-100/50 dark:bg-rose-950/40' : 'text-amber-600 border-amber-400'}`}>
+                        {attribution.severity === 'critical' ? 'CRITICAL' : 'WARNING'}
+                      </Badge>
+                      <Badge variant="outline" className="text-[9px] py-0 px-1.5 text-zinc-500">{attribution.category}</Badge>
+                    </div>
+                    <Button size="sm" variant="destructive" onClick={() => onRunTable?.(t.table)}>
+                      <RefreshCw className="h-3.5 w-3.5 mr-1" />强制重跑
+                    </Button>
                   </div>
-                  <Button size="sm" variant="destructive" onClick={() => onRunTable?.(t.table)}>
-                    <RefreshCw className="h-3.5 w-3.5 mr-1" />强制重跑
-                  </Button>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                    {/* 根因 */}
+                    <div className="p-2 rounded bg-rose-100/40 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900">
+                      <div className="text-[10px] font-medium text-rose-700 dark:text-rose-300 mb-1 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />根因
+                      </div>
+                      <div className="text-zinc-700 dark:text-zinc-300 leading-relaxed">{attribution.cause}</div>
+                    </div>
+                    {/* 影响 */}
+                    <div className="p-2 rounded bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
+                      <div className="text-[10px] font-medium text-amber-700 dark:text-amber-300 mb-1 flex items-center gap-1">
+                        <Activity className="h-3 w-3" />下游影响
+                      </div>
+                      <div className="text-zinc-700 dark:text-zinc-300 leading-relaxed">
+                        {t.downstream.length > 0 ? (
+                          <>
+                            <span className="font-mono">{t.downstream.length}</span> 张下游表阻塞：{t.downstream.slice(0, 2).map(d => <span key={d} className="font-mono text-[10px] bg-amber-100 dark:bg-amber-900/40 px-1 rounded mr-0.5">{d}</span>)}
+                            {t.downstream.length > 2 && <span className="text-zinc-500"> 等</span>}
+                          </>
+                        ) : '无下游依赖'}
+                      </div>
+                    </div>
+                    {/* 修复建议 */}
+                    <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900">
+                      <div className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300 mb-1 flex items-center gap-1">
+                        <Wrench className="h-3 w-3" />修复建议
+                      </div>
+                      <div className="text-zinc-700 dark:text-zinc-300 leading-relaxed">{attribution.fix}</div>
+                    </div>
+                  </div>
+
+                  {/* 修复步骤 */}
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] text-zinc-500 flex items-center gap-1"><RefreshCw className="h-3 w-3" />修复步骤:</span>
+                    {attribution.steps.map((step, i) => (
+                      <div key={i} className="flex items-center gap-1">
+                        <span className="h-4 w-4 rounded-full bg-zinc-200 dark:bg-zinc-700 text-[9px] font-mono flex items-center justify-center text-zinc-600 dark:text-zinc-300">{i + 1}</span>
+                        <span className="text-[11px] text-zinc-600 dark:text-zinc-400">{step}</span>
+                        {i < attribution.steps.length - 1 && <span className="text-zinc-300 mx-0.5">→</span>}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 最后出错时间 */}
+                  <div className="mt-2 flex items-center gap-3 text-[10px] text-zinc-500">
+                    <span className="flex items-center gap-1"><Activity className="h-3 w-3" />最后出错: {attribution.lastError}</span>
+                    <span>·</span>
+                    <span>重试次数: {attribution.retries}/3</span>
+                    <span>·</span>
+                    <span className={attribution.estimatedFix !== '5min' ? 'text-amber-600' : 'text-emerald-600'}>预计修复: {attribution.estimatedFix}</span>
+                  </div>
                 </div>
-                <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                  {t.table === 'sector_stocks' && '空表：脚本未实现，ensure_table 里表名字面量写着「表名」。建议删除或实现。'}
-                  {t.table === 't_bk5_19' && '滞后：最新数据 2026-06-24 < 最后交易日 2026-06-25。@meta mode=increment 与代码 MODE="full" 矛盾导致 DELETE 逻辑错乱。'}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </CardContent>
         </Card>
       )}
@@ -296,6 +352,53 @@ function dayStatusClass(s: string): string {
     case 'failed': return 'bg-rose-500 text-white'
     case 'skipped': return 'bg-zinc-300 text-zinc-600'
     default: return 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400'
+  }
+}
+
+// 异常自动归因数据
+interface Attribution {
+  severity: 'critical' | 'warning'
+  category: string
+  cause: string
+  fix: string
+  steps: string[]
+  lastError: string
+  retries: number
+  estimatedFix: string
+}
+
+function getAttribution(table: string): Attribution {
+  const map: Record<string, Attribution> = {
+    sector_stocks: {
+      severity: 'warning',
+      category: '实现缺失',
+      cause: '脚本未实现：ensure_table 里表名字面量写着「表名」，未真正建表也未灌数。',
+      fix: '删除该脚本，或正确实现 ensure_table + fetch_data + save_data。',
+      steps: ['定位脚本', '修复字面量', '本地验证', '重新入库'],
+      lastError: '2026-06-25 18:42:12',
+      retries: 0,
+      estimatedFix: '15min',
+    },
+    t_bk5_19: {
+      severity: 'critical',
+      category: '配置矛盾',
+      cause: '@meta mode=increment 与代码 MODE="full" 矛盾，DELETE 逻辑错乱导致数据滞后 1 天。',
+      fix: '统一 @meta 与代码 MODE 为 full（全量重灌语义），并补跑昨日数据。',
+      steps: ['改 YAML @meta', '改代码常量', 'lint 校验', 'force 补数'],
+      lastError: '2026-06-25 18:42:10',
+      retries: 3,
+      estimatedFix: '30min',
+    },
+  }
+  return map[table] || {
+    severity: 'warning',
+    category: '未知',
+    cause: '未配置归因规则，请检查脚本日志确认根因。',
+    fix: '查看 logs/run_YYYYMMDD.log 定位异常堆栈。',
+    steps: ['查日志', '定位异常', '修复', '重跑'],
+    lastError: '—',
+    retries: 0,
+    estimatedFix: '—',
   }
 }
 

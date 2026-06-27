@@ -1,17 +1,64 @@
 'use client'
-import { TableMeta } from '@/lib/dataops/mock-data'
+import { TableMeta, DailyRunStat } from '@/lib/dataops/mock-data'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive, Radio, Loader2, XCircle, Play, Pause, Terminal } from 'lucide-react'
+import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive, Radio, Loader2, XCircle, Play, Pause, Terminal, Calendar } from 'lucide-react'
 import { ALERTS, PIPELINE_RUNS, ROW_TREND, TABLES, DAILY_STATS, INGEST_TREND, SCRIPT_DISTRIBUTION } from '@/lib/dataops/mock-data'
 import { formatRows, runStatusClass, runStatusDot } from '@/lib/dataops/styles'
 import { useLogStreamer } from '@/hooks/use-log-streamer'
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+type TimeRange = '7d' | '30d' | '90d'
+
+// 根据时间范围生成缩放的 mock 数据
+function genScaledStats(range: TimeRange): DailyRunStat[] {
+  if (range === '7d') return DAILY_STATS
+  const days = range === '30d' ? 30 : 90
+  const result: DailyRunStat[] = []
+  const baseDate = new Date('2026-06-25')
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(baseDate)
+    d.setDate(d.getDate() - i)
+    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`
+    const dayOfWeek = d.getDay()
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+    // 用周期性 mock 数据（基于日期 hash）
+    const seed = (d.getDate() * 7 + d.getMonth() * 31) % 100
+    const total = isWeekend ? 0 : 18 + (seed % 4)
+    const failed = isWeekend ? 0 : (seed % 7 === 0 ? 1 : 0) + (seed % 11 === 0 ? 1 : 0)
+    const skipped = isWeekend ? 0 : (seed % 5 === 0 ? 1 : 0)
+    const success = total - failed - skipped
+    const totalRows = isWeekend ? 0 : 3_200_000 + (seed * 47000) % 2_000_000
+    const durationMin = isWeekend ? 0 : 38 + (seed % 12)
+    result.push({ date: dateStr, success, failed, skipped, total, totalRows, durationMin })
+  }
+  return result
+}
+
+function genScaledIngest(range: TimeRange): { date: string; rows: number }[] {
+  if (range === '7d') return INGEST_TREND
+  const days = range === '30d' ? 30 : 90
+  const result: { date: string; rows: number }[] = []
+  const baseDate = new Date('2026-06-25')
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(baseDate)
+    d.setDate(d.getDate() - i)
+    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`
+    const dayOfWeek = d.getDay()
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+    const seed = (d.getDate() * 13 + d.getMonth() * 7) % 100
+    const rows = isWeekend ? 0 : 600_000 + (seed * 31000) % 3_500_000
+    result.push({ date: dateStr, rows })
+  }
+  return result
+}
+
 export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void }) {
+  const [timeRange, setTimeRange] = useState<TimeRange>('7d')
+
   const totalTables = TABLES.length
   const greenTables = TABLES.filter(t => t.health === 'green').length
   const redTables = TABLES.filter(t => t.health === 'red').length
@@ -23,9 +70,14 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
   const totalRows = TABLES.reduce((s, t) => s + t.rows, 0)
   const runningRun = PIPELINE_RUNS.find(r => r.status === 'running')
   const todayStat = DAILY_STATS[DAILY_STATS.length - 1]
-  const last7Success = DAILY_STATS.reduce((s, d) => s + d.success, 0)
-  const last7Total = DAILY_STATS.reduce((s, d) => s + d.total, 0)
-  const last7Rate = last7Total > 0 ? Math.round((last7Success / last7Total) * 100) : 0
+
+  // 时间范围相关数据
+  const scaledStats = useMemo(() => genScaledStats(timeRange), [timeRange])
+  const scaledIngest = useMemo(() => genScaledIngest(timeRange), [timeRange])
+  const rangeSuccess = scaledStats.reduce((s, d) => s + d.success, 0)
+  const rangeTotal = scaledStats.reduce((s, d) => s + d.total, 0)
+  const rangeRate = rangeTotal > 0 ? Math.round((rangeSuccess / rangeTotal) * 100) : 0
+  const rangeLabel = timeRange === '7d' ? '7日' : timeRange === '30d' ? '30日' : '90日'
 
   // 执行时间线 (gantt)
   const timelineRuns = todayRuns.filter(r => r.durationSec && r.durationSec > 0).slice(0, 12)
@@ -38,6 +90,25 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
 
   return (
     <div className="space-y-6">
+      {/* 时间范围选择器 */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2 text-xs text-zinc-500">
+          <Calendar className="h-3.5 w-3.5" />
+          <span>统计区间</span>
+        </div>
+        <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
+          {(['7d', '30d', '90d'] as TimeRange[]).map(r => (
+            <button
+              key={r}
+              onClick={() => setTimeRange(r)}
+              className={`px-3 py-1 text-xs rounded transition-all ${timeRange === r ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+            >
+              {r === '7d' ? '近 7 天' : r === '30d' ? '近 30 天' : '近 90 天'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* KPI 卡片 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
@@ -50,19 +121,19 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
         />
         <KpiCard
           icon={<CheckCircle2 className="h-5 w-5" />}
-          label="今日执行成功率"
-          value={`${successRate}%`}
-          sub={`${todayRuns.filter(r => r.status === 'success').length}/${todayRuns.length} 成功 · 7日均 ${last7Rate}%`}
-          tone={successRate >= 90 ? 'emerald' : 'amber'}
-          spark={<Sparkline data={[100, 96, 0, 0, 92, 96, 85]} color={successRate >= 90 ? 'emerald' : 'amber'} />}
+          label={`${rangeLabel}执行成功率`}
+          value={`${rangeRate}%`}
+          sub={`${rangeSuccess}/${rangeTotal} 成功 · 今日 ${successRate}%`}
+          tone={rangeRate >= 90 ? 'emerald' : 'amber'}
+          spark={<Sparkline data={scaledStats.slice(-7).map(d => d.total > 0 ? Math.round((d.success / d.total) * 100) : 0)} color={rangeRate >= 90 ? 'emerald' : 'amber'} />}
         />
         <KpiCard
           icon={<TrendingUp className="h-5 w-5" />}
-          label="总行数"
-          value={formatRows(totalRows)}
-          sub={`今日入库 ${formatRows(todayStat.totalRows)}`}
+          label={`${rangeLabel}入库行数`}
+          value={formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0))}
+          sub={`日均 ${formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0) / scaledIngest.filter(d => d.rows > 0).length || 1)}`}
           tone="fuchsia"
-          spark={<Sparkline data={[215, 215, 215, 215, 216, 216, 217]} color="fuchsia" suffix="M" />}
+          spark={<Sparkline data={scaledIngest.slice(-7).map(d => Math.round(d.rows / 1000000 * 10) / 10)} color="fuchsia" suffix="M" />}
         />
         <KpiCard
           icon={<AlertTriangle className="h-5 w-5" />}
@@ -163,21 +234,22 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Gauge className="h-4 w-4 text-emerald-500" />
-              近 7 日执行成功率
+              {rangeLabel}执行成功率
+              <Badge variant="outline" className="text-[10px] ml-1">{scaledStats.length} 天</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-4">
               <DonutChart
-                value={last7Rate}
+                value={rangeRate}
                 size={120}
-                label={`${last7Rate}%`}
-                subLabel="7日均"
+                label={`${rangeRate}%`}
+                subLabel={rangeLabel}
               />
-              <div className="flex-1 space-y-1.5 text-xs">
-                {DAILY_STATS.slice().reverse().map(d => (
+              <div className="flex-1 space-y-1 text-xs max-h-[140px] overflow-y-auto pr-1">
+                {scaledStats.slice().reverse().slice(0, timeRange === '7d' ? 7 : 12).map(d => (
                   <div key={d.date} className="flex items-center gap-2">
-                    <span className="w-10 text-zinc-500 font-mono">{d.date}</span>
+                    <span className="w-10 text-zinc-500 font-mono text-[10px] flex-shrink-0">{d.date}</span>
                     <div className="flex-1 h-2 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
                       <div
                         className={`h-full rounded ${d.total === 0 ? 'bg-zinc-200' : d.failed > 0 ? 'bg-amber-400' : 'bg-emerald-500'}`}
@@ -189,6 +261,9 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
                     </span>
                   </div>
                 ))}
+                {timeRange !== '7d' && (
+                  <div className="text-[10px] text-zinc-400 text-center pt-1">显示最近 12 天 · 共 {scaledStats.length} 天</div>
+                )}
               </div>
             </div>
           </CardContent>
@@ -199,23 +274,23 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-fuchsia-500" />
-              每日入座行数趋势
+              {rangeLabel}入座行数趋势
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <AreaChart data={INGEST_TREND} />
+            <AreaChart data={scaledIngest} />
             <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
               <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/50">
-                <div className="text-[10px] text-zinc-400">本周累计</div>
-                <div className="font-mono font-semibold text-sm">{formatRows(INGEST_TREND.reduce((s, d) => s + d.rows, 0))}</div>
+                <div className="text-[10px] text-zinc-400">{rangeLabel}累计</div>
+                <div className="font-mono font-semibold text-sm">{formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0))}</div>
               </div>
               <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/50">
                 <div className="text-[10px] text-zinc-400">日均</div>
-                <div className="font-mono font-semibold text-sm">{formatRows(INGEST_TREND.reduce((s, d) => s + d.rows, 0) / 5)}</div>
+                <div className="font-mono font-semibold text-sm">{formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0) / (scaledIngest.filter(d => d.rows > 0).length || 1))}</div>
               </div>
               <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/50">
                 <div className="text-[10px] text-zinc-400">峰值</div>
-                <div className="font-mono font-semibold text-sm text-fuchsia-600">{formatRows(Math.max(...INGEST_TREND.map(d => d.rows)))}</div>
+                <div className="font-mono font-semibold text-sm text-fuchsia-600">{formatRows(Math.max(...scaledIngest.map(d => d.rows)))}</div>
               </div>
             </div>
           </CardContent>
@@ -534,15 +609,15 @@ function KpiCard({ icon, label, value, sub, tone, spark }: { icon: React.ReactNo
     fuchsia: 'text-fuchsia-600 bg-fuchsia-50 dark:bg-fuchsia-950/40',
   }
   return (
-    <Card className="overflow-hidden group hover:shadow-md transition-shadow">
+    <Card className="overflow-hidden group hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-stagger-in">
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
           <div className="space-y-1 flex-1 min-w-0">
             <div className="text-xs text-zinc-500">{label}</div>
-            <div className="text-2xl font-semibold tracking-tight">{value}</div>
+            <div className="text-2xl font-semibold tracking-tight animate-count-up">{value}</div>
             <div className="text-[11px] text-zinc-400 truncate">{sub}</div>
           </div>
-          <div className={`p-2 rounded-lg ${toneMap[tone]}`}>{icon}</div>
+          <div className={`p-2 rounded-lg ${toneMap[tone]} group-hover:scale-110 transition-transform`}>{icon}</div>
         </div>
         {spark && <div className="mt-3 -mb-1">{spark}</div>}
       </CardContent>
@@ -620,10 +695,14 @@ function AreaChart({ data }: { data: { date: string; rows: number }[] }) {
   const h = 100
   const padding = 4
   const max = Math.max(...data.map(d => d.rows), 1)
-  const step = (w - padding * 2) / (data.length - 1)
+  const step = data.length > 1 ? (w - padding * 2) / (data.length - 1) : 0
   const points = data.map((d, i) => `${padding + i * step},${h - padding - (d.rows / max) * (h - padding * 2 - 16)}`)
   const linePath = `M ${points.join(' L ')}`
   const areaPath = `${linePath} L ${padding + (data.length - 1) * step},${h - padding} L ${padding},${h - padding} Z`
+  // 大数据集时稀疏化标签和圆点
+  const labelInterval = data.length > 60 ? 15 : data.length > 20 ? 7 : data.length > 10 ? 3 : 1
+  const showDots = data.length <= 30
+  const dotR = data.length > 15 ? 1.5 : 2.5
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-24" preserveAspectRatio="none">
       <defs>
@@ -636,10 +715,12 @@ function AreaChart({ data }: { data: { date: string; rows: number }[] }) {
       <path d={linePath} fill="none" stroke="#d946ef" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
       {data.map((d, i) => (
         <g key={i}>
-          {d.rows > 0 && (
-            <circle cx={padding + i * step} cy={h - padding - (d.rows / max) * (h - padding * 2 - 16)} r={2.5} fill="#d946ef" />
+          {showDots && d.rows > 0 && (
+            <circle cx={padding + i * step} cy={h - padding - (d.rows / max) * (h - padding * 2 - 16)} r={dotR} fill="#d946ef" />
           )}
-          <text x={padding + i * step} y={h - 2} textAnchor="middle" className="fill-zinc-400 text-[8px] font-mono">{d.date}</text>
+          {i % labelInterval === 0 && (
+            <text x={padding + i * step} y={h - 2} textAnchor="middle" className="fill-zinc-400 text-[8px] font-mono">{d.date}</text>
+          )}
         </g>
       ))}
     </svg>

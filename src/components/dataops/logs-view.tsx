@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Search, FileText, Radio, Pause, Play, Trash2, Activity, Loader2, CheckCircle2, XCircle, Zap, Wifi, WifiOff } from 'lucide-react'
+import { Search, FileText, Radio, Pause, Play, Trash2, Activity, Loader2, CheckCircle2, XCircle, Zap, Wifi, WifiOff, Download, ArrowDownToLine, ChevronDown, ChevronUp, Filter, Copy } from 'lucide-react'
 import { useLogStreamer } from '@/hooks/use-log-streamer'
 import { toast } from 'sonner'
 
@@ -18,6 +18,8 @@ export function LogsView() {
   const [level, setLevel] = useState<string>('all')
   const [table, setTable] = useState<string>('all')
   const [liveMode, setLiveMode] = useState(true)
+  const [autoScroll, setAutoScroll] = useState(true)
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
   // 实时流
   const streamer = useLogStreamer()
@@ -40,17 +42,50 @@ export function LogsView() {
     })
   }, [allLogs, search, level, table])
 
+  // 按级别统计
+  const stats = useMemo(() => {
+    const s = { ERROR: 0, WARNING: 0, INFO: 0, DEBUG: 0 }
+    allLogs.forEach(l => { s[l.level]++ })
+    return s
+  }, [allLogs])
+
   const liveRefs = useRef<HTMLDivElement>(null)
-  // 自动滚动到底部（live 模式）
+  // 自动滚动到底部（live 模式 + autoScroll 开启）
   useEffect(() => {
-    if (liveMode && liveRefs.current) {
+    if (liveMode && autoScroll && liveRefs.current) {
       liveRefs.current.scrollTop = liveRefs.current.scrollHeight
     }
-  }, [filtered.length, liveMode])
+  }, [filtered.length, liveMode, autoScroll])
 
   const handleTrigger = (table: string) => {
     streamer.trigger(undefined, table)
     toast.success(`已触发实时执行：${table}`, { description: '观察下方日志流' })
+  }
+
+  const handleExport = () => {
+    const lines = filtered.map(l => `[${l.ts}] ${l.level.padEnd(7)} ${l.table.padEnd(22)} | ${l.message}`)
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `logs_${new Date().toISOString().slice(0, 10)}.log`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success(`已导出 ${filtered.length} 条日志`, { description: a.download })
+  }
+
+  const copyLog = (msg: string) => {
+    navigator.clipboard?.writeText(msg)
+    toast.success('已复制日志内容')
+  }
+
+  const toggleExpand = (id: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   return (
@@ -195,24 +230,14 @@ export function LogsView() {
         </Card>
       )}
 
-      {/* 筛选栏 */}
+      {/* 筛选栏 + 级别 chips */}
       <Card>
-        <CardContent className="p-3">
+        <CardContent className="p-3 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-              <Input placeholder="搜索日志内容..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 font-mono text-sm" />
+              <Input placeholder="搜索日志内容 / 表名..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 font-mono text-sm h-9" />
             </div>
-            <Select value={level} onValueChange={setLevel}>
-              <SelectTrigger className="w-32 h-9"><SelectValue placeholder="级别" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部级别</SelectItem>
-                <SelectItem value="ERROR">ERROR</SelectItem>
-                <SelectItem value="WARNING">WARNING</SelectItem>
-                <SelectItem value="INFO">INFO</SelectItem>
-                <SelectItem value="DEBUG">DEBUG</SelectItem>
-              </SelectContent>
-            </Select>
             <Select value={table} onValueChange={setTable}>
               <SelectTrigger className="w-48 h-9"><SelectValue placeholder="表" /></SelectTrigger>
               <SelectContent className="max-h-80">
@@ -220,10 +245,22 @@ export function LogsView() {
                 {tables.map(t => <SelectItem key={t} value={t} className="font-mono text-xs">{t}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Button variant="outline" size="sm" className="h-9 text-xs" onClick={handleExport} disabled={filtered.length === 0} title="导出为 .log 文件">
+              <Download className="h-3.5 w-3.5 mr-1" />导出
+            </Button>
             <Badge variant="secondary" className="ml-auto">
               {filtered.length} / {allLogs.length}
               {liveMode && streamer.logs.length > 0 && <span className="ml-1 text-rose-500">·{streamer.logs.length} live</span>}
             </Badge>
+          </div>
+          {/* 级别 chips */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] text-zinc-400 flex items-center gap-1 mr-1"><Filter className="h-3 w-3" />级别:</span>
+            <LevelChip label="全部" count={allLogs.length} active={level === 'all'} onClick={() => setLevel('all')} color="zinc" />
+            <LevelChip label="ERROR" count={stats.ERROR} active={level === 'ERROR'} onClick={() => setLevel('ERROR')} color="rose" />
+            <LevelChip label="WARNING" count={stats.WARNING} active={level === 'WARNING'} onClick={() => setLevel('WARNING')} color="amber" />
+            <LevelChip label="INFO" count={stats.INFO} active={level === 'INFO'} onClick={() => setLevel('INFO')} color="emerald" />
+            <LevelChip label="DEBUG" count={stats.DEBUG} active={level === 'DEBUG'} onClick={() => setLevel('DEBUG')} color="sky" />
           </div>
         </CardContent>
       </Card>
@@ -231,20 +268,32 @@ export function LogsView() {
       {/* 日志流 */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileText className="h-4 w-4 text-zinc-500" />
-            日志流
-            {liveMode ? (
-              <Badge variant="outline" className="text-rose-600 border-rose-300 ml-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse mr-1" /> LIVE
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="text-zinc-500 ml-1">历史回放</Badge>
-            )}
-            <span className="text-[11px] text-zinc-400 font-normal ml-2">
-              {liveMode ? 'logs/run_20260625.log + 实时推送' : 'logs/run_20260625.log'}
-            </span>
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4 text-zinc-500" />
+              日志流
+              {liveMode ? (
+                <Badge variant="outline" className="text-rose-600 border-rose-300 ml-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse mr-1" /> LIVE
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-zinc-500 ml-1">历史回放</Badge>
+              )}
+              <span className="text-[11px] text-zinc-400 font-normal ml-2">
+                {liveMode ? 'logs/run_20260625.log + 实时推送' : 'logs/run_20260625.log'}
+              </span>
+            </CardTitle>
+            <div className="flex items-center gap-2 text-xs">
+              <div className="flex items-center gap-1.5">
+                <ArrowDownToLine className={`h-3.5 w-3.5 ${autoScroll && liveMode ? 'text-emerald-500' : 'text-zinc-400'}`} />
+                <span className="text-zinc-500">自动滚动</span>
+                <Switch checked={autoScroll && liveMode} onCheckedChange={v => { setAutoScroll(v); if (v) setLiveMode(true) }} disabled={!liveMode} />
+              </div>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { if (liveRefs.current) liveRefs.current.scrollTop = liveRefs.current.scrollHeight }} title="滚动到底部">
+                <ChevronDown className="h-3.5 w-3.5" />底部
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <div ref={liveRefs} className="h-[calc(100vh-460px)] overflow-y-auto font-mono">
@@ -257,23 +306,35 @@ export function LogsView() {
               )}
               {filtered.map((l, i) => {
                 const isLive = streamer.logs.some(s => s.id === l.id)
+                const isExpanded = expandedRows.has(l.id ?? `row-${i}`)
+                const hasLong = l.message.length > 80
                 return (
                   <div
                     key={l.id ?? i}
-                    className={`flex gap-2 py-0.5 px-2 rounded ${
+                    className={`group flex gap-2 py-0.5 px-2 rounded ${
                       l.level === 'ERROR' ? 'bg-rose-50 dark:bg-rose-950/30' :
                       l.level === 'WARNING' ? 'bg-amber-50 dark:bg-amber-950/20' :
                       isLive ? 'bg-sky-50/50 dark:bg-sky-950/20' :
                       'hover:bg-zinc-50 dark:hover:bg-zinc-900/40'
                     }`}
                   >
-                    <span className="text-zinc-400 flex-shrink-0">{l.ts.slice(5)}</span>
-                    <span className={`flex-shrink-0 w-16 font-bold ${levelColor(l.level)}`}>
+                    <span className="text-zinc-400 flex-shrink-0 w-20">{l.ts.slice(5)}</span>
+                    <span className={`flex-shrink-0 w-20 font-bold ${levelColor(l.level)}`}>
                       {l.level}
                       {isLive && <span className="ml-1 text-rose-500">●</span>}
                     </span>
-                    <span className="text-sky-600 dark:text-sky-400 flex-shrink-0 w-40 truncate">{l.table}</span>
-                    <span className="text-zinc-700 dark:text-zinc-300 flex-1">{l.message}</span>
+                    <span className="text-sky-600 dark:text-sky-400 flex-shrink-0 w-40 truncate" title={l.table}>{l.table}</span>
+                    <span className={`text-zinc-700 dark:text-zinc-300 flex-1 ${!isExpanded && hasLong ? 'truncate' : ''}`}>{l.message}</span>
+                    <div className="flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {hasLong && (
+                        <button onClick={() => toggleExpand(l.id ?? `row-${i}`)} className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400" title={isExpanded ? '收起' : '展开'}>
+                          {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        </button>
+                      )}
+                      <button onClick={() => copyLog(l.message)} className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400" title="复制">
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </div>
                   </div>
                 )
               })}
@@ -282,6 +343,25 @@ export function LogsView() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function LevelChip({ label, count, active, onClick, color }: { label: string; count: number; active: boolean; onClick: () => void; color: 'zinc' | 'rose' | 'amber' | 'emerald' | 'sky' }) {
+  const colorMap = {
+    zinc: active ? 'bg-zinc-700 text-white border-zinc-700' : 'text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800',
+    rose: active ? 'bg-rose-600 text-white border-rose-600' : 'text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-50 dark:hover:bg-rose-950/30',
+    amber: active ? 'bg-amber-500 text-white border-amber-500' : 'text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900 hover:bg-amber-50 dark:hover:bg-amber-950/30',
+    emerald: active ? 'bg-emerald-600 text-white border-emerald-600' : 'text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-50 dark:hover:bg-emerald-950/30',
+    sky: active ? 'bg-sky-600 text-white border-sky-600' : 'text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900 hover:bg-sky-50 dark:hover:bg-sky-950/30',
+  }
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium border transition-all ${colorMap[color]}`}
+    >
+      {label}
+      <span className={`px-1 rounded text-[10px] ${active ? 'bg-white/20' : 'bg-zinc-100 dark:bg-zinc-800'}`}>{count}</span>
+    </button>
   )
 }
 

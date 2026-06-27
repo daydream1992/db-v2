@@ -351,3 +351,120 @@ Unresolved / 下一阶段优先事项:
 - 接真实 API（E3 阶段）仍是最大未完成项
 - lint engine 12 条规则的 Python 实现仍未做（E1 阶段）
 - log-streamer mini-service 当前用客户端模拟，可切回真实 socket.io
+
+---
+Task ID: 6 (cron webDevReview 第 5 轮)
+Agent: main (Z.ai Code)
+Task: DataOps 管理台持续开发巡检 — QA 测试 + 新增功能 + 样式打磨（v5）
+
+Work Log:
+- 读取 worklog.md 了解 v4 进展：10 视图 + 命令面板 + 通知中心 + 交互式血缘 + SQL 多 Tab + 健康度增强 + 全局滚动条/动画
+- QA 测试（agent-browser）：
+  - dev server 正常 (port 3000, 200, 编译无错)
+  - 10 视图遍历全部可访问，H1 全部正确
+  - 命令面板 Cmd+K 唤起，搜索 "kline" 过滤正确
+  - 通知中心抽屉打开正常
+  - SQL 多 Tab：3 个 tab，新建 tab，加载 q1 后执行返回 8 行
+  - 血缘 27 节点 + minimap
+  - 暗色切换正常
+  - reload 后 0 console error
+  - bun run lint 0 error
+- 判断：项目稳定，进入新功能开发（重点：Settings 视图最弱，仅 150 行 readonly）
+- 新增功能 1：Settings 视图全面重构（从 150 行 → 689 行）
+  - 7 个 Tab：通用 / Lint 规则 / 调度 / 通知 / 数据源 / 集成 / 高级
+  - 完整状态管理（SettingsState 接口 30+ 字段）
+  - dirty state 跟踪：JSON 深比较，显示"未保存 · N 处变更"badge
+  - Save/Reset/恢复默认 三按钮 + Ctrl+S 快捷键
+  - Lint 规则配置：12 规则逐条 toggle + 级别覆盖（RED/YELLOW/BLUE 下拉）
+  - 4 张级别统计卡（RED/YELLOW/BLUE/禁用）
+  - 调度配置：时间输入 + 时区下拉 + Cron 表达式预览
+  - 自动重试：可配置最大次数(0-10) + 退避间隔(5-300s) 滑块
+  - 通知渠道：IM/邮件/Webhook 三选多卡片，条件展示收件人/URL 输入
+  - 备份保留：滑块 7-180 天 + 预计磁盘占用计算
+  - 高级：日志级别下拉 + 并行 worker(1-16) + 查询超时(30-3600s) 滑块
+  - 密钥管理：3 个 key 行（已设置/未设置）
+  - 危险区：清空缓存 / 重置所有配置
+  - 集成 5 行：pre-commit / CI / WebSocket / REST API / 外部调度
+  - 数据源 4 行：带延迟显示 + 巡检时间
+- 新增功能 2：Dashboard 时间范围选择器（7d/30d/90d）
+  - 顶部 segmented control：近 7 天 / 近 30 天 / 近 90 天
+  - genScaledStats 函数：根据范围生成 N 天 mock 数据（周末 0，工作日基于日期 hash 的伪随机）
+  - genScaledIngest 函数：生成 N 天入库行数趋势
+  - KPI 卡片：成功率/入库行数/Sparkline 全部跟随范围
+  - 环形图：{rangeLabel}执行成功率 + N 天 badge
+  - 每日成功率横条：最多显示 12 天，超过显示"共 N 天"
+  - 区域图：{rangeLabel}入座行数趋势 + 累计/日均/峰值
+  - AreaChart 智能稀疏化：>30 隐藏圆点，>60 每 15 个标签，>20 每 7 个
+- 新增功能 3：Logs 视图增强
+  - 5 个级别 chips（全部/ERROR/WARNING/INFO/DEBUG）带计数 badge
+  - chips 配色：激活时背景色填充，未激活时描边
+  - 导出按钮：导出为 .log 文件（Blob + download）
+  - 自动滚动开关：Switch + 底部跳转按钮
+  - 日志行可展开/收起（>80 字符显示展开按钮）
+  - 日志行可复制（hover 显示 Copy 按钮）
+  - 移除级别下拉（改为 chips），保留表名下拉
+  - LevelChip 子组件：5 色配色映射
+- 新增功能 4：健康度异常自动归因
+  - 重写"异常表详情"为"异常表自动归因"
+  - getAttribution 函数：返回 severity/category/cause/fix/steps/lastError/retries/estimatedFix
+  - 每张红表显示 3 列卡片：根因 / 下游影响 / 修复建议（红/黄/绿配色）
+  - 修复步骤：编号圆点 + 步骤名 + 箭头连接
+  - 底部元数据：最后出错时间 / 重试次数 / 预计修复时长
+  - severity badge：CRITICAL（红）/ WARNING（黄）
+  - category badge：实现缺失 / 配置矛盾 / 未知
+  - 下游影响：显示下游表数量 + 前 2 个表名
+- 新增功能 5：键盘快捷键帮助（? 键）
+  - keyboard-help.tsx 组件（95 行）
+  - ? 键全局唤起（忽略输入框中按键）
+  - Dialog 展示 13 个快捷键，按 4 类分组（全局/设置/SQL/导航）
+  - 每个快捷键：描述 + kbd 键位徽章
+  - 顶栏新增 Keyboard 图标按钮入口
+  - 支持受控/非受控两种模式（open/onOpenChange props）
+- 新增功能 6：样式细节打磨
+  - globals.css 新增 6 个动画/效果：
+    * stagger-in：卡片依次入场（translateY + scale）
+    * shimmer：加载骨架屏 shimmer 效果
+    * slide-in-right：抽屉滑入
+    * count-up：数字滚动入场
+    * focus-ring：键盘焦点环
+    * hover-lift：悬浮提升（translateY + shadow）
+  - KpiCard 增强：hover -translate-y-0.5 + shadow + 图标 scale-110
+  - 数字加 animate-count-up 入场
+  - Settings 卡片 hover 过渡
+- 修复 bug：Settings 视图 JSX 解析错误
+  - 根因：template literal `${... ? '1-5' : '*'}` 中的 `* *` 被 JSX 解析器误判
+  - 修复：移除 `state.dailyTime.length >= 4 ?` 三元，简化模板
+- 验证：
+  - bun run lint 0 error
+  - agent-browser 验证：
+    * Settings：7 tabs + 保存按钮 + Lint tab 12 规则行 + dirty state badge 切换
+    * Dashboard：3 range buttons，30d 切换后显示"30日"，90d 显示"90 天"
+    * Logs：5 level chips（全部17/ERROR2/WARNING1/INFO13/DEBUG1），ERROR 过滤后 2 条
+    * Health：根因/修复步骤/异常表自动归因 全部可见
+    * Keyboard help：? 键唤起 Dialog，显示"键盘快捷键"
+    * reload 后 0 console error（仅 1 个已知 Dialog aria-description warning）
+    * 10 视图遍历 H1 全部正确
+  - 截图存档：v5-settings-general/lint/schedule, v5-dashboard-90d, v5-logs-enhanced, v5-health-attribution, v5-final-* 共 9 张
+
+Stage Summary:
+- 项目当前状态：稳定，功能显著扩展。v5 在 v4 基础上完成 Settings 视图全面重构 + Dashboard 时间范围 + Logs 增强 + 健康度归因 + 键盘帮助 + 样式动画，共 6 大功能模块
+- 已完成的修改：
+  1. Settings 视图重构（150→689 行）：7 Tab 交互式表单 + dirty state + Lint 规则配置 + Cron 预览 + 通知渠道 + 密钥管理 + 危险区
+  2. Dashboard 时间范围选择器：7d/30d/90d segmented control + 数据缩放 + AreaChart 智能稀疏化
+  3. Logs 视图增强：5 级别 chips + 导出 .log + 自动滚动开关 + 行展开/复制
+  4. 健康度异常自动归因：3 列根因/影响/修复 + 步骤编号 + 元数据 + severity/category badge
+  5. 键盘快捷键帮助（? 键）：13 快捷键 4 分类 Dialog
+  6. 样式动画：stagger-in/shimmer/slide-in/count-up/focus-ring/hover-lift + KpiCard 增强
+  7. lint 0 error，reload 后 0 console error
+
+Unresolved / 下一阶段优先事项:
+- Settings 可加：导入/导出 YAML 配置文件、配置版本历史、多环境 profile 切换
+- Dashboard 可加：自定义 KPI 卡片、按表钻取、导出 PNG 报表
+- Logs 可加：虚拟滚动（千条以上）、日志着色主题、按 run_id 分组
+- 健康度可加：补数任务编排（多表批量 force）、SLA 阈值配置、自动修复脚本
+- SQL Playground 可加：跨 Tab 结果对比、EXPLAIN 可视化、查询性能对比
+- 命令面板可加：最近搜索记录、命令历史
+- 血缘可加：minimap 点击跳转、节点 pin、自动布局算法
+- 接真实 API（E3 阶段）仍是最大未完成项
+- lint engine 12 条规则的 Python 实现仍未做（E1 阶段）
+- log-streamer mini-service 当前用客户端模拟，可切回真实 socket.io

@@ -12,12 +12,13 @@ import { SettingsView } from '@/components/dataops/settings-view'
 import { SqlPlaygroundView } from '@/components/dataops/sql-playground-view'
 import { CommandPalette } from '@/components/dataops/command-palette'
 import { NotificationCenter } from '@/components/dataops/notification-center'
+import { KeyboardHelp } from '@/components/dataops/keyboard-help'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { TABLES, ALERTS, PIPELINE_RUNS } from '@/lib/dataops/mock-data'
 import { toast } from 'sonner'
 import {
   LayoutDashboard, Library, HeartPulse, Workflow, GitBranch,
-  CheckCheck, ScrollText, BookOpen, Settings, Database, Github, Sparkles, AlertTriangle, Play, Terminal, Search, Bell
+  CheckCheck, ScrollText, BookOpen, Settings, Database, Github, Sparkles, AlertTriangle, Play, Terminal, Search, Bell, Keyboard
 } from 'lucide-react'
 
 type View = 'dashboard' | 'catalog' | 'health' | 'orchestration' | 'lineage' | 'lint' | 'logs' | 'dictionary' | 'sql' | 'settings'
@@ -52,6 +53,7 @@ export default function Home() {
   const [view, setView] = useState<View>('dashboard')
   const [cmdOpen, setCmdOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const handleRunTable = (table: string) => {
     toast.success(`已触发执行：${table}`, {
@@ -94,6 +96,14 @@ export default function Home() {
               <kbd className="ml-1 px-1 py-0.5 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-[9px] font-mono text-zinc-400">⌘K</kbd>
             </button>
             <ThemeToggle />
+            <button
+              onClick={() => setHelpOpen(true)}
+              className="hidden sm:flex p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"
+              title="键盘快捷键 (?)"
+              aria-label="快捷键"
+            >
+              <Keyboard className="h-4 w-4" />
+            </button>
             <button
               onClick={() => setNotifOpen(true)}
               className="relative p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"
@@ -256,6 +266,9 @@ export default function Home() {
         onOpenChange={setNotifOpen}
         onNavigate={handleNavigate}
       />
+
+      {/* 键盘快捷键帮助 */}
+      <KeyboardHelp open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   )
 }
