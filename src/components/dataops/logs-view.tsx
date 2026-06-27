@@ -1,38 +1,113 @@
 'use client'
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { LOGS } from '@/lib/dataops/mock-data'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Search, FileText, Radio, Pause, Play, Trash2, Activity, Loader2, CheckCircle2, XCircle, Zap, Wifi, WifiOff, Download, ArrowDownToLine, ChevronDown, ChevronUp, Filter, Copy } from 'lucide-react'
+import { Search, FileText, Radio, Pause, Play, Trash2, Activity, Loader2, CheckCircle2, XCircle, Zap, Wifi, WifiOff, Download, ArrowDownToLine, ChevronDown, ChevronRight, Filter, Copy, Layers } from 'lucide-react'
 import { useLogStreamer } from '@/hooks/use-log-streamer'
 import { toast } from 'sonner'
 
+// ── Constants ──────────────────────────────────────────────────
+const ROW_HEIGHT = 28
+const GROUP_HEADER_HEIGHT = 36
+const BUFFER_COUNT = 20
+
+// ── Types ──────────────────────────────────────────────────────
+interface LogItem {
+  id: string
+  ts: string
+  level: 'INFO' | 'WARNING' | 'ERROR' | 'DEBUG'
+  table: string
+  message: string
+  runId: string
+  isLive?: boolean
+}
+
+interface LogGroup {
+  runId: string
+  logs: LogItem[]
+  firstTs: string
+  lastTs: string
+  hasError: boolean
+  hasWarning: boolean
+}
+
+interface VirtualItem {
+  type: 'log' | 'group-header'
+  key: string
+  height: number
+  top: number
+  log?: LogItem
+  logIndex?: number
+  group?: LogGroup
+}
+
+// ── Main Component ─────────────────────────────────────────────
 export function LogsView() {
-  // 静态历史日志
   const [search, setSearch] = useState('')
   const [level, setLevel] = useState<string>('all')
   const [table, setTable] = useState<string>('all')
   const [liveMode, setLiveMode] = useState(true)
   const [autoScroll, setAutoScroll] = useState(true)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const [groupByRun, setGroupByRun] = useState(false)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  // 实时流
+  // Virtual scroll state
+  const [scrollTop, setScrollTop] = useState(0)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const containerHeightRef = useRef(0)
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const streamer = useLogStreamer()
-
   const tables = useMemo(() => [...new Set(LOGS.map(l => l.table))].sort(), [])
 
-  // 合并静态 + 实时日志（实时优先显示在顶部）
-  const allLogs = useMemo(() => {
-    const live = streamer.logs
-    const staticLogs = LOGS.map(l => ({ ...l, id: `static-${l.ts}-${l.table}`, runId: 'r-202606251700' }))
-    return liveMode ? [...live, ...staticLogs] : staticLogs
-  }, [streamer.logs, liveMode])
+  // ── Assign run_ids to static logs ────────────────────────────
+  const staticLogsWithRunId = useMemo(() => {
+    const sorted = LOGS.map((l, i) => ({
+      ...l,
+      id: `static-${i}-${l.ts}-${l.table}`,
+      isLive: false,
+    }))
+    // Sort by timestamp
+    sorted.sort((a, b) => a.ts.localeCompare(b.ts))
 
+    // Assign run_ids: same date prefix + same table + no time gap > 10min = same group
+    let runCounter = 0
+    let prevTable = ''
+    let prevTs = ''
+    let currentRunId = ''
+
+    return sorted.map(l => {
+      const datePrefix = l.ts.slice(0, 10).replace(/-/g, '')
+      const timeGap = prevTs
+        ? (new Date(l.ts).getTime() - new Date(prevTs).getTime()) / 60000
+        : Infinity
+
+      // New group if: different table, or gap > 10 minutes within same table
+      if (l.table !== prevTable || timeGap > 10) {
+        runCounter++
+        currentRunId = `run-${datePrefix}-${String(runCounter).padStart(3, '0')}`
+      }
+      prevTable = l.table
+      prevTs = l.ts
+
+      return { ...l, runId: currentRunId } as LogItem
+    })
+  }, [])
+
+  // ── Merge static + live logs ─────────────────────────────────
+  const allLogs = useMemo(() => {
+    const live = streamer.logs.map(l => ({ ...l, isLive: true }))
+    return liveMode ? [...live, ...staticLogsWithRunId] : staticLogsWithRunId
+  }, [streamer.logs, liveMode, staticLogsWithRunId])
+
+  // ── Filter ───────────────────────────────────────────────────
   const filtered = useMemo(() => {
     return allLogs.filter(l => {
       if (level !== 'all' && l.level !== level) return false
@@ -42,21 +117,173 @@ export function LogsView() {
     })
   }, [allLogs, search, level, table])
 
-  // 按级别统计
+  // ── Level stats ──────────────────────────────────────────────
   const stats = useMemo(() => {
     const s = { ERROR: 0, WARNING: 0, INFO: 0, DEBUG: 0 }
     allLogs.forEach(l => { s[l.level]++ })
     return s
   }, [allLogs])
 
-  const liveRefs = useRef<HTMLDivElement>(null)
-  // 自动滚动到底部（live 模式 + autoScroll 开启）
+  // ── Group logs by runId ──────────────────────────────────────
+  const groups = useMemo(() => {
+    if (!groupByRun) return [] as LogGroup[]
+    const map = new Map<string, LogItem[]>()
+    filtered.forEach(l => {
+      const key = l.runId || 'unknown'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(l)
+    })
+    const result: LogGroup[] = []
+    map.forEach((logs, runId) => {
+      const sorted = [...logs].sort((a, b) => a.ts.localeCompare(b.ts))
+      result.push({
+        runId,
+        logs: sorted,
+        firstTs: sorted[0]?.ts ?? '',
+        lastTs: sorted[sorted.length - 1]?.ts ?? '',
+        hasError: sorted.some(l => l.level === 'ERROR'),
+        hasWarning: sorted.some(l => l.level === 'WARNING'),
+      })
+    })
+    // Sort groups by first timestamp
+    result.sort((a, b) => a.firstTs.localeCompare(b.firstTs))
+    return result
+  }, [groupByRun, filtered])
+
+  const groupCount = groups.length
+
+  // ── Auto-collapse clean groups on first enable ───────────────
   useEffect(() => {
-    if (liveMode && autoScroll && liveRefs.current) {
-      liveRefs.current.scrollTop = liveRefs.current.scrollHeight
+    if (groupByRun && groups.length > 0) {
+      const toCollapse = new Set<string>()
+      groups.forEach(g => {
+        if (!g.hasError && !g.hasWarning) {
+          toCollapse.add(g.runId)
+        }
+      })
+      setCollapsedGroups(toCollapse)
+    }
+  }, [groupByRun, groups])
+
+  // ── Build virtual items list ─────────────────────────────────
+  const virtualItems = useMemo(() => {
+    const items: VirtualItem[] = []
+    let top = 0
+
+    if (!groupByRun) {
+      // Flat list of logs
+      filtered.forEach((log, i) => {
+        const isExpanded = expandedRows.has(log.id)
+        const h = isExpanded ? estimateRowHeight(log.message) : ROW_HEIGHT
+        items.push({
+          type: 'log',
+          key: log.id ?? `log-${i}`,
+          height: h,
+          top,
+          log,
+          logIndex: i,
+        })
+        top += h
+      })
+    } else {
+      // Grouped list
+      groups.forEach(group => {
+        // Group header
+        items.push({
+          type: 'group-header',
+          key: `group-${group.runId}`,
+          height: GROUP_HEADER_HEIGHT,
+          top,
+          group,
+        })
+        top += GROUP_HEADER_HEIGHT
+
+        // Log rows (if not collapsed)
+        if (!collapsedGroups.has(group.runId)) {
+          group.logs.forEach((log, i) => {
+            const isExpanded = expandedRows.has(log.id)
+            const h = isExpanded ? estimateRowHeight(log.message) : ROW_HEIGHT
+            items.push({
+              type: 'log',
+              key: log.id ?? `glog-${group.runId}-${i}`,
+              height: h,
+              top,
+              log,
+              logIndex: i,
+            })
+            top += h
+          })
+        }
+      })
+    }
+
+    return items
+  }, [groupByRun, filtered, groups, collapsedGroups, expandedRows])
+
+  const totalHeight = virtualItems.length > 0
+    ? virtualItems[virtualItems.length - 1].top + virtualItems[virtualItems.length - 1].height
+    : 0
+
+  // ── Visible items (virtual windowing) ────────────────────────
+  const visibleItems = useMemo(() => {
+    const ch = containerHeightRef.current || 600
+    const viewTop = scrollTop - BUFFER_COUNT * ROW_HEIGHT
+    const viewBottom = scrollTop + ch + BUFFER_COUNT * ROW_HEIGHT
+
+    // Binary search for first visible item
+    let lo = 0
+    let hi = virtualItems.length - 1
+    let firstIdx = 0
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (virtualItems[mid].top + virtualItems[mid].height >= viewTop) {
+        firstIdx = mid
+        hi = mid - 1
+      } else {
+        lo = mid + 1
+      }
+    }
+
+    // Collect visible items from firstIdx
+    const result: VirtualItem[] = []
+    for (let i = firstIdx; i < virtualItems.length; i++) {
+      const item = virtualItems[i]
+      if (item.top > viewBottom) break
+      result.push(item)
+    }
+    return result
+  }, [virtualItems, scrollTop])
+
+  // ── Scroll handler ───────────────────────────────────────────
+  const handleScroll = useCallback(() => {
+    if (scrollContainerRef.current) {
+      setScrollTop(scrollContainerRef.current.scrollTop)
+    }
+  }, [])
+
+  // ── Measure container height ─────────────────────────────────
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const observer = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        containerHeightRef.current = entry.contentRect.height
+      }
+      // Trigger re-render for visible items recalculation
+      setScrollTop(el.scrollTop)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  // ── Auto-scroll to bottom ────────────────────────────────────
+  useEffect(() => {
+    if (liveMode && autoScroll && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
     }
   }, [filtered.length, liveMode, autoScroll])
 
+  // ── Handlers ─────────────────────────────────────────────────
   const handleTrigger = (table: string) => {
     streamer.trigger(undefined, table)
     toast.success(`已触发实时执行：${table}`, { description: '观察下方日志流' })
@@ -74,9 +301,11 @@ export function LogsView() {
     toast.success(`已导出 ${filtered.length} 条日志`, { description: a.download })
   }
 
-  const copyLog = (msg: string) => {
+  const copyLog = (msg: string, id: string) => {
     navigator.clipboard?.writeText(msg)
-    toast.success('已复制日志内容')
+    setCopiedId(id)
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    copiedTimerRef.current = setTimeout(() => setCopiedId(null), 1500)
   }
 
   const toggleExpand = (id: string) => {
@@ -88,6 +317,46 @@ export function LogsView() {
     })
   }
 
+  const toggleGroupCollapse = (runId: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(runId)) next.delete(runId)
+      else next.add(runId)
+      return next
+    })
+  }
+
+  const scrollToBottom = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
+    }
+  }
+
+  // ── Group status helpers ─────────────────────────────────────
+  const getGroupBorderColor = (group: LogGroup) => {
+    if (group.hasError) return 'border-l-2 border-rose-400'
+    if (group.hasWarning) return 'border-l-2 border-amber-400'
+    return 'border-l-2 border-emerald-400'
+  }
+
+  const getGroupStatusDot = (group: LogGroup) => {
+    if (group.hasError) return 'bg-rose-500'
+    if (group.hasWarning) return 'bg-amber-500'
+    return 'bg-emerald-500'
+  }
+
+  // ── Row left border color ────────────────────────────────────
+  const getLevelBorder = (l: LogItem) => {
+    switch (l.level) {
+      case 'ERROR': return 'border-l-2 border-rose-400'
+      case 'WARNING': return 'border-l-2 border-amber-400'
+      case 'INFO': return 'border-l-2 border-emerald-400'
+      case 'DEBUG': return 'border-l-2 border-zinc-300 dark:border-zinc-600'
+      default: return 'border-l-2 border-zinc-200 dark:border-zinc-700'
+    }
+  }
+
+  // ── Render ───────────────────────────────────────────────────
   return (
     <div className="space-y-4">
       {/* 实时状态栏 */}
@@ -230,7 +499,7 @@ export function LogsView() {
         </Card>
       )}
 
-      {/* 筛选栏 + 级别 chips */}
+      {/* 筛选栏 + 级别 chips + 分组切换 */}
       <Card>
         <CardContent className="p-3 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -245,6 +514,24 @@ export function LogsView() {
                 {tables.map(t => <SelectItem key={t} value={t} className="font-mono text-xs">{t}</SelectItem>)}
               </SelectContent>
             </Select>
+
+            {/* 分组切换按钮 */}
+            <Button
+              variant={groupByRun ? 'default' : 'outline'}
+              size="sm"
+              className={`h-9 text-xs gap-1.5 ${groupByRun ? 'bg-zinc-700 hover:bg-zinc-800 text-white' : ''}`}
+              onClick={() => setGroupByRun(v => !v)}
+              title="按 run_id 分组显示日志"
+            >
+              <Layers className="h-3.5 w-3.5" />
+              按执行分组
+              {groupByRun && groupCount > 0 && (
+                <Badge variant="secondary" className="ml-0.5 px-1.5 py-0 text-[10px] bg-white/20 text-white border-0">
+                  {groupCount}
+                </Badge>
+              )}
+            </Button>
+
             <Button variant="outline" size="sm" className="h-9 text-xs" onClick={handleExport} disabled={filtered.length === 0} title="导出为 .log 文件">
               <Download className="h-3.5 w-3.5 mr-1" />导出
             </Button>
@@ -282,6 +569,11 @@ export function LogsView() {
               <span className="text-[11px] text-zinc-400 font-normal ml-2">
                 {liveMode ? 'logs/run_20260625.log + 实时推送' : 'logs/run_20260625.log'}
               </span>
+              {groupByRun && (
+                <Badge variant="outline" className="text-zinc-500 ml-1">
+                  <Layers className="h-3 w-3 mr-0.5" /> {groupCount} 组
+                </Badge>
+              )}
             </CardTitle>
             <div className="flex items-center gap-2 text-xs">
               <div className="flex items-center gap-1.5">
@@ -289,56 +581,91 @@ export function LogsView() {
                 <span className="text-zinc-500">自动滚动</span>
                 <Switch checked={autoScroll && liveMode} onCheckedChange={v => { setAutoScroll(v); if (v) setLiveMode(true) }} disabled={!liveMode} />
               </div>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { if (liveRefs.current) liveRefs.current.scrollTop = liveRefs.current.scrollHeight }} title="滚动到底部">
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={scrollToBottom} title="滚动到底部">
                 <ChevronDown className="h-3.5 w-3.5" />底部
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div ref={liveRefs} className="h-[calc(100vh-460px)] overflow-y-auto font-mono">
-            <div className="px-3 py-2 text-xs space-y-0.5">
-              {filtered.length === 0 && (
-                <div className="py-10 text-center text-zinc-400">
-                  <FileText className="h-8 w-8 mx-auto opacity-40 mb-2" />
-                  {liveMode && streamer.connected ? '等待日志推送... 点击上方剧本触发' : '无匹配日志'}
+          <div
+            ref={scrollContainerRef}
+            className="h-[calc(100vh-460px)] overflow-y-auto font-mono"
+            onScroll={handleScroll}
+          >
+            {filtered.length === 0 ? (
+              <div className="py-10 text-center text-zinc-400">
+                <FileText className="h-8 w-8 mx-auto opacity-40 mb-2" />
+                {liveMode && streamer.connected ? '等待日志推送... 点击上方剧本触发' : '无匹配日志'}
+              </div>
+            ) : (
+              <div className="relative" style={{ height: totalHeight }}>
+                <div className="px-3 py-2 text-xs">
+                  {visibleItems.map(item => {
+                    if (item.type === 'group-header' && item.group) {
+                      return (
+                        <GroupHeader
+                          key={item.key}
+                          group={item.group}
+                          isCollapsed={collapsedGroups.has(item.group.runId)}
+                          onToggle={() => toggleGroupCollapse(item.group!.runId)}
+                          borderColor={getGroupBorderColor(item.group)}
+                          statusDot={getGroupStatusDot(item.group)}
+                          style={{ position: 'absolute', top: item.top, left: 0, right: 0 }}
+                        />
+                      )
+                    }
+                    if (item.type === 'log' && item.log) {
+                      const l = item.log
+                      const isLive = l.isLive
+                      const isExpanded = expandedRows.has(l.id)
+                      const hasLong = l.message.length > 80
+                      const isCopied = copiedId === l.id
+                      return (
+                        <div
+                          key={item.key}
+                          className={`group row-hover-gradient flex gap-2 py-0.5 px-2 rounded ${getLevelBorder(l)} ${
+                            l.level === 'ERROR' ? 'bg-rose-50 dark:bg-rose-950/30' :
+                            l.level === 'WARNING' ? 'bg-amber-50 dark:bg-amber-950/20' :
+                            isLive ? 'bg-sky-50/50 dark:bg-sky-950/20' :
+                            'hover:bg-zinc-50 dark:hover:bg-zinc-900/40'
+                          }`}
+                          style={{ position: 'absolute', top: item.top, left: 0, right: 0, height: item.height }}
+                        >
+                          <span className="text-zinc-400 flex-shrink-0 w-20">{l.ts.slice(5)}</span>
+                          <span className={`flex-shrink-0 w-20 font-bold ${levelColor(l.level)}`}>
+                            {l.level}
+                            {isLive && <span className="ml-1 text-rose-500">●</span>}
+                          </span>
+                          <span className="text-sky-600 dark:text-sky-400 flex-shrink-0 w-40 truncate" title={l.table}>{l.table}</span>
+                          <span className={`text-zinc-700 dark:text-zinc-300 flex-1 ${!isExpanded && hasLong ? 'truncate' : ''}`}>{l.message}</span>
+                          <div className="flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity relative">
+                            {hasLong && (
+                              <button onClick={() => toggleExpand(l.id)} className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400" title={isExpanded ? '收起' : '展开'}>
+                                {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => copyLog(l.message, l.id)}
+                              className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 relative"
+                              title="复制"
+                            >
+                              <Copy className="h-3 w-3" />
+                              {isCopied && (
+                                <span className="absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-800 text-[10px] whitespace-nowrap animate-fade-in">
+                                  Copied!
+                                </span>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    }
+                    return null
+                  })}
                 </div>
-              )}
-              {filtered.map((l, i) => {
-                const isLive = streamer.logs.some(s => s.id === l.id)
-                const isExpanded = expandedRows.has(l.id ?? `row-${i}`)
-                const hasLong = l.message.length > 80
-                return (
-                  <div
-                    key={l.id ?? i}
-                    className={`group flex gap-2 py-0.5 px-2 rounded ${
-                      l.level === 'ERROR' ? 'bg-rose-50 dark:bg-rose-950/30' :
-                      l.level === 'WARNING' ? 'bg-amber-50 dark:bg-amber-950/20' :
-                      isLive ? 'bg-sky-50/50 dark:bg-sky-950/20' :
-                      'hover:bg-zinc-50 dark:hover:bg-zinc-900/40'
-                    }`}
-                  >
-                    <span className="text-zinc-400 flex-shrink-0 w-20">{l.ts.slice(5)}</span>
-                    <span className={`flex-shrink-0 w-20 font-bold ${levelColor(l.level)}`}>
-                      {l.level}
-                      {isLive && <span className="ml-1 text-rose-500">●</span>}
-                    </span>
-                    <span className="text-sky-600 dark:text-sky-400 flex-shrink-0 w-40 truncate" title={l.table}>{l.table}</span>
-                    <span className={`text-zinc-700 dark:text-zinc-300 flex-1 ${!isExpanded && hasLong ? 'truncate' : ''}`}>{l.message}</span>
-                    <div className="flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {hasLong && (
-                        <button onClick={() => toggleExpand(l.id ?? `row-${i}`)} className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400" title={isExpanded ? '收起' : '展开'}>
-                          {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                        </button>
-                      )}
-                      <button onClick={() => copyLog(l.message)} className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400" title="复制">
-                        <Copy className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -346,6 +673,57 @@ export function LogsView() {
   )
 }
 
+// ── GroupHeader Component ──────────────────────────────────────
+function GroupHeader({
+  group,
+  isCollapsed,
+  onToggle,
+  borderColor,
+  statusDot,
+  style,
+}: {
+  group: LogGroup
+  isCollapsed: boolean
+  onToggle: () => void
+  borderColor: string
+  statusDot: string
+  style: React.CSSProperties
+}) {
+  const timeRange = group.firstTs.slice(11) + ' → ' + group.lastTs.slice(11)
+  return (
+    <div
+      style={style}
+      className={`flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded cursor-pointer select-none ${borderColor}`}
+      onClick={onToggle}
+    >
+      {/* Collapse toggle */}
+      {isCollapsed ? (
+        <ChevronRight className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
+      ) : (
+        <ChevronDown className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
+      )}
+
+      {/* Status dot */}
+      <span className={`h-2 w-2 rounded-full flex-shrink-0 ${statusDot}`} />
+
+      {/* Run ID */}
+      <span className="font-mono text-xs font-medium text-zinc-700 dark:text-zinc-300">{group.runId}</span>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Log count badge */}
+      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+        {group.logs.length} 条
+      </Badge>
+
+      {/* Time range */}
+      <span className="text-[10px] text-zinc-400 font-mono">{timeRange}</span>
+    </div>
+  )
+}
+
+// ── LevelChip Component ────────────────────────────────────────
 function LevelChip({ label, count, active, onClick, color }: { label: string; count: number; active: boolean; onClick: () => void; color: 'zinc' | 'rose' | 'amber' | 'emerald' | 'sky' }) {
   const colorMap = {
     zinc: active ? 'bg-zinc-700 text-white border-zinc-700' : 'text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800',
@@ -365,6 +743,7 @@ function LevelChip({ label, count, active, onClick, color }: { label: string; co
   )
 }
 
+// ── Utility Functions ──────────────────────────────────────────
 function levelColor(l: string): string {
   switch (l) {
     case 'ERROR': return 'text-rose-600'
@@ -373,4 +752,18 @@ function levelColor(l: string): string {
     case 'DEBUG': return 'text-zinc-400'
     default: return 'text-zinc-500'
   }
+}
+
+function estimateRowHeight(message: string): number {
+  const lines = Math.ceil(message.length / 80)
+  return ROW_HEIGHT + Math.max(0, lines - 1) * 16
+}
+
+// ChevronUp used in expanded rows - inline SVG to avoid extra import
+function ChevronUp({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="m18 15-6-6-6 6" />
+    </svg>
+  )
 }

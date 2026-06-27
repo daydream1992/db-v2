@@ -4,11 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive, Radio, Loader2, XCircle, Play, Pause, Terminal, Calendar } from 'lucide-react'
+import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive, Radio, Loader2, XCircle, Play, Pause, Terminal, Calendar, ArrowUpRight } from 'lucide-react'
 import { ALERTS, PIPELINE_RUNS, ROW_TREND, TABLES, DAILY_STATS, INGEST_TREND, SCRIPT_DISTRIBUTION } from '@/lib/dataops/mock-data'
 import { formatRows, runStatusClass, runStatusDot } from '@/lib/dataops/styles'
 import { useLogStreamer } from '@/hooks/use-log-streamer'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 type TimeRange = '7d' | '30d' | '90d'
@@ -118,6 +119,8 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
           sub={`${greenTables} 健康 · ${redTables} 异常 · ${yellowTables} 待查`}
           tone="sky"
           spark={<Sparkline data={[20, 22, 22, 23, 25, 25, 26]} color="sky" />}
+          onClick={() => onNavigate('health')}
+          navigable
         />
         <KpiCard
           icon={<CheckCircle2 className="h-5 w-5" />}
@@ -126,6 +129,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
           sub={`${rangeSuccess}/${rangeTotal} 成功 · 今日 ${successRate}%`}
           tone={rangeRate >= 90 ? 'emerald' : 'amber'}
           spark={<Sparkline data={scaledStats.slice(-7).map(d => d.total > 0 ? Math.round((d.success / d.total) * 100) : 0)} color={rangeRate >= 90 ? 'emerald' : 'amber'} />}
+          popover={<SuccessRatePopover stats={scaledStats} onNavigate={onNavigate} />}
         />
         <KpiCard
           icon={<TrendingUp className="h-5 w-5" />}
@@ -134,6 +138,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
           sub={`日均 ${formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0) / scaledIngest.filter(d => d.rows > 0).length || 1)}`}
           tone="fuchsia"
           spark={<Sparkline data={scaledIngest.slice(-7).map(d => Math.round(d.rows / 1000000 * 10) / 10)} color="fuchsia" suffix="M" />}
+          popover={<IngestRowsPopover onNavigate={onNavigate} />}
         />
         <KpiCard
           icon={<AlertTriangle className="h-5 w-5" />}
@@ -142,6 +147,8 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
           sub={`${ALERTS.filter(a => a.level === 'red').length} 红 · ${ALERTS.filter(a => a.level === 'yellow').length} 黄`}
           tone={ALERTS.filter(a => a.level === 'red').length > 0 ? 'rose' : 'amber'}
           spark={<Sparkline data={[3, 4, 5, 6, 7, 8, 8]} color="rose" />}
+          onClick={() => onNavigate('lint')}
+          navigable
         />
       </div>
 
@@ -600,7 +607,10 @@ function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
 }
 
 // --- 子组件：KPI 卡片 ---
-function KpiCard({ icon, label, value, sub, tone, spark }: { icon: React.ReactNode; label: string; value: string; sub: string; tone: 'sky' | 'emerald' | 'amber' | 'rose' | 'fuchsia'; spark?: React.ReactNode }) {
+function KpiCard({ icon, label, value, sub, tone, spark, onClick, popover, navigable }: {
+  icon: React.ReactNode; label: string; value: string; sub: string; tone: 'sky' | 'emerald' | 'amber' | 'rose' | 'fuchsia'; spark?: React.ReactNode
+  onClick?: () => void; popover?: ReactNode; navigable?: boolean
+}) {
   const toneMap = {
     sky: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40',
     emerald: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40',
@@ -608,8 +618,12 @@ function KpiCard({ icon, label, value, sub, tone, spark }: { icon: React.ReactNo
     rose: 'text-rose-600 bg-rose-50 dark:bg-rose-950/40',
     fuchsia: 'text-fuchsia-600 bg-fuchsia-50 dark:bg-fuchsia-950/40',
   }
-  return (
-    <Card className="overflow-hidden group hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-stagger-in">
+  const isClickable = !!onClick || !!popover
+
+  const cardInner = (
+    <Card className={`overflow-hidden group hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-stagger-in ${
+      isClickable ? 'cursor-pointer focus-visible:ring-2 focus-visible:ring-sky-200 dark:focus-visible:ring-sky-800 outline-none' : ''
+    }`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
           <div className="space-y-1 flex-1 min-w-0">
@@ -617,11 +631,133 @@ function KpiCard({ icon, label, value, sub, tone, spark }: { icon: React.ReactNo
             <div className="text-2xl font-semibold tracking-tight animate-count-up">{value}</div>
             <div className="text-[11px] text-zinc-400 truncate">{sub}</div>
           </div>
-          <div className={`p-2 rounded-lg ${toneMap[tone]} group-hover:scale-110 transition-transform`}>{icon}</div>
+          <div className="flex items-center gap-1">
+            {navigable && (
+              <ArrowUpRight className="h-3.5 w-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+            )}
+            <div className={`p-2 rounded-lg ${toneMap[tone]} group-hover:scale-110 transition-transform`}>{icon}</div>
+          </div>
         </div>
         {spark && <div className="mt-3 -mb-1">{spark}</div>}
       </CardContent>
     </Card>
+  )
+
+  // If popover is provided, wrap in Popover
+  if (popover) {
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          {cardInner}
+        </PopoverTrigger>
+        <PopoverContent className="w-80 p-0 animate-scale-fade-in" side="bottom" align="center">
+          {popover}
+        </PopoverContent>
+      </Popover>
+    )
+  }
+
+  // If onClick is provided, make clickable
+  if (onClick) {
+    return (
+      <div onClick={onClick} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onClick() }}>
+        {cardInner}
+      </div>
+    )
+  }
+
+  return cardInner
+}
+
+// --- 子组件：执行成功率 Popover ---
+function SuccessRatePopover({ stats, onNavigate }: { stats: DailyRunStat[]; onNavigate: (v: string) => void }) {
+  const last7 = stats.slice(-7)
+  return (
+    <div>
+      <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
+        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+        <span className="text-xs font-medium">每日执行成功率</span>
+        <Badge variant="outline" className="text-[9px] ml-auto">近 7 天</Badge>
+      </div>
+      <div className="p-2">
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="text-zinc-400 border-b border-zinc-100 dark:border-zinc-800">
+              <th className="py-1.5 px-2 text-left font-medium">日期</th>
+              <th className="py-1.5 px-2 text-right font-medium">成功/总数</th>
+              <th className="py-1.5 px-2 text-right font-medium">率%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {last7.map(d => {
+              const rate = d.total > 0 ? Math.round((d.success / d.total) * 100) : 0
+              const colorClass = rate === 100 ? 'text-emerald-600 dark:text-emerald-400' : rate >= 90 ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
+              return (
+                <tr key={d.date} className="border-b border-zinc-50 dark:border-zinc-800/50 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                  <td className="py-1.5 px-2 font-mono">{d.date}</td>
+                  <td className="py-1.5 px-2 text-right font-mono">{d.total === 0 ? '—' : `${d.success}/${d.total}`}</td>
+                  <td className={`py-1.5 px-2 text-right font-mono font-semibold ${d.total === 0 ? 'text-zinc-400' : colorClass}`}>
+                    {d.total === 0 ? '—' : `${rate}%`}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="px-3 py-2 border-t border-zinc-100 dark:border-zinc-800">
+        <button
+          onClick={() => onNavigate('orchestration')}
+          className="text-[11px] text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-1 transition-colors"
+        >
+          点击查看更多 <ArrowRight className="h-3 w-3" /> 编排
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// --- 子组件：入库行数 Popover ---
+function IngestRowsPopover({ onNavigate }: { onNavigate: (v: string) => void }) {
+  const top5 = [...TABLES].filter(t => t.rows > 0).sort((a, b) => b.rows - a.rows).slice(0, 5)
+  const maxRows = top5[0]?.rows ?? 1
+  return (
+    <div>
+      <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
+        <TrendingUp className="h-3.5 w-3.5 text-fuchsia-500" />
+        <span className="text-xs font-medium">Top 5 大表</span>
+        <Badge variant="outline" className="text-[9px] ml-auto">按行数</Badge>
+      </div>
+      <div className="p-2 space-y-2">
+        {top5.map((t, i) => {
+          const pct = (t.rows / maxRows) * 100
+          return (
+            <div key={t.table}>
+              <div className="flex items-center justify-between text-[11px] mb-0.5">
+                <span className="font-mono text-zinc-700 dark:text-zinc-300 truncate flex-1">{t.table}</span>
+                <span className="font-mono text-zinc-500 ml-2">{formatRows(t.rows)}</span>
+              </div>
+              <div className="h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+                <div
+                  className={`h-full rounded ${
+                    i === 0 ? 'bg-fuchsia-500' : i === 1 ? 'bg-fuchsia-400' : 'bg-fuchsia-300 dark:bg-fuchsia-700'
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="px-3 py-2 border-t border-zinc-100 dark:border-zinc-800">
+        <button
+          onClick={() => onNavigate('catalog')}
+          className="text-[11px] text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-1 transition-colors"
+        >
+          点击查看更多 <ArrowRight className="h-3 w-3" /> 目录
+        </button>
+      </div>
+    </div>
   )
 }
 

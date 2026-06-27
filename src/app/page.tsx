@@ -14,6 +14,7 @@ import { CommandPalette } from '@/components/dataops/command-palette'
 import { NotificationCenter } from '@/components/dataops/notification-center'
 import { KeyboardHelp } from '@/components/dataops/keyboard-help'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { Badge } from '@/components/ui/badge'
 import { TABLES, ALERTS, PIPELINE_RUNS } from '@/lib/dataops/mock-data'
 import { toast } from 'sonner'
 import {
@@ -138,7 +139,7 @@ export default function Home() {
 
       <div className="flex flex-1 min-h-0">
         {/* 侧栏 */}
-        <aside className="w-14 lg:w-56 border-r bg-white dark:bg-zinc-900 flex-shrink-0 hidden sm:block">
+        <aside className="w-14 lg:w-56 border-r bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm flex-shrink-0 hidden sm:flex flex-col">
           <nav className="p-2 space-y-0.5 sticky top-14">
             {NAV.map(item => {
               const active = view === item.key
@@ -146,17 +147,20 @@ export default function Home() {
                 <button
                   key={item.key}
                   onClick={() => setView(item.key)}
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors ${
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all duration-200 relative overflow-hidden ${
                     active
-                      ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-medium'
-                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                      ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-medium shadow-sm'
+                      : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:translate-x-0.5'
                   }`}
                   title={item.label}
                 >
-                  <span className="flex-shrink-0">{item.icon}</span>
+                  {active && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-gradient-to-b from-sky-500 to-fuchsia-500" />
+                  )}
+                  <span className={`flex-shrink-0 transition-transform duration-200 ${active ? 'scale-110' : 'group-hover:scale-105'}`}>{item.icon}</span>
                   <span className="hidden lg:inline flex-1 text-left truncate">{item.label}</span>
                   {item.badge !== undefined && item.badge > 0 && (
-                    <span className={`hidden lg:inline-flex px-1.5 min-w-[18px] h-[18px] items-center justify-center rounded-full text-[10px] font-medium ${
+                    <span className={`hidden lg:inline-flex px-1.5 min-w-[18px] h-[18px] items-center justify-center rounded-full text-[10px] font-medium transition-transform duration-200 ${active ? 'scale-105' : ''} ${
                       item.key === 'health' ? 'bg-rose-500 text-white' :
                       item.key === 'lint' ? 'bg-amber-400 text-amber-950' :
                       item.key === 'orchestration' ? 'bg-sky-500 text-white' :
@@ -233,20 +237,24 @@ export default function Home() {
       </div>
 
       {/* Sticky Footer */}
-      <footer className="mt-auto border-t bg-white dark:bg-zinc-900">
-        <div className="px-4 lg:px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-zinc-500">
+      <footer className="mt-auto border-t bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
+        <div className="px-4 lg:px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-zinc-500">
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              DataOps 管理台 · 探索稿 v2
+            <span className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="font-medium">DataOps 管理台</span>
+              <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-mono">v7</Badge>
             </span>
             <span className="hidden sm:inline text-zinc-300 dark:text-zinc-700">|</span>
-            <span>26 张表 · 10 个视图 · 12 条 lint 规则 · Cmd+K 命令面板</span>
+            <span>26 表 · 10 视图 · 12 lint · Cmd+K</span>
             <span className="hidden md:inline text-zinc-300 dark:text-zinc-700">|</span>
-            <span className="hidden md:inline">基于真实脚本清单 mock</span>
+            <span className="hidden md:inline">Gantt 时序 · KPI 钻取 · 日志分组 · YAML 导入导出</span>
           </div>
           <div className="flex items-center gap-3">
-            <span>profit_radar.duckdb</span>
+            <span className="flex items-center gap-1">
+              <span className="h-1 w-1 rounded-full bg-sky-500" />
+              <span className="font-mono">profit_radar.duckdb</span>
+            </span>
             <span className="text-zinc-300 dark:text-zinc-700">·</span>
             <span>方案文档：SYSTEM_DESIGN_EXPLORATION_v1.md</span>
           </div>

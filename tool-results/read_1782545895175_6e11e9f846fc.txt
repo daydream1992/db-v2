@@ -1,0 +1,744 @@
+     1→'use client'
+     2→import { TableMeta, DailyRunStat } from '@/lib/dataops/mock-data'
+     3→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     4→import { Badge } from '@/components/ui/badge'
+     5→import { Button } from '@/components/ui/button'
+     6→import { ScrollArea } from '@/components/ui/scroll-area'
+     7→import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive, Radio, Loader2, XCircle, Play, Pause, Terminal, Calendar } from 'lucide-react'
+     8→import { ALERTS, PIPELINE_RUNS, ROW_TREND, TABLES, DAILY_STATS, INGEST_TREND, SCRIPT_DISTRIBUTION } from '@/lib/dataops/mock-data'
+     9→import { formatRows, runStatusClass, runStatusDot } from '@/lib/dataops/styles'
+    10→import { useLogStreamer } from '@/hooks/use-log-streamer'
+    11→import { useEffect, useMemo, useRef, useState } from 'react'
+    12→import { toast } from 'sonner'
+    13→
+    14→type TimeRange = '7d' | '30d' | '90d'
+    15→
+    16→// 根据时间范围生成缩放的 mock 数据
+    17→function genScaledStats(range: TimeRange): DailyRunStat[] {
+    18→  if (range === '7d') return DAILY_STATS
+    19→  const days = range === '30d' ? 30 : 90
+    20→  const result: DailyRunStat[] = []
+    21→  const baseDate = new Date('2026-06-25')
+    22→  for (let i = days - 1; i >= 0; i--) {
+    23→    const d = new Date(baseDate)
+    24→    d.setDate(d.getDate() - i)
+    25→    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`
+    26→    const dayOfWeek = d.getDay()
+    27→    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+    28→    // 用周期性 mock 数据（基于日期 hash）
+    29→    const seed = (d.getDate() * 7 + d.getMonth() * 31) % 100
+    30→    const total = isWeekend ? 0 : 18 + (seed % 4)
+    31→    const failed = isWeekend ? 0 : (seed % 7 === 0 ? 1 : 0) + (seed % 11 === 0 ? 1 : 0)
+    32→    const skipped = isWeekend ? 0 : (seed % 5 === 0 ? 1 : 0)
+    33→    const success = total - failed - skipped
+    34→    const totalRows = isWeekend ? 0 : 3_200_000 + (seed * 47000) % 2_000_000
+    35→    const durationMin = isWeekend ? 0 : 38 + (seed % 12)
+    36→    result.push({ date: dateStr, success, failed, skipped, total, totalRows, durationMin })
+    37→  }
+    38→  return result
+    39→}
+    40→
+    41→function genScaledIngest(range: TimeRange): { date: string; rows: number }[] {
+    42→  if (range === '7d') return INGEST_TREND
+    43→  const days = range === '30d' ? 30 : 90
+    44→  const result: { date: string; rows: number }[] = []
+    45→  const baseDate = new Date('2026-06-25')
+    46→  for (let i = days - 1; i >= 0; i--) {
+    47→    const d = new Date(baseDate)
+    48→    d.setDate(d.getDate() - i)
+    49→    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`
+    50→    const dayOfWeek = d.getDay()
+    51→    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+    52→    const seed = (d.getDate() * 13 + d.getMonth() * 7) % 100
+    53→    const rows = isWeekend ? 0 : 600_000 + (seed * 31000) % 3_500_000
+    54→    result.push({ date: dateStr, rows })
+    55→  }
+    56→  return result
+    57→}
+    58→
+    59→export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void }) {
+    60→  const [timeRange, setTimeRange] = useState<TimeRange>('7d')
+    61→
+    62→  const totalTables = TABLES.length
+    63→  const greenTables = TABLES.filter(t => t.health === 'green').length
+    64→  const redTables = TABLES.filter(t => t.health === 'red').length
+    65→  const yellowTables = TABLES.filter(t => t.health === 'yellow').length
+    66→  const todayRuns = PIPELINE_RUNS.filter(r => r.startedAt.startsWith('2026-06-25'))
+    67→  const successRate = todayRuns.length > 0
+    68→    ? Math.round((todayRuns.filter(r => r.status === 'success').length / todayRuns.length) * 100)
+    69→    : 0
+    70→  const totalRows = TABLES.reduce((s, t) => s + t.rows, 0)
+    71→  const runningRun = PIPELINE_RUNS.find(r => r.status === 'running')
+    72→  const todayStat = DAILY_STATS[DAILY_STATS.length - 1]
+    73→
+    74→  // 时间范围相关数据
+    75→  const scaledStats = useMemo(() => genScaledStats(timeRange), [timeRange])
+    76→  const scaledIngest = useMemo(() => genScaledIngest(timeRange), [timeRange])
+    77→  const rangeSuccess = scaledStats.reduce((s, d) => s + d.success, 0)
+    78→  const rangeTotal = scaledStats.reduce((s, d) => s + d.total, 0)
+    79→  const rangeRate = rangeTotal > 0 ? Math.round((rangeSuccess / rangeTotal) * 100) : 0
+    80→  const rangeLabel = timeRange === '7d' ? '7日' : timeRange === '30d' ? '30日' : '90日'
+    81→
+    82→  // 执行时间线 (gantt)
+    83→  const timelineRuns = todayRuns.filter(r => r.durationSec && r.durationSec > 0).slice(0, 12)
+    84→  const minStart = Math.min(...timelineRuns.map(r => new Date(r.startedAt).getTime()))
+    85→  const maxEnd = Math.max(...timelineRuns.map(r => new Date(r.finishedAt!).getTime()))
+    86→  const totalSpan = maxEnd - minStart || 1
+    87→
+    88→  // Top 大表
+    89→  const topTables = [...TABLES].filter(t => t.rows > 0).sort((a, b) => b.rows - a.rows).slice(0, 6)
+    90→
+    91→  return (
+    92→    <div className="space-y-6">
+    93→      {/* 时间范围选择器 */}
+    94→      <div className="flex items-center justify-between flex-wrap gap-3">
+    95→        <div className="flex items-center gap-2 text-xs text-zinc-500">
+    96→          <Calendar className="h-3.5 w-3.5" />
+    97→          <span>统计区间</span>
+    98→        </div>
+    99→        <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
+   100→          {(['7d', '30d', '90d'] as TimeRange[]).map(r => (
+   101→            <button
+   102→              key={r}
+   103→              onClick={() => setTimeRange(r)}
+   104→              className={`px-3 py-1 text-xs rounded transition-all ${timeRange === r ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+   105→            >
+   106→              {r === '7d' ? '近 7 天' : r === '30d' ? '近 30 天' : '近 90 天'}
+   107→            </button>
+   108→          ))}
+   109→        </div>
+   110→      </div>
+   111→
+   112→      {/* KPI 卡片 */}
+   113→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   114→        <KpiCard
+   115→          icon={<Database className="h-5 w-5" />}
+   116→          label="数据表总数"
+   117→          value={totalTables.toString()}
+   118→          sub={`${greenTables} 健康 · ${redTables} 异常 · ${yellowTables} 待查`}
+   119→          tone="sky"
+   120→          spark={<Sparkline data={[20, 22, 22, 23, 25, 25, 26]} color="sky" />}
+   121→        />
+   122→        <KpiCard
+   123→          icon={<CheckCircle2 className="h-5 w-5" />}
+   124→          label={`${rangeLabel}执行成功率`}
+   125→          value={`${rangeRate}%`}
+   126→          sub={`${rangeSuccess}/${rangeTotal} 成功 · 今日 ${successRate}%`}
+   127→          tone={rangeRate >= 90 ? 'emerald' : 'amber'}
+   128→          spark={<Sparkline data={scaledStats.slice(-7).map(d => d.total > 0 ? Math.round((d.success / d.total) * 100) : 0)} color={rangeRate >= 90 ? 'emerald' : 'amber'} />}
+   129→        />
+   130→        <KpiCard
+   131→          icon={<TrendingUp className="h-5 w-5" />}
+   132→          label={`${rangeLabel}入库行数`}
+   133→          value={formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0))}
+   134→          sub={`日均 ${formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0) / scaledIngest.filter(d => d.rows > 0).length || 1)}`}
+   135→          tone="fuchsia"
+   136→          spark={<Sparkline data={scaledIngest.slice(-7).map(d => Math.round(d.rows / 1000000 * 10) / 10)} color="fuchsia" suffix="M" />}
+   137→        />
+   138→        <KpiCard
+   139→          icon={<AlertTriangle className="h-5 w-5" />}
+   140→          label="待处理告警"
+   141→          value={ALERTS.length.toString()}
+   142→          sub={`${ALERTS.filter(a => a.level === 'red').length} 红 · ${ALERTS.filter(a => a.level === 'yellow').length} 黄`}
+   143→          tone={ALERTS.filter(a => a.level === 'red').length > 0 ? 'rose' : 'amber'}
+   144→          spark={<Sparkline data={[3, 4, 5, 6, 7, 8, 8]} color="rose" />}
+   145→        />
+   146→      </div>
+   147→
+   148→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+   149→        {/* 执行时间线 */}
+   150→        <Card className="lg:col-span-2">
+   151→          <CardHeader className="flex flex-row items-center justify-between pb-3">
+   152→            <CardTitle className="text-base flex items-center gap-2">
+   153→              <Activity className="h-4 w-4 text-sky-500" />
+   154→              今日执行时间线
+   155→              <Badge variant="outline" className="text-[10px] ml-1">{todayRuns.length} 次</Badge>
+   156→            </CardTitle>
+   157→            <Button variant="ghost" size="sm" onClick={() => onNavigate('orchestration')}>
+   158→              查看全部 <ArrowRight className="ml-1 h-3 w-3" />
+   159→            </Button>
+   160→          </CardHeader>
+   161→          <CardContent>
+   162→            {runningRun && (
+   163→              <div className="mb-3 p-2 rounded-md bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sm flex items-center gap-2">
+   164→                <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
+   165→                <span className="font-medium text-sky-700 dark:text-sky-300">运行中：</span>
+   166→                <span className="text-sky-700 dark:text-sky-300 font-mono">{runningRun.table}</span>
+   167→                <span className="text-zinc-500 ml-auto text-xs">force={String(runningRun.force)} · 已运行 {Math.floor((Date.now() - new Date(runningRun.startedAt).getTime()) / 1000)}s</span>
+   168→              </div>
+   169→            )}
+   170→            <div className="space-y-1.5">
+   171→              {timelineRuns.map(r => {
+   172→                const start = new Date(r.startedAt).getTime()
+   173→                const end = new Date(r.finishedAt!).getTime()
+   174→                const left = ((start - minStart) / totalSpan) * 100
+   175→                const width = ((end - start) / totalSpan) * 100
+   176→                return (
+   177→                  <div key={r.id} className="flex items-center gap-2 text-xs group">
+   178→                    <div className="w-32 truncate text-zinc-600 dark:text-zinc-400 font-mono text-[11px]">{r.table}</div>
+   179→                    <div className="flex-1 relative h-5 bg-zinc-100 dark:bg-zinc-800/60 rounded">
+   180→                      <div
+   181→                        className={`absolute top-0 h-5 rounded ${runStatusDot(r.status)} transition-all group-hover:brightness-110`}
+   182→                        style={{ left: `${left}%`, width: `${Math.max(width, 1.5)}%` }}
+   183→                        title={`${r.table} ${r.startedAt.slice(11)} - ${r.finishedAt!.slice(11)} (${r.durationSec}s)`}
+   184→                      />
+   185→                      <span className="absolute right-1 top-0 leading-5 text-[10px] text-zinc-400 font-mono">{r.durationSec}s</span>
+   186→                    </div>
+   187→                  </div>
+   188→                )
+   189→              })}
+   190→            </div>
+   191→            <div className="mt-3 flex items-center gap-4 text-[11px] text-zinc-500">
+   192→              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> 成功</span>
+   193→              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-500" /> 失败</span>
+   194→              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-zinc-300" /> 跳过</span>
+   195→              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" /> 运行中</span>
+   196→              <span className="ml-auto text-zinc-400">日耗时 {todayStat.durationMin}min</span>
+   197→            </div>
+   198→          </CardContent>
+   199→        </Card>
+   200→
+   201→        {/* 告警列表 */}
+   202→        <Card>
+   203→          <CardHeader className="flex flex-row items-center justify-between pb-3">
+   204→            <CardTitle className="text-base flex items-center gap-2">
+   205→              <AlertTriangle className="h-4 w-4 text-amber-500" />
+   206→              待处理告警
+   207→            </CardTitle>
+   208→            <Button variant="ghost" size="sm" onClick={() => onNavigate('lint')}>规范</Button>
+   209→          </CardHeader>
+   210→          <CardContent>
+   211→            <ScrollArea className="h-[320px] pr-3">
+   212→              <div className="space-y-2">
+   213→                {ALERTS.map(a => (
+   214→                  <div key={a.id} className={`p-2.5 rounded-md border text-xs ${a.level === 'red' ? 'border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30' : 'border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30'}`}>
+   215→                    <div className="flex items-center gap-2 mb-1">
+   216→                      <span className={`h-2 w-2 rounded-full ${a.level === 'red' ? 'bg-rose-500' : 'bg-amber-400'}`} />
+   217→                      <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">{a.table}</span>
+   218→                      <Badge variant="outline" className="ml-auto text-[10px] py-0 px-1.5">{a.type}</Badge>
+   219→                    </div>
+   220→                    <div className="text-zinc-600 dark:text-zinc-400 leading-relaxed">{a.message}</div>
+   221→                    <div className="text-[10px] text-zinc-400 mt-1 flex items-center gap-1"><Clock className="h-3 w-3" />{a.ts}</div>
+   222→                  </div>
+   223→                ))}
+   224→              </div>
+   225→            </ScrollArea>
+   226→          </CardContent>
+   227→        </Card>
+   228→      </div>
+   229→
+   230→      {/* 第二行：成功率环形图 + 入库趋势 + Top 表 */}
+   231→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+   232→        {/* 7日成功率环形图 */}
+   233→        <Card>
+   234→          <CardHeader className="pb-3">
+   235→            <CardTitle className="text-base flex items-center gap-2">
+   236→              <Gauge className="h-4 w-4 text-emerald-500" />
+   237→              {rangeLabel}执行成功率
+   238→              <Badge variant="outline" className="text-[10px] ml-1">{scaledStats.length} 天</Badge>
+   239→            </CardTitle>
+   240→          </CardHeader>
+   241→          <CardContent>
+   242→            <div className="flex items-center gap-4">
+   243→              <DonutChart
+   244→                value={rangeRate}
+   245→                size={120}
+   246→                label={`${rangeRate}%`}
+   247→                subLabel={rangeLabel}
+   248→              />
+   249→              <div className="flex-1 space-y-1 text-xs max-h-[140px] overflow-y-auto pr-1">
+   250→                {scaledStats.slice().reverse().slice(0, timeRange === '7d' ? 7 : 12).map(d => (
+   251→                  <div key={d.date} className="flex items-center gap-2">
+   252→                    <span className="w-10 text-zinc-500 font-mono text-[10px] flex-shrink-0">{d.date}</span>
+   253→                    <div className="flex-1 h-2 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+   254→                      <div
+   255→                        className={`h-full rounded ${d.total === 0 ? 'bg-zinc-200' : d.failed > 0 ? 'bg-amber-400' : 'bg-emerald-500'}`}
+   256→                        style={{ width: d.total === 0 ? '0%' : `${(d.success / d.total) * 100}%` }}
+   257→                      />
+   258→                    </div>
+   259→                    <span className="w-16 text-right font-mono text-zinc-500 text-[10px]">
+   260→                      {d.total === 0 ? '—' : `${d.success}/${d.total}`}
+   261→                    </span>
+   262→                  </div>
+   263→                ))}
+   264→                {timeRange !== '7d' && (
+   265→                  <div className="text-[10px] text-zinc-400 text-center pt-1">显示最近 12 天 · 共 {scaledStats.length} 天</div>
+   266→                )}
+   267→              </div>
+   268→            </div>
+   269→          </CardContent>
+   270→        </Card>
+   271→
+   272→        {/* 入库行数趋势 */}
+   273→        <Card>
+   274→          <CardHeader className="pb-3">
+   275→            <CardTitle className="text-base flex items-center gap-2">
+   276→              <TrendingUp className="h-4 w-4 text-fuchsia-500" />
+   277→              {rangeLabel}入座行数趋势
+   278→            </CardTitle>
+   279→          </CardHeader>
+   280→          <CardContent>
+   281→            <AreaChart data={scaledIngest} />
+   282→            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+   283→              <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/50">
+   284→                <div className="text-[10px] text-zinc-400">{rangeLabel}累计</div>
+   285→                <div className="font-mono font-semibold text-sm">{formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0))}</div>
+   286→              </div>
+   287→              <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/50">
+   288→                <div className="text-[10px] text-zinc-400">日均</div>
+   289→                <div className="font-mono font-semibold text-sm">{formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0) / (scaledIngest.filter(d => d.rows > 0).length || 1))}</div>
+   290→              </div>
+   291→              <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/50">
+   292→                <div className="text-[10px] text-zinc-400">峰值</div>
+   293→                <div className="font-mono font-semibold text-sm text-fuchsia-600">{formatRows(Math.max(...scaledIngest.map(d => d.rows)))}</div>
+   294→              </div>
+   295→            </div>
+   296→          </CardContent>
+   297→        </Card>
+   298→
+   299→        {/* Top 大表 */}
+   300→        <Card>
+   301→          <CardHeader className="pb-3">
+   302→            <CardTitle className="text-base flex items-center gap-2">
+   303→              <Layers className="h-4 w-4 text-sky-500" />
+   304→              Top 6 大表
+   305→            </CardTitle>
+   306→          </CardHeader>
+   307→          <CardContent>
+   308→            <div className="space-y-2">
+   309→              {topTables.map((t, i) => {
+   310→                const maxRows = topTables[0].rows
+   311→                const pct = (t.rows / maxRows) * 100
+   312→                return (
+   313→                  <button
+   314→                    key={t.table}
+   315→                    onClick={() => onNavigate('catalog')}
+   316→                    className="w-full text-left group"
+   317→                  >
+   318→                    <div className="flex items-center gap-2 text-xs mb-1">
+   319→                      <span className="text-zinc-400 font-mono w-4">#{i + 1}</span>
+   320→                      <span className="font-mono text-zinc-700 dark:text-zinc-300 group-hover:text-sky-600 dark:group-hover:text-sky-400 truncate flex-1">{t.table}</span>
+   321→                      <span className="font-mono text-zinc-500 text-[11px]">{formatRows(t.rows)}</span>
+   322→                    </div>
+   323→                    <div className="ml-6 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+   324→                      <div
+   325→                        className={`h-full rounded ${i === 0 ? 'bg-sky-500' : i === 1 ? 'bg-sky-400' : 'bg-sky-300 dark:bg-sky-700'}`}
+   326→                        style={{ width: `${pct}%` }}
+   327→                      />
+   328→                    </div>
+   329→                  </button>
+   330→                )
+   331→              })}
+   332→            </div>
+   333→          </CardContent>
+   334→        </Card>
+   335→      </div>
+   336→
+   337→      {/* 第三行：行数趋势 Top + 脚本规模分布 */}
+   338→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+   339→        <Card className="lg:col-span-2">
+   340→          <CardHeader className="pb-3">
+   341→            <CardTitle className="text-base flex items-center gap-2">
+   342→              <TrendingUp className="h-4 w-4 text-fuchsia-500" />
+   343→              行数趋势 · 大表 Top
+   344→            </CardTitle>
+   345→          </CardHeader>
+   346→          <CardContent>
+   347→            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+   348→              {ROW_TREND.map(rt => {
+   349→                const max = Math.max(...rt.days.map(d => d.rows))
+   350→                const min = Math.min(...rt.days.map(d => d.rows))
+   351→                const range = max - min || 1
+   352→                return (
+   353→                  <div key={rt.table}>
+   354→                    <div className="flex items-baseline justify-between mb-2">
+   355→                      <span className="font-mono text-sm font-medium">{rt.table}</span>
+   356→                      <span className="text-xs text-zinc-500">{formatRows(max)}</span>
+   357→                    </div>
+   358→                    <div className="flex items-end gap-1 h-16">
+   359→                      {rt.days.map(d => {
+   360→                        const h = ((d.rows - min) / range) * 70 + 25
+   361→                        return (
+   362→                          <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group cursor-pointer">
+   363→                            <div className="w-full bg-fuchsia-200 dark:bg-fuchsia-900/50 rounded-t group-hover:bg-fuchsia-400 dark:group-hover:bg-fuchsia-600 transition-colors" style={{ height: `${h}%` }} title={`${formatRows(d.rows)} 行`} />
+   364→                            <span className="text-[9px] text-zinc-400">{d.date}</span>
+   365→                          </div>
+   366→                        )
+   367→                      })}
+   368→                    </div>
+   369→                  </div>
+   370→                )
+   371→              })}
+   372→            </div>
+   373→          </CardContent>
+   374→        </Card>
+   375→
+   376→        {/* 脚本规模分布 */}
+   377→        <Card>
+   378→          <CardHeader className="pb-3">
+   379→            <CardTitle className="text-base flex items-center gap-2">
+   380→              <Cpu className="h-4 w-4 text-amber-500" />
+   381→              脚本规模分布
+   382→            </CardTitle>
+   383→          </CardHeader>
+   384→          <CardContent>
+   385→            <div className="space-y-3">
+   386→              {SCRIPT_DISTRIBUTION.map(s => {
+   387→                const maxLines = Math.max(...SCRIPT_DISTRIBUTION.map(x => x.totalLines))
+   388→                const pct = (s.totalLines / maxLines) * 100
+   389→                return (
+   390→                  <div key={s.dir}>
+   391→                    <div className="flex items-center justify-between text-xs mb-1">
+   392→                      <span className="font-mono">{s.dir}</span>
+   393→                      <span className="text-zinc-500">{s.tables} 表 · {s.totalLines} 行</span>
+   394→                    </div>
+   395→                    <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+   396→                      <div
+   397→                        className={`h-full rounded ${
+   398→                          s.dir === '1_入库' ? 'bg-sky-500' :
+   399→                          s.dir === '2_计算' ? 'bg-fuchsia-500' :
+   400→                          s.dir === '3_策略' ? 'bg-amber-500' : 'bg-emerald-500'
+   401→                        }`}
+   402→                        style={{ width: `${pct}%` }}
+   403→                      />
+   404→                    </div>
+   405→                  </div>
+   406→                )
+   407→              })}
+   408→            </div>
+   409→            <div className="mt-4 pt-3 border-t grid grid-cols-2 gap-3 text-xs">
+   410→              <div className="flex items-center gap-2">
+   411→                <HardDrive className="h-3.5 w-3.5 text-zinc-400" />
+   412→                <span className="text-zinc-500">总行数</span>
+   413→                <span className="font-mono font-medium ml-auto">{SCRIPT_DISTRIBUTION.reduce((s, d) => s + d.totalLines, 0)}</span>
+   414→              </div>
+   415→              <div className="flex items-center gap-2">
+   416→                <Database className="h-3.5 w-3.5 text-zinc-400" />
+   417→                <span className="text-zinc-500">总表数</span>
+   418→                <span className="font-mono font-medium ml-auto">{SCRIPT_DISTRIBUTION.reduce((s, d) => s + d.tables, 0)}</span>
+   419→              </div>
+   420→            </div>
+   421→          </CardContent>
+   422→        </Card>
+   423→      </div>
+   424→
+   425→      {/* 实时执行流 */}
+   426→      <LiveStreamCard onNavigate={onNavigate} />
+   427→
+   428→      {/* 快捷入口 */}
+   429→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   430→        <QuickAction icon={<Zap className="h-4 w-4" />} label="立即执行" desc="手动触发某表" onClick={() => onNavigate('orchestration')} />
+   431→        <QuickAction icon={<Activity className="h-4 w-4" />} label="健康度" desc="红绿灯矩阵" onClick={() => onNavigate('health')} />
+   432→        <QuickAction icon={<CheckCircle2 className="h-4 w-4" />} label="规范校验" desc="12 条规则" onClick={() => onNavigate('lint')} />
+   433→        <QuickAction icon={<Database className="h-4 w-4" />} label="数据字典" desc="字段级元数据" onClick={() => onNavigate('dictionary')} />
+   434→      </div>
+   435→    </div>
+   436→  )
+   437→}
+   438→
+   439→// --- 子组件：实时执行流 ---
+   440→function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
+   441→  const streamer = useLogStreamer()
+   442→  const logEndRef = useRef<HTMLDivElement>(null)
+   443→
+   444→  useEffect(() => {
+   445→    if (logEndRef.current) {
+   446→      logEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+   447→    }
+   448→  }, [streamer.logs.length])
+   449→
+   450→  const handleTrigger = (table: string) => {
+   451→    streamer.trigger(undefined, table)
+   452→    toast.success(`已触发：${table}`, { description: '观察实时日志流' })
+   453→  }
+   454→
+   455→  return (
+   456→    <Card className="border-sky-200/50 dark:border-sky-900/40 overflow-hidden">
+   457→      <CardHeader className="pb-3">
+   458→        <div className="flex items-center justify-between flex-wrap gap-2">
+   459→          <CardTitle className="text-base flex items-center gap-2">
+   460→            <Radio className={`h-4 w-4 ${streamer.currentRun?.status === 'running' ? 'text-rose-500 animate-pulse' : 'text-sky-500'}`} />
+   461→            实时执行流
+   462→            {streamer.connected && (
+   463→              <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300 ml-1">
+   464→                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse mr-1" /> 已连接 :3003
+   465→              </Badge>
+   466→            )}
+   467→            {streamer.currentRun && (
+   468→              <Badge variant="outline" className={`text-[10px] ml-1 ${
+   469→                streamer.currentRun.status === 'running' ? 'text-sky-600 border-sky-300' :
+   470→                streamer.currentRun.status === 'success' ? 'text-emerald-600 border-emerald-300' :
+   471→                'text-rose-600 border-rose-300'
+   472→              }`}>
+   473→                {streamer.currentRun.status === 'running' && <Loader2 className="h-3 w-3 mr-0.5 animate-spin" />}
+   474→                {streamer.currentRun.status === 'success' && <CheckCircle2 className="h-3 w-3 mr-0.5" />}
+   475→                {streamer.currentRun.status === 'failed' && <XCircle className="h-3 w-3 mr-0.5" />}
+   476→                {streamer.currentRun.table} · {streamer.currentRun.progress ?? 0}%
+   477→              </Badge>
+   478→            )}
+   479→          </CardTitle>
+   480→          <div className="flex items-center gap-1.5">
+   481→            {streamer.currentRun?.status === 'running' ? (
+   482→              <Button size="sm" variant="outline" className="h-7 text-xs text-rose-600 hover:text-rose-700" onClick={() => streamer.cancel()}>
+   483→                <Pause className="h-3 w-3 mr-1" /> 取消
+   484→              </Button>
+   485→            ) : (
+   486→              <Button
+   487→                size="sm"
+   488→                variant="outline"
+   489→                className="h-7 text-xs"
+   490→                onClick={() => streamer.triggerDaily()}
+   491→                disabled={!!streamer.currentRun}
+   492→                title="触发 daily 全量执行"
+   493→              >
+   494→                <Play className="h-3 w-3 mr-1" /> 触发 daily
+   495→              </Button>
+   496→            )}
+   497→            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onNavigate('logs')}>
+   498→              <Terminal className="h-3 w-3 mr-1" /> 完整日志
+   499→            </Button>
+   500→          </div>
+   501→        </div>
+   502→        {/* 进度条 */}
+   503→        {streamer.currentRun?.status === 'running' && (
+   504→          <div className="mt-2 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+   505→            <div
+   506→              className="h-full bg-gradient-to-r from-sky-500 via-fuchsia-500 to-rose-500 transition-all duration-300"
+   507→              style={{ width: `${streamer.currentRun.progress ?? 0}%` }}
+   508→            />
+   509→          </div>
+   510→        )}
+   511→        {streamer.dailyProgress && (
+   512→          <div className="mt-2 flex items-center gap-2 text-[11px]">
+   513→            <Zap className="h-3 w-3 text-amber-500" />
+   514→            <span className="text-zinc-500">daily 全量</span>
+   515→            <div className="flex-1 max-w-[200px] h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+   516→              <div className="h-full bg-amber-500 transition-all" style={{ width: `${(streamer.dailyProgress.completed / streamer.dailyProgress.total) * 100}%` }} />
+   517→            </div>
+   518→            <span className="font-mono text-zinc-400">{streamer.dailyProgress.completed}/{streamer.dailyProgress.total}</span>
+   519→          </div>
+   520→        )}
+   521→      </CardHeader>
+   522→      <CardContent className="pt-0">
+   523→        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
+   524→          {/* 日志流 */}
+   525→          <div className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 overflow-hidden">
+   526→            <div className="px-3 py-1.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-900/50 flex items-center gap-2">
+   527→              <Terminal className="h-3 w-3 text-zinc-400" />
+   528→              <span className="text-[11px] font-mono text-zinc-500">logs/run_live.log</span>
+   529→              {streamer.logs.length > 0 && (
+   530→                <Badge variant="outline" className="ml-auto text-[9px] text-rose-600 border-rose-300 py-0">
+   531→                  <span className="h-1 w-1 rounded-full bg-rose-500 animate-pulse mr-1" /> LIVE · {streamer.logs.length}
+   532→                </Badge>
+   533→              )}
+   534→            </div>
+   535→            <div className="h-[240px] overflow-y-auto font-mono text-[11px] p-2 space-y-0">
+   536→              {streamer.logs.length === 0 && (
+   537→                <div className="py-12 text-center text-zinc-400">
+   538→                  <Terminal className="h-6 w-6 mx-auto opacity-40 mb-2" />
+   539→                  <div className="text-xs">点击右侧剧本触发实时执行</div>
+   540→                  <div className="text-[10px] mt-1">或点击「触发 daily」执行全量</div>
+   541→                </div>
+   542→              )}
+   543→              {streamer.logs.slice(-80).map(l => (
+   544→                <div
+   545→                  key={l.id}
+   546→                  className={`flex gap-2 px-1.5 py-0.5 rounded ${
+   547→                    l.level === 'ERROR' ? 'bg-rose-50 dark:bg-rose-950/30' :
+   548→                    l.level === 'WARNING' ? 'bg-amber-50 dark:bg-amber-950/20' :
+   549→                    l.level === 'INFO' && l.message.startsWith('✔') ? 'bg-emerald-50/50 dark:bg-emerald-950/20' :
+   550→                    ''
+   551→                  }`}
+   552→                >
+   553→                  <span className="text-zinc-400 flex-shrink-0">{l.ts.slice(11)}</span>
+   554→                  <span className={`flex-shrink-0 w-14 font-bold ${
+   555→                    l.level === 'ERROR' ? 'text-rose-600' :
+   556→                    l.level === 'WARNING' ? 'text-amber-600' :
+   557→                    l.level === 'INFO' ? 'text-emerald-600' :
+   558→                    'text-zinc-400'
+   559→                  }`}>{l.level}</span>
+   560→                  <span className="text-sky-600 dark:text-sky-400 flex-shrink-0 w-32 truncate">{l.table}</span>
+   561→                  <span className="text-zinc-700 dark:text-zinc-300 flex-1">{l.message}</span>
+   562→                </div>
+   563→              ))}
+   564→              <div ref={logEndRef} />
+   565→            </div>
+   566→          </div>
+   567→
+   568→          {/* 可触发剧本 */}
+   569→          <div className="rounded-md border border-zinc-200 dark:border-zinc-800 p-2">
+   570→            <div className="text-[11px] text-zinc-500 mb-1.5 flex items-center gap-1">
+   571→              <Zap className="h-3 w-3" /> 可触发剧本 ({streamer.scripts.length})
+   572→            </div>
+   573→            <div className="space-y-1 max-h-[260px] overflow-y-auto pr-1">
+   574→              {streamer.scripts.map(s => {
+   575→                const isRunning = streamer.currentRun?.table === s.table
+   576→                return (
+   577→                  <button
+   578→                    key={s.idx}
+   579→                    onClick={() => handleTrigger(s.table)}
+   580→                    disabled={!!streamer.currentRun}
+   581→                    className={`w-full text-left px-2 py-1.5 rounded text-[11px] font-mono border transition-all flex items-center gap-1.5 ${
+   582→                      isRunning
+   583→                        ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300'
+   584→                        : 'border-zinc-200 dark:border-zinc-700 hover:border-sky-300 dark:hover:border-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/30 disabled:opacity-50 disabled:cursor-not-allowed'
+   585→                    }`}
+   586→                    title={`${s.cn} · ${s.steps} 步日志`}
+   587→                  >
+   588→                    {isRunning ? <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" /> : <Play className="h-3 w-3 flex-shrink-0 opacity-50" />}
+   589→                    <span className="truncate flex-1">{s.table}</span>
+   590→                    <span className="text-zinc-400 text-[10px]">{s.cn}</span>
+   591→                  </button>
+   592→                )
+   593→              })}
+   594→            </div>
+   595→          </div>
+   596→        </div>
+   597→      </CardContent>
+   598→    </Card>
+   599→  )
+   600→}
+   601→
+   602→// --- 子组件：KPI 卡片 ---
+   603→function KpiCard({ icon, label, value, sub, tone, spark }: { icon: React.ReactNode; label: string; value: string; sub: string; tone: 'sky' | 'emerald' | 'amber' | 'rose' | 'fuchsia'; spark?: React.ReactNode }) {
+   604→  const toneMap = {
+   605→    sky: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40',
+   606→    emerald: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40',
+   607→    amber: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40',
+   608→    rose: 'text-rose-600 bg-rose-50 dark:bg-rose-950/40',
+   609→    fuchsia: 'text-fuchsia-600 bg-fuchsia-50 dark:bg-fuchsia-950/40',
+   610→  }
+   611→  return (
+   612→    <Card className="overflow-hidden group hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-stagger-in">
+   613→      <CardContent className="p-4">
+   614→        <div className="flex items-start justify-between">
+   615→          <div className="space-y-1 flex-1 min-w-0">
+   616→            <div className="text-xs text-zinc-500">{label}</div>
+   617→            <div className="text-2xl font-semibold tracking-tight animate-count-up">{value}</div>
+   618→            <div className="text-[11px] text-zinc-400 truncate">{sub}</div>
+   619→          </div>
+   620→          <div className={`p-2 rounded-lg ${toneMap[tone]} group-hover:scale-110 transition-transform`}>{icon}</div>
+   621→        </div>
+   622→        {spark && <div className="mt-3 -mb-1">{spark}</div>}
+   623→      </CardContent>
+   624→    </Card>
+   625→  )
+   626→}
+   627→
+   628→// --- 子组件：Sparkline（小折线/柱线）---
+   629→function Sparkline({ data, color, suffix }: { data: number[]; color: 'sky' | 'emerald' | 'amber' | 'rose' | 'fuchsia'; suffix?: string }) {
+   630→  const colorMap = {
+   631→    sky: 'stroke-sky-500',
+   632→    emerald: 'stroke-emerald-500',
+   633→    amber: 'stroke-amber-500',
+   634→    rose: 'stroke-rose-500',
+   635→    fuchsia: 'stroke-fuchsia-500',
+   636→  }
+   637→  const fillMap = {
+   638→    sky: 'fill-sky-500/10',
+   639→    emerald: 'fill-emerald-500/10',
+   640→    amber: 'fill-amber-500/10',
+   641→    rose: 'fill-rose-500/10',
+   642→    fuchsia: 'fill-fuchsia-500/10',
+   643→  }
+   644→  const w = 200
+   645→  const h = 32
+   646→  const max = Math.max(...data, 1)
+   647→  const min = Math.min(...data, 0)
+   648→  const range = max - min || 1
+   649→  const step = w / (data.length - 1)
+   650→  const points = data.map((v, i) => `${i * step},${h - ((v - min) / range) * (h - 4) - 2}`)
+   651→  const path = `M ${points.join(' L ')}`
+   652→  const areaPath = `${path} L ${w},${h} L 0,${h} Z`
+   653→  return (
+   654→    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-8" preserveAspectRatio="none">
+   655→      <path d={areaPath} className={fillMap[color]} />
+   656→      <path d={path} fill="none" className={`${colorMap[color]} stroke-1.5`} strokeLinecap="round" strokeLinejoin="round" />
+   657→      {data.map((v, i) => (
+   658→        <circle key={i} cx={i * step} cy={h - ((v - min) / range) * (h - 4) - 2} r={i === data.length - 1 ? 2 : 0} className={colorMap[color].replace('stroke', 'fill')} />
+   659→      ))}
+   660→      {suffix && data[data.length - 1] > 0 && (
+   661→        <text x={w - 2} y={10} textAnchor="end" className="fill-zinc-400 text-[8px] font-mono">{data[data.length - 1]}{suffix}</text>
+   662→      )}
+   663→    </svg>
+   664→  )
+   665→}
+   666→
+   667→// --- 子组件：环形图 ---
+   668→function DonutChart({ value, size, label, subLabel }: { value: number; size: number; label: string; subLabel: string }) {
+   669→  const radius = size / 2 - 8
+   670→  const circumference = 2 * Math.PI * radius
+   671→  const offset = circumference - (value / 100) * circumference
+   672→  const color = value >= 95 ? '#10b981' : value >= 80 ? '#f59e0b' : '#f43f5e'
+   673→  return (
+   674→    <div className="relative" style={{ width: size, height: size }}>
+   675→      <svg width={size} height={size} className="-rotate-90">
+   676→        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" className="text-zinc-200 dark:text-zinc-800" strokeWidth={6} />
+   677→        <circle
+   678→          cx={size / 2} cy={size / 2} r={radius} fill="none"
+   679→          stroke={color} strokeWidth={6} strokeLinecap="round"
+   680→          strokeDasharray={circumference} strokeDashoffset={offset}
+   681→          style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+   682→        />
+   683→      </svg>
+   684→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   685→        <div className="text-2xl font-bold" style={{ color }}>{label}</div>
+   686→        <div className="text-[10px] text-zinc-400">{subLabel}</div>
+   687→      </div>
+   688→    </div>
+   689→  )
+   690→}
+   691→
+   692→// --- 子组件：区域图 ---
+   693→function AreaChart({ data }: { data: { date: string; rows: number }[] }) {
+   694→  const w = 320
+   695→  const h = 100
+   696→  const padding = 4
+   697→  const max = Math.max(...data.map(d => d.rows), 1)
+   698→  const step = data.length > 1 ? (w - padding * 2) / (data.length - 1) : 0
+   699→  const points = data.map((d, i) => `${padding + i * step},${h - padding - (d.rows / max) * (h - padding * 2 - 16)}`)
+   700→  const linePath = `M ${points.join(' L ')}`
+   701→  const areaPath = `${linePath} L ${padding + (data.length - 1) * step},${h - padding} L ${padding},${h - padding} Z`
+   702→  // 大数据集时稀疏化标签和圆点
+   703→  const labelInterval = data.length > 60 ? 15 : data.length > 20 ? 7 : data.length > 10 ? 3 : 1
+   704→  const showDots = data.length <= 30
+   705→  const dotR = data.length > 15 ? 1.5 : 2.5
+   706→  return (
+   707→    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-24" preserveAspectRatio="none">
+   708→      <defs>
+   709→        <linearGradient id="ingest-grad" x1="0" y1="0" x2="0" y2="1">
+   710→          <stop offset="0%" stopColor="#d946ef" stopOpacity={0.4} />
+   711→          <stop offset="100%" stopColor="#d946ef" stopOpacity={0.05} />
+   712→        </linearGradient>
+   713→      </defs>
+   714→      <path d={areaPath} fill="url(#ingest-grad)" />
+   715→      <path d={linePath} fill="none" stroke="#d946ef" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+   716→      {data.map((d, i) => (
+   717→        <g key={i}>
+   718→          {showDots && d.rows > 0 && (
+   719→            <circle cx={padding + i * step} cy={h - padding - (d.rows / max) * (h - padding * 2 - 16)} r={dotR} fill="#d946ef" />
+   720→          )}
+   721→          {i % labelInterval === 0 && (
+   722→            <text x={padding + i * step} y={h - 2} textAnchor="middle" className="fill-zinc-400 text-[8px] font-mono">{d.date}</text>
+   723→          )}
+   724→        </g>
+   725→      ))}
+   726→    </svg>
+   727→  )
+   728→}
+   729→
+   730→// --- 子组件：快捷入口 ---
+   731→function QuickAction({ icon, label, desc, onClick }: { icon: React.ReactNode; label: string; desc: string; onClick: () => void }) {
+   732→  return (
+   733→    <Button variant="outline" className="h-auto py-3 justify-start text-left" onClick={onClick}>
+   734→      <div className="flex items-center gap-3">
+   735→        <div className="p-1.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">{icon}</div>
+   736→        <div>
+   737→          <div className="text-sm font-medium">{label}</div>
+   738→          <div className="text-[11px] text-zinc-400">{desc}</div>
+   739→        </div>
+   740→      </div>
+   741→    </Button>
+   742→  )
+   743→}
+   744→
