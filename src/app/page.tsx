@@ -9,14 +9,16 @@ import { LintView } from '@/components/dataops/lint-view'
 import { LogsView } from '@/components/dataops/logs-view'
 import { DictionaryView } from '@/components/dataops/dictionary-view'
 import { SettingsView } from '@/components/dataops/settings-view'
+import { SqlPlaygroundView } from '@/components/dataops/sql-playground-view'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { TABLES, ALERTS, PIPELINE_RUNS } from '@/lib/dataops/mock-data'
 import { toast } from 'sonner'
 import {
   LayoutDashboard, Library, HeartPulse, Workflow, GitBranch,
-  CheckCheck, ScrollText, BookOpen, Settings, Database, Github, Sparkles, AlertTriangle, Play
+  CheckCheck, ScrollText, BookOpen, Settings, Database, Github, Sparkles, AlertTriangle, Play, Terminal
 } from 'lucide-react'
 
-type View = 'dashboard' | 'catalog' | 'health' | 'orchestration' | 'lineage' | 'lint' | 'logs' | 'dictionary' | 'settings'
+type View = 'dashboard' | 'catalog' | 'health' | 'orchestration' | 'lineage' | 'lint' | 'logs' | 'dictionary' | 'sql' | 'settings'
 
 const NAV: { key: View; label: string; icon: React.ReactNode; badge?: number }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
@@ -27,6 +29,7 @@ const NAV: { key: View; label: string; icon: React.ReactNode; badge?: number }[]
   { key: 'lint', label: '规范校验', icon: <CheckCheck className="h-4 w-4" />, badge: ALERTS.filter(a => a.type === 'lint').length },
   { key: 'logs', label: '日志', icon: <ScrollText className="h-4 w-4" /> },
   { key: 'dictionary', label: '数据字典', icon: <BookOpen className="h-4 w-4" /> },
+  { key: 'sql', label: 'SQL Playground', icon: <Terminal className="h-4 w-4" /> },
   { key: 'settings', label: '设置', icon: <Settings className="h-4 w-4" /> },
 ]
 
@@ -39,6 +42,7 @@ const VIEW_TITLES: Record<View, { title: string; desc: string }> = {
   lint: { title: '规范校验', desc: '12 条可机器校验的编码规则' },
   logs: { title: '日志', desc: '按表 / 级别 / 时间筛选' },
   dictionary: { title: '数据字典', desc: '字段级元数据 SSOT' },
+  sql: { title: 'SQL Playground', desc: '在线查询 DuckDB · Ctrl+Enter 执行' },
   settings: { title: '设置', desc: 'DB 连接 · 调度 · 数据源 · 集成' },
 }
 
@@ -71,7 +75,8 @@ export default function Home() {
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-xs text-zinc-500">DuckDB 已连接 · 1.2 GB</span>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1">
+            <ThemeToggle />
             <button
               onClick={() => { toast.info('已触发 daily 全量执行', { description: '18 张 daily 表按拓扑序执行，预计 ~25 分钟' }); setView('orchestration') }}
               className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-sky-500 hover:bg-sky-600 text-white text-xs font-medium transition-colors"
@@ -179,6 +184,7 @@ export default function Home() {
             {view === 'lint' && <LintView />}
             {view === 'logs' && <LogsView />}
             {view === 'dictionary' && <DictionaryView />}
+            {view === 'sql' && <SqlPlaygroundView />}
             {view === 'settings' && <SettingsView />}
           </div>
         </main>
@@ -193,7 +199,7 @@ export default function Home() {
               DataOps 管理台 · 探索稿 v1
             </span>
             <span className="hidden sm:inline text-zinc-300 dark:text-zinc-700">|</span>
-            <span>26 张表 · 9 个视图 · 12 条 lint 规则</span>
+            <span>26 张表 · 10 个视图 · 12 条 lint 规则</span>
             <span className="hidden md:inline text-zinc-300 dark:text-zinc-700">|</span>
             <span className="hidden md:inline">基于真实脚本清单 mock</span>
           </div>

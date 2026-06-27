@@ -1,43 +1,68 @@
 ---
-Task ID: 1
+Task ID: 2 (cron webDevReview 第 1 轮)
 Agent: main (Z.ai Code)
-Task: DB数据库_v2 脚本库系统化方案探索 — 产出设计文档 + UI 管理台原型
+Task: DataOps 管理台持续开发巡检 — QA 测试 + 新增功能 + 样式打磨
 
 Work Log:
-- 系统性通读脚本包：CLAUDE.md / dbv2-skeleton.md / run.py 全文 / 1_入库·2_计算·3_策略·4_工具 全部脚本 / 废弃目录
-- grep 量化统计：DB_PATH 硬编码 49 处、TQ 初始化重复 9 份、5 种 fetch_data 签名变体
-- 产出诊断报告 SCRIPT_AUDIT_REPORT.md：8 类核心问题 + 3 档解决方案 + 8 个确认 bug
-- 产出系统化方案探索文档 SYSTEM_DESIGN_EXPLORATION_v1.md：
-  - 三层架构（治理/执行/观测）
-  - YAML registry SSOT + 12 条可机器校验 lint 规则
-  - BaseIngest 基类 + 执行状态机 + orchestrator
-  - 9 个 UI 页面信息架构
-  - 从入库到调用全流程
-  - 与现有 run.py 的演进关系（不推翻）
-  - 5 阶段落地路线图 (E0-E5)
-- 搭建 Next.js UI 原型（frontend-first，mock 数据基于真实 26 个脚本清单）：
-  - mock-data.ts：26 个表完整元数据 + 12 条 lint 规则 + 15 条执行记录 + 8 条告警 + 健康度矩阵 + 行数趋势
-  - styles.ts：颜色/格式化辅助
-  - 9 个视图组件：dashboard / catalog / health / orchestration / lineage / lint / logs / dictionary / settings
-  - page.tsx：侧栏导航 + 视图切换 + sticky footer + 执行 daily 按钮 + toast 反馈
-- 自检：
+- 读取 worklog.md 了解项目进展：9 视图 mock 原型已完成，lint 通过，agent-browser 验证全可用
+- QA 测试（agent-browser）：
+  - dev server 正常 (port 3000, 200)
+  - 9 视图遍历：全部无水平滚动、无运行时错误
+  - 仅 1 个已知 shadcn Dialog aria-description warning（非阻断）
+  - VLM 分析截图确认视觉层次清晰，给出样式改进建议
+- 新增功能 1：暗色模式完善
+  - 创建 theme-provider.tsx (next-themes, attribute="class")
+  - 创建 theme-toggle.tsx (Sun/Moon 图标平滑切换动画)
+  - layout.tsx 包裹 ThemeProvider
+  - 顶栏集成 ThemeToggle 按钮
+  - 修复 lint: setState-in-effect 规则（改用 queueMicrotask 模式）
+- 新增功能 2：SQL Playground 视图（第 10 个页面）
+  - sql-playground-view.tsx：三栏布局（表清单/编辑器+结果/参考）
+  - SQL 编辑器（monospace textarea, Ctrl+Enter 执行）
+  - mock 执行引擎：根据 SQL 关键字返回不同 mock 结果（COUNT/板块/骗炮/K线）
+  - 结果表格渲染（列头+行，数字蓝色字符串默认色）
+  - 保存的查询（4 个示例：涨停股/板块Top/K线统计/骗炮候选）点击载入
+  - 执行历史（带耗时/行数/成功状态）
+  - 字段参考 tab（点击列名插入编辑器，点击表名插入表名）
+  - 执行状态：loading spinner + 成功 badge + 耗时 ms 显示
+- 新增功能 3：执行详情抽屉（run-detail-sheet.tsx）
+  - 编排页执行历史行可点击 → 打开右侧抽屉
+  - 显示：run_id / 触发方式 / 耗时 / 入库行数 / force / 开始结束时间
+  - 错误信息高亮区（失败红/警告黄）
+  - mock 执行日志生成（根据表名生成不同的进度日志）
+  - 重新执行 / 强制重跑 按钮
+  - 日志文件路径显示
+- 改进：编排 DAG 视图
+  - 节点悬停效果（scale + shadow + ring）
+  - 增加外部数据源节点（TQ API / TDX .day / .lc5 / .lc1 / gpsz / signals）
+  - 层级描述说明
+  - 红色异常节点带脉冲圆点
+- 样式打磨：
+  - 顶栏按钮组间距优化
+  - 执行历史行 hover 天蓝色高亮 + 箭头图标
+  - DAG 节点颜色语义统一（绿正常/红异常/灰once/蓝外部）
+  - footer 更新为 10 视图
+- 验证：
   - bun run lint 通过（0 error）
-  - dev server 运行正常 (port 3000)
-  - agent-browser 验证：9 个视图全部可切换、Catalog 详情抽屉可打开、触发执行 toast 正常、健康度矩阵 7×26 渲染、lint 12 规则显示、移动端 375px 无水平滚动、sticky footer 行为正确
-  - 无运行时错误，仅 1 个 shadcn Dialog aria-description warning（非阻断）
+  - agent-browser 验证：10 视图全可切换（h1 标题全部正确）、SQL 执行成功显示结果、暗色切换 html class="dark"、执行详情抽屉打开显示 run_id+错误+日志
+  - VLM 确认 SQL Playground 三栏布局合理、视觉专业
+  - 截图存档：download/dataops-dashboard-final.png, dataops-sql-final.png
 
 Stage Summary:
-- 交付物：
-  1. /home/z/my-project/db_scripts_analysis/SCRIPT_AUDIT_REPORT.md （诊断报告）
-  2. /home/z/my-project/db_scripts_analysis/SYSTEM_DESIGN_EXPLORATION_v1.md （系统化方案探索 v1）
-  3. /home/z/my-project/src/app/page.tsx + 9 个视图组件 + mock 数据 （UI 原型，可交互）
-- 核心设计决策：不重写 run.py，而是套「治理壳 + 可视化壳」；YAML registry 替代散落 @meta；lint engine 把人记规范变机器校验；BaseIngest 统一 5 种签名
-- UI 原型覆盖 9 个页面，数据全部基于真实脚本清单（26 表 + 8 bug + 12 lint 规则），让用户看到的是项目真实样貌
-- 待用户决策的 5 个点：废弃脚本处理 / 中文列名是否保留 / BaseIngest vs 平铺 / DB_PATH 统一 / run.py 拆分
-- 下一步：等用户对方案方向反馈，决定是否进入 E1（YAML registry + lint engine 真实实现）
+- 项目当前状态：稳定，功能持续增强。从 9 视图扩展到 10 视图，新增暗色模式、SQL Playground、执行详情抽屉三大功能
+- 已完成的修改：
+  1. 暗色模式：ThemeProvider + ThemeToggle，全站 dark: 变体生效
+  2. SQL Playground：完整三栏查询界面，mock 执行引擎，保存查询/历史/字段参考
+  3. 执行详情抽屉：编排历史可点击展开，含元数据/错误/日志/操作
+  4. DAG 改进：悬停交互 + 外部源节点 + 层级描述
+  5. lint 通过，无运行时错误
+- 验证结果：10 视图遍历全部 h1 正确，SQL 执行出结果，暗色切换生效，抽屉打开正常
 
-Unresolved / Risk:
-- UI 为纯 mock，未接真实 DuckDB / run.py（E3 阶段任务）
-- lint engine 12 条规则是设计稿，尚未实现 Python 版
-- BaseIngest 基类未实现，26 个脚本未迁移
-- 血缘 DAG 当前是静态分层展示，未接 react-flow 交互式图谱（P2）
+Unresolved / 下一阶段优先事项:
+- SQL Playground 可加：表清单搜索框、SQL 语法高亮、结果排序/分页
+- 血缘视图可升级为 react-flow 交互式图谱（当前是三栏列表式）
+- 可加全局搜索（Cmd+K 命令面板）快速跳转表/脚本
+- 可加执行实时进度条（WebSocket 推送 mock）
+- 数据字典可加"中英文列名对照表"导出功能
+- 接真实 API（E3 阶段）仍是最大未完成项
+- lint engine 12 条规则的 Python 实现仍未做（E1 阶段）
