@@ -694,3 +694,42 @@ export const HEALTH_MATRIX: { table: string; days: { date: string; status: 'succ
     return { date: d, status: 'success' as const }
   }),
 }))
+
+// 近 7 天执行汇总（用于 Dashboard 成功率环形图）
+export interface DailyRunStat {
+  date: string
+  total: number
+  success: number
+  failed: number
+  skipped: number
+  totalRows: number
+  durationMin: number
+}
+export const DAILY_STATS: DailyRunStat[] = [
+  { date: '06-19', total: 24, success: 24, failed: 0, skipped: 0, totalRows: 215_400_000, durationMin: 22 },
+  { date: '06-20', total: 24, success: 23, failed: 1, skipped: 0, totalRows: 215_500_000, durationMin: 25 },
+  { date: '06-21', total: 0, success: 0, failed: 0, skipped: 0, totalRows: 0, durationMin: 0 }, // 周末
+  { date: '06-22', total: 0, success: 0, failed: 0, skipped: 0, totalRows: 0, durationMin: 0 }, // 周末
+  { date: '06-23', total: 24, success: 22, failed: 2, skipped: 0, totalRows: 215_900_000, durationMin: 28 },
+  { date: '06-24', total: 24, success: 23, failed: 1, skipped: 0, totalRows: 216_400_000, durationMin: 23 },
+  { date: '06-25', total: 26, success: 22, failed: 2, skipped: 1, totalRows: 216_900_000, durationMin: 65 },
+]
+
+// 每日入座行数 (用于 Dashboard 行数趋势区域图)
+export const INGEST_TREND: { date: string; rows: number }[] = [
+  { date: '06-19', rows: 1_850_000 },
+  { date: '06-20', rows: 1_920_000 },
+  { date: '06-21', rows: 0 },
+  { date: '06-22', rows: 0 },
+  { date: '06-23', rows: 2_010_000 },
+  { date: '06-24', rows: 1_870_000 },
+  { date: '06-25', rows: 3_240_000 },
+]
+
+// 脚本规模分布（按目录）
+export const SCRIPT_DISTRIBUTION: { dir: string; tables: number; totalLines: number }[] = [
+  { dir: '1_入库', tables: 17, totalLines: 1842 },
+  { dir: '2_计算', tables: 7, totalLines: 687 },
+  { dir: '3_策略', tables: 1, totalLines: 124 },
+  { dir: '4_工具', tables: 1, totalLines: 136 },
+]

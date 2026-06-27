@@ -10,12 +10,14 @@ import { LogsView } from '@/components/dataops/logs-view'
 import { DictionaryView } from '@/components/dataops/dictionary-view'
 import { SettingsView } from '@/components/dataops/settings-view'
 import { SqlPlaygroundView } from '@/components/dataops/sql-playground-view'
+import { CommandPalette } from '@/components/dataops/command-palette'
+import { NotificationCenter } from '@/components/dataops/notification-center'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { TABLES, ALERTS, PIPELINE_RUNS } from '@/lib/dataops/mock-data'
 import { toast } from 'sonner'
 import {
   LayoutDashboard, Library, HeartPulse, Workflow, GitBranch,
-  CheckCheck, ScrollText, BookOpen, Settings, Database, Github, Sparkles, AlertTriangle, Play, Terminal
+  CheckCheck, ScrollText, BookOpen, Settings, Database, Github, Sparkles, AlertTriangle, Play, Terminal, Search, Bell
 } from 'lucide-react'
 
 type View = 'dashboard' | 'catalog' | 'health' | 'orchestration' | 'lineage' | 'lint' | 'logs' | 'dictionary' | 'sql' | 'settings'
@@ -48,6 +50,8 @@ const VIEW_TITLES: Record<View, { title: string; desc: string }> = {
 
 export default function Home() {
   const [view, setView] = useState<View>('dashboard')
+  const [cmdOpen, setCmdOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
 
   const handleRunTable = (table: string) => {
     toast.success(`已触发执行：${table}`, {
@@ -56,6 +60,10 @@ export default function Home() {
   }
 
   const handleNavigate = (v: string) => setView(v as View)
+  const handleRunDaily = () => {
+    toast.info('已触发 daily 全量执行', { description: '18 张 daily 表按拓扑序执行，预计 ~25 分钟' })
+    setView('orchestration')
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
@@ -76,9 +84,31 @@ export default function Home() {
             <span className="text-xs text-zinc-500">DuckDB 已连接 · 1.2 GB</span>
           </div>
           <div className="ml-auto flex items-center gap-1">
+            <button
+              onClick={() => setCmdOpen(true)}
+              className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs text-zinc-500 transition-colors"
+              title="命令面板 (Cmd+K)"
+            >
+              <Search className="h-3.5 w-3.5" />
+              <span>搜索...</span>
+              <kbd className="ml-1 px-1 py-0.5 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-[9px] font-mono text-zinc-400">⌘K</kbd>
+            </button>
             <ThemeToggle />
             <button
-              onClick={() => { toast.info('已触发 daily 全量执行', { description: '18 张 daily 表按拓扑序执行，预计 ~25 分钟' }); setView('orchestration') }}
+              onClick={() => setNotifOpen(true)}
+              className="relative p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"
+              title="通知中心"
+              aria-label="通知"
+            >
+              <Bell className="h-4 w-4" />
+              {ALERTS.length > 0 && (
+                <span className="absolute top-0.5 right-0.5 min-w-[14px] h-[14px] px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[9px] font-bold leading-none">
+                  {ALERTS.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={handleRunDaily}
               className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-sky-500 hover:bg-sky-600 text-white text-xs font-medium transition-colors"
             >
               <Play className="h-3.5 w-3.5" /> 执行 daily
@@ -196,10 +226,10 @@ export default function Home() {
           <div className="flex items-center gap-3 flex-wrap">
             <span className="flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              DataOps 管理台 · 探索稿 v1
+              DataOps 管理台 · 探索稿 v2
             </span>
             <span className="hidden sm:inline text-zinc-300 dark:text-zinc-700">|</span>
-            <span>26 张表 · 10 个视图 · 12 条 lint 规则</span>
+            <span>26 张表 · 10 个视图 · 12 条 lint 规则 · Cmd+K 命令面板</span>
             <span className="hidden md:inline text-zinc-300 dark:text-zinc-700">|</span>
             <span className="hidden md:inline">基于真实脚本清单 mock</span>
           </div>
@@ -210,6 +240,22 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      {/* 命令面板 */}
+      <CommandPalette
+        open={cmdOpen}
+        onOpenChange={setCmdOpen}
+        onNavigate={handleNavigate}
+        onRunTable={handleRunTable}
+        onRunDaily={handleRunDaily}
+      />
+
+      {/* 通知中心 */}
+      <NotificationCenter
+        open={notifOpen}
+        onOpenChange={setNotifOpen}
+        onNavigate={handleNavigate}
+      />
     </div>
   )
 }
