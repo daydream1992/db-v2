@@ -290,3 +290,88 @@
   box-shadow: 0 4px 12px oklch(0 0 0 / 0.08);
 }
 
+/* 渐变文字 */
+.text-gradient {
+  background: linear-gradient(135deg, oklch(0.65 0.2 250), oklch(0.65 0.2 330));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* 网格背景图案 */
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(oklch(0 0 0 / 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0 0 0 / 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.dark .bg-grid-pattern {
+  background-image:
+    linear-gradient(oklch(1 0 0 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(1 0 0 / 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* 发光环（活跃元素） */
+.glow-ring {
+  box-shadow: 0 0 0 1px oklch(0.65 0.2 250 / 0.3), 0 0 12px oklch(0.65 0.2 250 / 0.15);
+}
+
+/* 淡入动画 */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+/* 缩放淡入 */
+@keyframes scale-fade-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-scale-fade-in {
+  animation: scale-fade-in 0.2s ease-out;
+}
+
+/* 闪烁高亮（新数据） */
+@keyframes flash-highlight {
+  0% { background-color: oklch(0.85 0.15 250 / 0.4); }
+  100% { background-color: transparent; }
+}
+.animate-flash {
+  animation: flash-highlight 1s ease-out;
+}
+
+/* 工具栏分隔线 */
+.toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: oklch(0 0 0 / 0.1);
+  margin: 0 2px;
+}
+.dark .toolbar-divider {
+  background: oklch(1 0 0 / 0.1);
+}
+
+/* 行 hover 渐变 */
+.row-hover-gradient {
+  position: relative;
+}
+.row-hover-gradient::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, oklch(0.65 0.2 250), oklch(0.65 0.2 330));
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.row-hover-gradient:hover::before {
+  opacity: 1;
+}
+

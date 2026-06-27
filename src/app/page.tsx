@@ -68,12 +68,12 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950">
+    <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 bg-grid-pattern">
       {/* 顶部栏 */}
-      <header className="border-b bg-white dark:bg-zinc-900 sticky top-0 z-30">
+      <header className="border-b bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm sticky top-0 z-30">
         <div className="px-4 lg:px-6 h-14 flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white">
+            <div className="p-1.5 rounded-lg bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white shadow-sm">
               <Database className="h-4 w-4" />
             </div>
             <div>
@@ -201,10 +201,10 @@ export default function Home() {
         <main className="flex-1 min-w-0 overflow-hidden">
           <div className="px-4 lg:px-6 py-4">
             {/* 页面标题 */}
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between animate-fade-in">
               <div>
                 <h1 className="text-lg font-semibold flex items-center gap-2">
-                  {VIEW_TITLES[view].title}
+                  <span className="text-gradient">{VIEW_TITLES[view].title}</span>
                 </h1>
                 <p className="text-xs text-zinc-500 mt-0.5">{VIEW_TITLES[view].desc}</p>
               </div>
@@ -216,16 +216,18 @@ export default function Home() {
             </div>
 
             {/* 视图内容 */}
-            {view === 'dashboard' && <DashboardView onNavigate={handleNavigate} />}
-            {view === 'catalog' && <CatalogView onNavigate={handleNavigate} onRunTable={handleRunTable} />}
-            {view === 'health' && <HealthView onRunTable={handleRunTable} />}
-            {view === 'orchestration' && <OrchestrationView onRunTable={handleRunTable} />}
-            {view === 'lineage' && <LineageView />}
-            {view === 'lint' && <LintView />}
-            {view === 'logs' && <LogsView />}
-            {view === 'dictionary' && <DictionaryView />}
-            {view === 'sql' && <SqlPlaygroundView />}
-            {view === 'settings' && <SettingsView />}
+            <div key={view} className="animate-fade-in">
+              {view === 'dashboard' && <DashboardView onNavigate={handleNavigate} />}
+              {view === 'catalog' && <CatalogView onNavigate={handleNavigate} onRunTable={handleRunTable} />}
+              {view === 'health' && <HealthView onRunTable={handleRunTable} />}
+              {view === 'orchestration' && <OrchestrationView onRunTable={handleRunTable} />}
+              {view === 'lineage' && <LineageView />}
+              {view === 'lint' && <LintView />}
+              {view === 'logs' && <LogsView />}
+              {view === 'dictionary' && <DictionaryView />}
+              {view === 'sql' && <SqlPlaygroundView />}
+              {view === 'settings' && <SettingsView />}
+            </div>
           </div>
         </main>
       </div>

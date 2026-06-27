@@ -468,3 +468,100 @@ Unresolved / 下一阶段优先事项:
 - 接真实 API（E3 阶段）仍是最大未完成项
 - lint engine 12 条规则的 Python 实现仍未做（E1 阶段）
 - log-streamer mini-service 当前用客户端模拟，可切回真实 socket.io
+
+---
+Task ID: 7 (cron webDevReview 第 6 轮)
+Agent: main (Z.ai Code)
+Task: DataOps 管理台持续开发巡检 — QA 测试 + 新增功能 + 样式打磨（v6）
+
+Work Log:
+- 读取 worklog.md 了解 v5 进展：10 视图 + 命令面板 + 通知中心 + 交互式血缘 + SQL 多 Tab + Settings 重构 + 键盘帮助 + 样式动画
+- QA 测试（agent-browser）：
+  - dev server 正常 (port 3000, 200, 编译无错)
+  - 10 视图遍历全部可访问，H1 全部正确（用 ref 点击导航）
+  - reload 后 0 console error（仅 React DevTools info + HMR）
+  - VLM 分析 Dashboard/SQL 截图给出改进建议
+  - bun run lint 0 error
+- 判断：项目稳定，进入新功能开发
+- 新增功能 1：SQL Playground 跨 Tab 结果对比
+  - 结果卡片头新增「对比」按钮（fuchsia 描边，需 ≥2 个 tab 有结果才启用）
+  - 全屏对比面板（max-w-6xl, max-h-90vh）：
+    * 头部：渐变图标 + 标题 + 关闭按钮
+    * Tab 选择器：左/右下拉选择对比的 tab（显示 tab 名+行数）
+    * 统计 badge：相同(emerald)/差异(rose)/左独有(sky)/右独有(fuchsia)
+    * 摘要条：Key 列 + 对比列 badge 列表 + 总行数
+    * 对比表：key 列 sticky + 左值/右值并排 + 差异单元格红底高亮 + 状态 badge
+    * 4 种行类型：match(绿)/diff(红)/left_only(蓝)/right_only(紫)
+    * 底部图例 + 提示
+  - 对比逻辑：取两结果交集列，首列做 key join，逐列比较值
+  - 空状态：无结果时提示「请先在两个 Tab 中执行查询」
+- 新增功能 2：Settings YAML 导入/导出
+  - 顶部操作栏新增「导入」「导出」按钮 + 分隔线
+  - 导出：生成 YAML 预览对话框（76 行）
+    * 6 个 section：general/schedule/notification/backup/lint_rules(12规则)/advanced
+    * 复制到剪贴板 + 下载 .yaml 文件
+    * 渐变头部 + 行数统计
+  - 导入：YAML 文本编辑对话框
+    * 文件上传（.yaml/.yml/.txt）+ 文本框粘贴
+    * 简易 YAML 解析器（支持 section/key-value/布尔/数字/数组/lint 子规则）
+    * 浅合并到当前 state，toast 提示导入段数
+    * placeholder 示例 + 格式说明
+- 新增功能 3：命令面板最近搜索记录
+  - localStorage 持久化（key: dataops:recent-searches, 最多 6 条）
+  - 空搜索时顶部显示「最近搜索」分组
+  - 每条记录：查询词 + 选中动作名 + 相对时间（刚刚/N分钟前/N小时前/N天前）
+  - 点击最近搜索 → 填入搜索框
+  - 「清除搜索历史」选项（rose 色）
+  - 选中任意命令时记录当前搜索词
+  - 打开时自动清空搜索 + 聚焦输入框
+- 新增样式打磨：
+  - globals.css 新增 8 个工具类/动画：
+    * .text-gradient：标题渐变文字（sky→fuchsia）
+    * .bg-grid-pattern：细网格背景（明暗适配）
+    * .glow-ring：活跃元素发光环
+    * .animate-fade-in / .animate-scale-fade-in：淡入/缩放淡入
+    * .animate-flash：新数据闪烁高亮
+    * .toolbar-divider：工具栏竖分隔线（16px）
+    * .row-hover-gradient：行 hover 左侧渐变条
+  - page.tsx 应用：
+    * 根 div 加 bg-grid-pattern 网格背景
+    * 顶栏 backdrop-blur-sm 半透明
+    * 页面标题 text-gradient 渐变文字
+    * 视图切换 animate-fade-in + key={view} 触发重新动画
+  - SQL 编辑器工具栏加 toolbar-divider（VLM 建议）
+- 修复 bug：lucide-react NotEqual 图标不存在
+  - 根因：import { NotEqual } 报 "Export NotEqual doesn't exist in target module"
+  - 修复：改用 Split 图标（2 处：统计 badge + 行状态 badge）
+- 验证：
+  - bun run lint 0 error
+  - agent-browser 验证：
+    * SQL 跨 Tab 对比：tab1 执行(stock_daily_kline 8行) + tab2 执行(COUNT 3行) → 点对比 → 面板打开，统计 0相同/0差异/8左独有/3右独有，VLM 确认布局合理
+    * Settings YAML 导出：点导出 → 预览面板 76 行，含 general/schedule/notification/backup/lint_rules(12)/advanced 全部 section，复制/下载按钮可见
+    * 命令面板最近搜索：搜 "kline" → 选中 stock_daily_kline → 重开 → 顶部「最近搜索」显示 "kline → stock_daily_kline · 刚刚" + 清除按钮
+    * 暗色模式：VLM 8/10，渐变标题/网格背景/卡片效果均正常
+    * reload 后 0 console error
+  - 截图存档：download/v6-qa/ 共 15 张（01~12 含 dark mode）
+
+Stage Summary:
+- 项目当前状态：稳定，功能持续扩展。v6 在 v5 基础上新增 3 大功能模块 + 8 项样式工具类，修复 1 个图标导入 bug
+- 已完成的修改：
+  1. SQL 跨 Tab 结果对比：全屏面板，key join + 差异高亮 + 4 种行类型 + 统计 badge
+  2. Settings YAML 导入/导出：76 行 YAML 预览 + 复制/下载 + 文件上传/粘贴导入 + 简易解析器
+  3. 命令面板最近搜索：localStorage 持久化 + 相对时间 + 清除历史
+  4. 样式打磨：8 个 CSS 工具类（text-gradient/bg-grid-pattern/glow-ring/fade-in/scale-fade-in/flash/toolbar-divider/row-hover-gradient）
+  5. page.tsx 视觉升级：网格背景 + 半透明顶栏 + 渐变标题 + 视图切换动画
+  6. SQL 编辑器工具栏分隔线
+  7. 修复 lucide NotEqual → Split
+  8. lint 0 error，reload 后 0 console error
+- 验证结果：所有新功能交互正常（对比面板/YAML 导出导入/最近搜索），VLM 评分 8/10
+
+Unresolved / 下一阶段优先事项:
+- SQL 对比可加：导出对比结果为 CSV/HTML、三 Tab 对比、按列对齐 diff（非 key join）
+- Settings YAML 可加：多环境 profile 切换（dev/staging/prod）、配置版本历史、YAML 语法校验高亮
+- 命令面板可加：命令历史导航（↑↓ 切换历史搜索）、置顶常用命令、按使用频率排序
+- 血缘图谱可加：minimap 点击跳转、节点 pin、自动布局算法
+- Dashboard 可加：自定义 KPI 卡片、按表钻取、导出 PNG 报表
+- Logs 可加：虚拟滚动（千条以上）、日志着色主题、按 run_id 分组
+- 接真实 API（E3 阶段）仍是最大未完成项
+- lint engine 12 条规则的 Python 实现仍未做（E1 阶段）
+- log-streamer mini-service 当前用客户端模拟，可切回真实 socket.io

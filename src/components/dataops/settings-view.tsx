@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Database, Settings, Bell, HardDrive, Clock, Webhook, Save, RotateCcw, Shield, Sliders, AlertTriangle, CheckCircle2, Cloud, FileDown, KeyRound, Activity, Zap, Calendar, Mail, MessageSquare } from 'lucide-react'
+import { Database, Settings, Bell, HardDrive, Clock, Webhook, Save, RotateCcw, Shield, Sliders, AlertTriangle, CheckCircle2, Cloud, FileDown, KeyRound, Activity, Zap, Calendar, Mail, MessageSquare, FileUp, FileCode2, ClipboardCopy } from 'lucide-react'
 import { LINT_RULES } from '@/lib/dataops/mock-data'
 import { toast } from 'sonner'
 
@@ -112,6 +112,213 @@ export function SettingsView() {
     toast.warning('已恢复出厂默认配置（未保存）')
   }
 
+  // === YAML 导入/导出 ===
+  const [yamlPreview, setYamlPreview] = useState<string>('')
+  const [showYamlDialog, setShowYamlDialog] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [showImportDialog, setShowImportDialog] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // 简易 YAML 序列化（不依赖外部库）
+  const stateToYaml = (s: SettingsState): string => {
+    const lines: string[] = []
+    lines.push('# DataOps 管理台配置文件')
+    lines.push('# 生成时间: ' + new Date().toISOString())
+    lines.push('# 路径: config/registry/settings.yaml')
+    lines.push('')
+    lines.push('general:')
+    lines.push(`  db_path: "${s.dbPath}"`)
+    lines.push(`  backup_dir: "${s.backupDir}"`)
+    lines.push(`  duckdb_version: "${s.duckdbVersion}"`)
+    lines.push(`  db_file_size: "${s.dbFileSize}"`)
+    lines.push('')
+    lines.push('schedule:')
+    lines.push(`  daily_time: "${s.dailyTime}"`)
+    lines.push(`  timezone: "${s.timezone}"`)
+    lines.push(`  trading_calendar: ${s.tradingCalendar}`)
+    lines.push(`  auto_retry: ${s.autoRetry}`)
+    lines.push(`  retry_max: ${s.retryMax}`)
+    lines.push(`  retry_backoff_sec: ${s.retryBackoff}`)
+    lines.push(`  health_fix_auto: ${s.healthFixAuto}`)
+    lines.push(`  notify_on_complete: ${s.notifyOnComplete}`)
+    lines.push('')
+    lines.push('notification:')
+    lines.push(`  notify_red: ${s.notifyRed}`)
+    lines.push(`  notify_daily_summary: ${s.notifyDailySummary}`)
+    lines.push(`  notify_weekly_report: ${s.notifyWeeklyReport}`)
+    lines.push(`  channels: [${s.notifyChannels.map(c => c).join(', ')}]`)
+    lines.push(`  email_recipient: "${s.emailRecipient}"`)
+    lines.push(`  webhook_url: "${s.webhookUrl}"`)
+    lines.push('')
+    lines.push('backup:')
+    lines.push(`  retention_days: ${s.backupRetentionDays}`)
+    lines.push(`  auto_backup: ${s.autoBackup}`)
+    lines.push('')
+    lines.push('lint_rules:')
+    LINT_RULES.forEach(r => {
+      lines.push(`  ${r.id}:`)
+      lines.push(`    enabled: ${s.lintRuleEnabled[r.id]}`)
+      lines.push(`    level: ${s.lintRuleLevel[r.id]}`)
+    })
+    lines.push('')
+    lines.push('advanced:')
+    lines.push(`  log_level: ${s.logLevel}`)
+    lines.push(`  parallel_workers: ${s.parallelWorkers}`)
+    lines.push(`  query_timeout_sec: ${s.queryTimeoutSec}`)
+    lines.push(`  cache_enabled: ${s.cacheEnabled}`)
+    lines.push(`  experimental_features: ${s.experimentalFeatures}`)
+    return lines.join('\n')
+  }
+
+  const handleExportYaml = () => {
+    const yaml = stateToYaml(state)
+    setYamlPreview(yaml)
+    setShowYamlDialog(true)
+  }
+
+  const handleDownloadYaml = () => {
+    const yaml = yamlPreview || stateToYaml(state)
+    const blob = new Blob([yaml], { type: 'text/yaml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `dataops_settings_${new Date().toISOString().slice(0, 10)}.yaml`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('YAML 配置已下载')
+  }
+
+  const handleCopyYaml = async () => {
+    try {
+      await navigator.clipboard.writeText(yamlPreview)
+      toast.success('YAML 已复制到剪贴板')
+    } catch {
+      toast.error('复制失败')
+    }
+  }
+
+  // 简易 YAML 解析（仅支持本项目生成的格式）
+  const parseSimpleYaml = (text: string): Partial<SettingsState> | null => {
+    try {
+      const result: any = {}
+      const lines = text.split('\n')
+      let section = ''
+      let inLintRules = false
+      let currentLintId = ''
+      for (const raw of lines) {
+        const line = raw.replace(/\r$/, '')
+        if (!line.trim() || line.trim().startsWith('#')) continue
+        // 顶层 section
+        const secMatch = line.match(/^(\w+):$/)
+        if (secMatch) {
+          section = secMatch[1]
+          inLintRules = section === 'lint_rules'
+          if (inLintRules) result.lintRuleEnabled = result.lintRuleEnabled || {}
+          if (inLintRules) result.lintRuleLevel = result.lintRuleLevel || {}
+          continue
+        }
+        // lint 子规则
+        if (inLintRules) {
+          const ruleMatch = line.match(/^  ([A-Z]\d+):$/)
+          if (ruleMatch) { currentLintId = ruleMatch[1]; continue }
+          if (currentLintId) {
+            const enMatch = line.match(/^    enabled:\s*(\w+)/)
+            if (enMatch) { result.lintRuleEnabled[currentLintId] = enMatch[1] === 'true'; continue }
+            const lvlMatch = line.match(/^    level:\s*(\w+)/)
+            if (lvlMatch) {
+              const lvl = lvlMatch[1]
+              if (lvl === 'RED' || lvl === 'YELLOW' || lvl === 'BLUE') {
+                result.lintRuleLevel[currentLintId] = lvl
+              }
+              continue
+            }
+          }
+        }
+        // 普通键值
+        const kvMatch = line.match(/^  (\w+):\s*(.*)$/)
+        if (kvMatch) {
+          let [, k, v] = kvMatch
+          v = v.trim()
+          // 字符串去引号
+          if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1)
+          // 布尔
+          if (v === 'true') v = true as any
+          else if (v === 'false') v = false as any
+          // 数字
+          else if (/^\d+$/.test(v)) v = parseInt(v, 10) as any
+          // 数组
+          else if (v.startsWith('[') && v.endsWith(']')) {
+            v = v.slice(1, -1).split(',').map(x => x.trim()).filter(Boolean) as any
+          }
+          if (section === 'general') {
+            if (k === 'db_path') result.dbPath = v as string
+            else if (k === 'backup_dir') result.backupDir = v as string
+            else if (k === 'duckdb_version') result.duckdbVersion = v as string
+            else if (k === 'db_file_size') result.dbFileSize = v as string
+          } else if (section === 'schedule') {
+            if (k === 'daily_time') result.dailyTime = v as string
+            else if (k === 'timezone') result.timezone = v as string
+            else if (k === 'trading_calendar') result.tradingCalendar = v as boolean
+            else if (k === 'auto_retry') result.autoRetry = v as boolean
+            else if (k === 'retry_max') result.retryMax = v as number
+            else if (k === 'retry_backoff_sec') result.retryBackoff = v as number
+            else if (k === 'health_fix_auto') result.healthFixAuto = v as boolean
+            else if (k === 'notify_on_complete') result.notifyOnComplete = v as boolean
+          } else if (section === 'notification') {
+            if (k === 'notify_red') result.notifyRed = v as boolean
+            else if (k === 'notify_daily_summary') result.notifyDailySummary = v as boolean
+            else if (k === 'notify_weekly_report') result.notifyWeeklyReport = v as boolean
+            else if (k === 'channels') result.notifyChannels = v as string[]
+            else if (k === 'email_recipient') result.emailRecipient = v as string
+            else if (k === 'webhook_url') result.webhookUrl = v as string
+          } else if (section === 'backup') {
+            if (k === 'retention_days') result.backupRetentionDays = v as number
+            else if (k === 'auto_backup') result.autoBackup = v as boolean
+          } else if (section === 'advanced') {
+            if (k === 'log_level') {
+              if (v === 'DEBUG' || v === 'INFO' || v === 'WARNING' || v === 'ERROR') result.logLevel = v
+            }
+            else if (k === 'parallel_workers') result.parallelWorkers = v as number
+            else if (k === 'query_timeout_sec') result.queryTimeoutSec = v as number
+            else if (k === 'cache_enabled') result.cacheEnabled = v as boolean
+            else if (k === 'experimental_features') result.experimentalFeatures = v as boolean
+          }
+        }
+      }
+      return Object.keys(result).length > 0 ? result : null
+    } catch {
+      return null
+    }
+  }
+
+  const handleImportYaml = () => {
+    const parsed = parseSimpleYaml(importText)
+    if (!parsed) {
+      toast.error('YAML 解析失败', { description: '请检查格式是否正确' })
+      return
+    }
+    setState(prev => ({ ...prev, ...parsed }))
+    setShowImportDialog(false)
+    setImportText('')
+    const keys = Object.keys(parsed)
+    toast.success(`已导入 ${keys.length} 个配置段`, {
+      description: keys.map(k => k).join(' · ') + ' · 记得保存',
+    })
+  }
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = String(reader.result || '')
+      setImportText(text)
+      setShowImportDialog(true)
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
   // 统计变更数
   const dirtyCount = useMemo(() => {
     let count = 0
@@ -169,6 +376,14 @@ export function SettingsView() {
               </div>
             </div>
             <div className="ml-auto flex items-center gap-1.5">
+              <input ref={fileInputRef} type="file" accept=".yaml,.yml,.txt" onChange={handleFileUpload} className="hidden" />
+              <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowImportDialog(true)} title="从文本导入 YAML">
+                <FileUp className="h-3 w-3 mr-1" />导入
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleExportYaml} title="导出为 YAML">
+                <FileDown className="h-3 w-3 mr-1" />导出
+              </Button>
+              <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
               <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleResetDefault} disabled={JSON.stringify(state) === JSON.stringify(DEFAULT_STATE)}>
                 <RotateCcw className="h-3 w-3 mr-1" />恢复默认
               </Button>
@@ -561,6 +776,85 @@ export function SettingsView() {
         <Settings className="h-4 w-4" />
         本页所有配置对应 <code className="font-mono text-sky-600">config/registry/</code> 下的 YAML 文件，UI 改动会写回 YAML（本原型为只读演示）。
       </div>
+
+      {/* YAML 导出预览对话框 */}
+      {showYamlDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setShowYamlDialog(false)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 border-b flex items-center justify-between bg-gradient-to-r from-sky-50 to-emerald-50 dark:from-sky-950/30 dark:to-emerald-950/30 rounded-t-xl">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-md bg-gradient-to-br from-sky-500 to-emerald-500 text-white">
+                  <FileCode2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">YAML 配置预览</div>
+                  <div className="text-[10px] text-zinc-500">settings.yaml · {yamlPreview.split('\n').length} 行</div>
+                </div>
+              </div>
+              <button onClick={() => setShowYamlDialog(false)} className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500">
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto p-4">
+              <pre className="text-xs font-mono leading-relaxed text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap"><code>{yamlPreview}</code></pre>
+            </div>
+            <div className="px-5 py-3 border-t flex items-center justify-end gap-2 bg-zinc-50/50 dark:bg-zinc-950/30 rounded-b-xl">
+              <Button size="sm" variant="outline" onClick={handleCopyYaml}>
+                <ClipboardCopy className="h-3 w-3 mr-1" />复制
+              </Button>
+              <Button size="sm" className="bg-sky-600 hover:bg-sky-700" onClick={handleDownloadYaml}>
+                <FileDown className="h-3 w-3 mr-1" />下载 .yaml
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* YAML 导入对话框 */}
+      {showImportDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setShowImportDialog(false)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 border-b flex items-center justify-between bg-gradient-to-r from-fuchsia-50 to-amber-50 dark:from-fuchsia-950/30 dark:to-amber-950/30 rounded-t-xl">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-md bg-gradient-to-br from-fuchsia-500 to-amber-500 text-white">
+                  <FileUp className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">导入 YAML 配置</div>
+                  <div className="text-[10px] text-zinc-500">粘贴 YAML 文本或上传文件 · 导入后需手动保存</div>
+                </div>
+              </div>
+              <button onClick={() => setShowImportDialog(false)} className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500">
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 p-4 flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  <FileUp className="h-3 w-3 mr-1" />选择文件...
+                </Button>
+                <span className="text-[10px] text-zinc-400">支持 .yaml / .yml / .txt</span>
+              </div>
+              <textarea
+                value={importText}
+                onChange={e => setImportText(e.target.value)}
+                placeholder={'# 粘贴 YAML 内容，例如：\n\ngeneral:\n  db_path: "K:\\DB数据库_v2\\db\\profit_radar.duckdb"\n  backup_dir: "K:\\DB数据库_v2\\archive"\n\nschedule:\n  daily_time: "17:00"\n  auto_retry: true\n  retry_max: 3\n\n# ... 完整格式参考「导出」生成的 YAML'}
+                className="flex-1 min-h-[200px] w-full p-3 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 font-mono text-xs resize-none focus:outline-none focus:ring-2 focus:ring-fuchsia-300"
+                spellCheck={false}
+              />
+            </div>
+            <div className="px-5 py-3 border-t flex items-center justify-between gap-2 bg-zinc-50/50 dark:bg-zinc-950/30 rounded-b-xl">
+              <span className="text-[10px] text-zinc-400">导入会合并到当前配置（浅合并），未出现的字段保留原值</span>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => { setShowImportDialog(false); setImportText('') }}>取消</Button>
+                <Button size="sm" className="bg-fuchsia-600 hover:bg-fuchsia-700" onClick={handleImportYaml} disabled={!importText.trim()}>
+                  <FileUp className="h-3 w-3 mr-1" />解析并导入
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 

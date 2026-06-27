@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   CommandDialog,
   CommandEmpty,
@@ -15,7 +15,17 @@ import {
   LayoutDashboard, Library, HeartPulse, Workflow, GitBranch,
   CheckCheck, ScrollText, BookOpen, Settings, Database, Terminal,
   Play, Search, AlertTriangle, FileCode2, Zap, CornerDownLeft,
+  Clock, Trash2,
 } from 'lucide-react'
+
+const RECENT_KEY = 'dataops:recent-searches'
+const MAX_RECENT = 6
+
+interface RecentEntry {
+  query: string
+  ts: number
+  actionLabel: string
+}
 
 export interface CommandPaletteAction {
   key: string
@@ -37,6 +47,18 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ open, onOpenChange, onNavigate, onRunTable, onRunDaily }: CommandPaletteProps) {
+  const [search, setSearch] = useState('')
+  const [recents, setRecents] = useState<RecentEntry[]>([])
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // 加载最近搜索
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_KEY)
+      if (raw) setRecents(JSON.parse(raw))
+    } catch {}
+  }, [])
+
   // 全局 Cmd/Ctrl+K 快捷键
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -51,6 +73,27 @@ export function CommandPalette({ open, onOpenChange, onNavigate, onRunTable, onR
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [open, onOpenChange])
+
+  // 打开时清空搜索
+  useEffect(() => {
+    if (open) {
+      setSearch('')
+      setTimeout(() => inputRef.current?.focus(), 50)
+    }
+  }, [open])
+
+  const recordRecent = (query: string, actionLabel: string) => {
+    if (!query.trim()) return
+    const entry: RecentEntry = { query: query.trim(), ts: Date.now(), actionLabel }
+    const next = [entry, ...recents.filter(r => r.query !== entry.query)].slice(0, MAX_RECENT)
+    setRecents(next)
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)) } catch {}
+  }
+
+  const clearRecents = () => {
+    setRecents([])
+    try { localStorage.removeItem(RECENT_KEY) } catch {}
+  }
 
   const navItems: CommandPaletteAction[] = [
     { key: 'nav-dash', label: 'Dashboard', desc: '全局健康度 · 今日执行 · 告警总览', icon: <LayoutDashboard className="h-4 w-4" />, group: 'navigation', run: () => onNavigate('dashboard'), keywords: '仪表盘 首页 home' },
@@ -111,14 +154,43 @@ export function CommandPalette({ open, onOpenChange, onNavigate, onRunTable, onR
   }))
 
   const handleSelect = (action: CommandPaletteAction) => {
+    if (search.trim()) recordRecent(search, action.label)
     action.run()
+  }
+
+  const formatTs = (ts: number) => {
+    const diff = Date.now() - ts
+    if (diff < 60000) return '刚刚'
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
+    return `${Math.floor(diff / 86400000)}天前`
   }
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} className="max-w-2xl">
-      <CommandInput placeholder="输入视图名、表名、脚本、告警... (Cmd+K 唤起)" />
+      <CommandInput ref={inputRef} placeholder="输入视图名、表名、脚本、告警... (Cmd+K 唤起)" value={search} onValueChange={setSearch} />
       <CommandList className="max-h-[480px]">
         <CommandEmpty>无匹配项</CommandEmpty>
+
+        {/* 最近搜索（仅空搜索时显示）*/}
+        {!search && recents.length > 0 && (
+          <CommandGroup heading="最近搜索">
+            {recents.map((r, i) => (
+              <CommandItem key={`recent-${i}`} value={`${r.query} ${r.actionLabel}`} onSelect={() => { setSearch(r.query); }}>
+                <Clock className="h-4 w-4 text-zinc-400" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{r.query}</div>
+                  <div className="text-[11px] text-zinc-500 truncate">→ {r.actionLabel} · {formatTs(r.ts)}</div>
+                </div>
+              </CommandItem>
+            ))}
+            <CommandItem value="清除最近搜索历史 clear" onSelect={clearRecents} className="text-rose-500">
+              <Trash2 className="h-4 w-4" />
+              <span className="text-sm">清除搜索历史</span>
+            </CommandItem>
+          </CommandGroup>
+        )}
+        <CommandSeparator />
 
         <CommandGroup heading="导航">
           {navItems.map(a => (

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Play, Save, History, Database, Clock, CheckCircle2, Table2, Terminal, BookOpen, ChevronRight, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight as ChevR, X, FileDown, Plus } from 'lucide-react'
+import { Play, Save, History, Database, Clock, CheckCircle2, Table2, Terminal, BookOpen, ChevronRight, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight as ChevR, X, FileDown, Plus, GitCompare, ArrowRight, Equal, Split, AlertTriangle } from 'lucide-react'
 
 interface SavedQuery { id: string; name: string; sql: string; desc?: string }
 interface QueryHistory { id: string; sql: string; ts: string; rows: number; durationMs: number; ok: boolean }
@@ -191,6 +191,9 @@ export function SqlPlaygroundView() {
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [compareLeftId, setCompareLeftId] = useState<string>('')
+  const [compareRightId, setCompareRightId] = useState<string>('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const tabCounter = useRef(1)
 
@@ -334,6 +337,70 @@ export function SqlPlaygroundView() {
     URL.revokeObjectURL(url)
   }
 
+  // === 跨 Tab 结果对比 ===
+  const openCompare = () => {
+    // 默认选前两个有结果的 tab
+    const withResult = tabs.filter(t => t.result)
+    setCompareLeftId(withResult[0]?.id || tabs[0]?.id || '')
+    setCompareRightId(withResult[1]?.id || tabs[1]?.id || '')
+    setCompareOpen(true)
+  }
+
+  const leftTab = tabs.find(t => t.id === compareLeftId)
+  const rightTab = tabs.find(t => t.id === compareRightId)
+
+  // 对比分析：取两个结果的交集列，按第一列做 key join
+  const compareAnalysis = useMemo(() => {
+    if (!leftTab?.result || !rightTab?.result) return null
+    const lCols = leftTab.result.columns
+    const rCols = rightTab.result.columns
+    const commonCols = lCols.filter(c => rCols.includes(c))
+    // 用第一列做 key
+    const keyCol = commonCols[0] || lCols[0]
+    const lKeyIdx = lCols.indexOf(keyCol)
+    const rKeyIdx = rCols.indexOf(keyCol)
+    // 构建 right 的 key -> row 映射
+    const rMap = new Map<string, (string | number)[]>()
+    rightTab.result.rows.forEach(r => rMap.set(String(r[rKeyIdx]), r))
+    // 对比列：除 key 外的公共列
+    const compareCols = commonCols.filter(c => c !== keyCol)
+    // 行类型：left_only / right_only / match / diff
+    type RowKind = 'match' | 'diff' | 'left_only' | 'right_only'
+    interface CompareRow { key: string; kind: RowKind; left?: (string | number)[]; right?: (string | number)[]; diffs: Record<string, 'same' | 'diff' | 'left_only' | 'right_only'> }
+    const rows: CompareRow[] = []
+    const seenKeys = new Set<string>()
+    leftTab.result.rows.forEach(lrow => {
+      const k = String(lrow[lKeyIdx])
+      seenKeys.add(k)
+      const rrow = rMap.get(k)
+      if (!rrow) {
+        rows.push({ key: k, kind: 'left_only', left: lrow, diffs: {} })
+        return
+      }
+      const diffs: Record<string, 'same' | 'diff' | 'left_only' | 'right_only'> = {}
+      let hasDiff = false
+      compareCols.forEach(c => {
+        const lv = lrow[lCols.indexOf(c)]
+        const rv = rrow[rCols.indexOf(c)]
+        if (lv === rv) diffs[c] = 'same'
+        else { diffs[c] = 'diff'; hasDiff = true }
+      })
+      rows.push({ key: k, kind: hasDiff ? 'diff' : 'match', left: lrow, right: rrow, diffs })
+    })
+    rightTab.result.rows.forEach(rrow => {
+      const k = String(rrow[rKeyIdx])
+      if (!seenKeys.has(k)) rows.push({ key: k, kind: 'right_only', right: rrow, diffs: {} })
+    })
+    const stats = {
+      total: rows.length,
+      match: rows.filter(r => r.kind === 'match').length,
+      diff: rows.filter(r => r.kind === 'diff').length,
+      leftOnly: rows.filter(r => r.kind === 'left_only').length,
+      rightOnly: rows.filter(r => r.kind === 'right_only').length,
+    }
+    return { keyCol, compareCols, lCols, rCols, rows, stats }
+  }, [leftTab, rightTab])
+
   // 简化变量名用于下方 JSX
   const sql = activeTab.sql
   const result = activeTab.result
@@ -461,6 +528,7 @@ export function SqlPlaygroundView() {
               <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSql('')} title="清空">
                 <Trash2 className="h-3 w-3" />
               </Button>
+              <div className="toolbar-divider" />
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowSaveDialog(true)}>
                 <Save className="h-3 w-3 mr-1" />保存
               </Button>
@@ -532,6 +600,16 @@ export function SqlPlaygroundView() {
                   </Button>
                 </>
               )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs px-2 border-fuchsia-300 text-fuchsia-600 hover:bg-fuchsia-50 dark:border-fuchsia-700 dark:text-fuchsia-400"
+                onClick={openCompare}
+                title="跨 Tab 结果对比"
+                disabled={tabs.filter(t => t.result).length < 2}
+              >
+                <GitCompare className="h-3 w-3 mr-1" />对比
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-0 flex-1 min-h-0">
@@ -694,6 +772,161 @@ export function SqlPlaygroundView() {
             <div className="flex justify-end gap-2">
               <Button size="sm" variant="outline" onClick={() => setShowSaveDialog(false)}>取消</Button>
               <Button size="sm" onClick={handleSave} disabled={!saveName.trim()}>保存</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 跨 Tab 结果对比面板 */}
+      {compareOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setCompareOpen(false)}>
+          <div
+            className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col border border-zinc-200 dark:border-zinc-800"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 头部 */}
+            <div className="px-5 py-3 border-b flex items-center justify-between bg-gradient-to-r from-fuchsia-50 to-sky-50 dark:from-fuchsia-950/30 dark:to-sky-950/30 rounded-t-xl">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-md bg-gradient-to-br from-fuchsia-500 to-sky-500 text-white">
+                  <GitCompare className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">跨 Tab 结果对比</div>
+                  <div className="text-[10px] text-zinc-500">按首列做 key join，高亮差异单元格</div>
+                </div>
+              </div>
+              <button onClick={() => setCompareOpen(false)} className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Tab 选择器 */}
+            <div className="px-5 py-3 border-b bg-zinc-50/50 dark:bg-zinc-950/30 flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-sky-600 dark:text-sky-400">左：</span>
+                <select
+                  value={compareLeftId}
+                  onChange={e => setCompareLeftId(e.target.value)}
+                  className="text-xs border rounded px-2 py-1 bg-white dark:bg-zinc-800 font-mono"
+                >
+                  {tabs.map(t => <option key={t.id} value={t.id}>{t.name}{t.result ? ` (${t.result.rowsAffected}行)` : ' (无结果)'}</option>)}
+                </select>
+              </div>
+              <ArrowRight className="h-4 w-4 text-zinc-400" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-fuchsia-600 dark:text-fuchsia-400">右：</span>
+                <select
+                  value={compareRightId}
+                  onChange={e => setCompareRightId(e.target.value)}
+                  className="text-xs border rounded px-2 py-1 bg-white dark:bg-zinc-800 font-mono"
+                >
+                  {tabs.map(t => <option key={t.id} value={t.id}>{t.name}{t.result ? ` (${t.result.rowsAffected}行)` : ' (无结果)'}</option>)}
+                </select>
+              </div>
+              {compareAnalysis && (
+                <div className="ml-auto flex items-center gap-2 text-[11px]">
+                  <Badge variant="outline" className="text-emerald-600 border-emerald-300 py-0.5"><Equal className="h-3 w-3 mr-0.5" />{compareAnalysis.stats.match} 相同</Badge>
+                  <Badge variant="outline" className="text-rose-600 border-rose-300 py-0.5"><Split className="h-3 w-3 mr-0.5" />{compareAnalysis.stats.diff} 差异</Badge>
+                  <Badge variant="outline" className="text-sky-600 border-sky-300 py-0.5">←{compareAnalysis.stats.leftOnly} 左独有</Badge>
+                  <Badge variant="outline" className="text-fuchsia-600 border-fuchsia-300 py-0.5">{compareAnalysis.stats.rightOnly}→ 右独有</Badge>
+                </div>
+              )}
+            </div>
+
+            {/* 对比内容 */}
+            <div className="flex-1 min-h-0 overflow-auto p-4">
+              {!leftTab?.result || !rightTab?.result ? (
+                <div className="h-full flex flex-col items-center justify-center text-zinc-400 py-16 gap-2">
+                  <AlertTriangle className="h-8 w-8 opacity-40" />
+                  <div className="text-sm">请先在两个 Tab 中执行查询获取结果</div>
+                  <div className="text-xs">当前：左 {leftTab?.name ?? '—'} {leftTab?.result ? '✓' : '✗'} · 右 {rightTab?.name ?? '—'} {rightTab?.result ? '✓' : '✗'}</div>
+                </div>
+              ) : !compareAnalysis || compareAnalysis.rows.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-zinc-400 py-16">
+                  <CheckCircle2 className="h-8 w-8 text-emerald-400 mb-2" />
+                  <div className="text-sm">无数据可对比</div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* 对比摘要条 */}
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border text-xs">
+                    <span className="text-zinc-500">Key 列：</span>
+                    <Badge variant="outline" className="font-mono text-[10px] py-0">{compareAnalysis.keyCol}</Badge>
+                    <span className="text-zinc-400 mx-1">·</span>
+                    <span className="text-zinc-500">对比列：</span>
+                    <div className="flex flex-wrap gap-1">
+                      {compareAnalysis.compareCols.length > 0 ? compareAnalysis.compareCols.map(c => (
+                        <Badge key={c} variant="outline" className="font-mono text-[10px] py-0">{c}</Badge>
+                      )) : <span className="text-zinc-400 italic">无公共列</span>}
+                    </div>
+                    <span className="ml-auto text-zinc-400">{compareAnalysis.stats.total} 行</span>
+                  </div>
+
+                  {/* 对比表 */}
+                  <div className="border rounded-lg overflow-hidden">
+                    {/* 表头 */}
+                    <div className="grid bg-zinc-100 dark:bg-zinc-800 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 border-b" style={{ gridTemplateColumns: `140px repeat(${compareAnalysis.compareCols.length * 2 + 1}, minmax(80px, 1fr))` }}>
+                      <div className="px-2 py-2 border-r sticky left-0 bg-zinc-100 dark:bg-zinc-800 z-10">{compareAnalysis.keyCol}</div>
+                      {compareAnalysis.compareCols.length === 0 && <div className="px-2 py-2 text-center text-zinc-400">无公共对比列</div>}
+                      {compareAnalysis.compareCols.map(c => (
+                        <div key={c + '-lh'} className="px-2 py-2 border-r text-sky-700 dark:text-sky-300 font-mono" colSpan={1}>{c}</div>
+                      ))}
+                      {compareAnalysis.compareCols.map(c => (
+                        <div key={c + '-rh'} className="px-2 py-2 border-r text-fuchsia-700 dark:text-fuchsia-300 font-mono" colSpan={1}>{c}</div>
+                      ))}
+                      <div className="px-2 py-2 text-center">状态</div>
+                    </div>
+                    {/* 行 */}
+                    {compareAnalysis.rows.map((row, i) => {
+                      const kindColor = {
+                        match: 'bg-emerald-50/40 dark:bg-emerald-950/20',
+                        diff: 'bg-rose-50/40 dark:bg-rose-950/20',
+                        left_only: 'bg-sky-50/40 dark:bg-sky-950/20',
+                        right_only: 'bg-fuchsia-50/40 dark:bg-fuchsia-950/20',
+                      }[row.kind]
+                      const kindBadge = {
+                        match: <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-[9px] py-0"><Equal className="h-2.5 w-2.5 mr-0.5" />同</Badge>,
+                        diff: <Badge variant="outline" className="text-rose-600 border-rose-300 text-[9px] py-0"><Split className="h-2.5 w-2.5 mr-0.5" />异</Badge>,
+                        left_only: <Badge variant="outline" className="text-sky-600 border-sky-300 text-[9px] py-0">←</Badge>,
+                        right_only: <Badge variant="outline" className="text-fuchsia-600 border-fuchsia-300 text-[9px] py-0">→</Badge>,
+                      }[row.kind]
+                      return (
+                        <div key={i} className={`grid text-xs border-b last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900/60 ${kindColor}`} style={{ gridTemplateColumns: `140px repeat(${compareAnalysis.compareCols.length * 2 + 1}, minmax(80px, 1fr))` }}>
+                          <div className="px-2 py-1.5 border-r sticky left-0 bg-inherit font-mono font-medium truncate" title={row.key}>{row.key}</div>
+                          {compareAnalysis.compareCols.map(c => {
+                            const lv = row.left ? row.left[compareAnalysis.lCols.indexOf(c)] : ''
+                            const isDiff = row.diffs[c] === 'diff'
+                            return (
+                              <div key={c + '-l'} className={`px-2 py-1.5 border-r font-mono truncate ${isDiff ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300' : typeof lv === 'number' ? 'text-sky-600 dark:text-sky-400 text-right' : 'text-zinc-600 dark:text-zinc-400'}`} title={String(lv)}>
+                                {String(lv)}
+                              </div>
+                            )
+                          })}
+                          {compareAnalysis.compareCols.map(c => {
+                            const rv = row.right ? row.right[compareAnalysis.rCols.indexOf(c)] : ''
+                            const isDiff = row.diffs[c] === 'diff'
+                            return (
+                              <div key={c + '-r'} className={`px-2 py-1.5 border-r font-mono truncate ${isDiff ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300' : typeof rv === 'number' ? 'text-sky-600 dark:text-sky-400 text-right' : 'text-zinc-600 dark:text-zinc-400'}`} title={String(rv)}>
+                                {String(rv)}
+                              </div>
+                            )
+                          })}
+                          <div className="px-2 py-1.5 flex items-center justify-center">{kindBadge}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 底部图例 */}
+            <div className="px-5 py-2.5 border-t bg-zinc-50/50 dark:bg-zinc-950/30 flex items-center gap-4 text-[10px] text-zinc-500 rounded-b-xl">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-300" />相同</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-rose-100 dark:bg-rose-950/40 border border-rose-300" />差异</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-sky-100 dark:bg-sky-950/40 border border-sky-300" />左独有</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-fuchsia-100 dark:bg-fuchsia-950/40 border border-fuchsia-300" />右独有</span>
+              <span className="ml-auto">提示：先在多个 Tab 执行查询，对比按钮才会启用</span>
             </div>
           </div>
         </div>
