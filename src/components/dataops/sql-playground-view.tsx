@@ -7,10 +7,24 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Play, Save, History, Database, Clock, CheckCircle2, Table2, Terminal, BookOpen, ChevronRight, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight as ChevR, X, FileDown } from 'lucide-react'
+import { Play, Save, History, Database, Clock, CheckCircle2, Table2, Terminal, BookOpen, ChevronRight, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight as ChevR, X, FileDown, Plus } from 'lucide-react'
 
 interface SavedQuery { id: string; name: string; sql: string; desc?: string }
 interface QueryHistory { id: string; sql: string; ts: string; rows: number; durationMs: number; ok: boolean }
+interface QueryResult { columns: string[]; rows: (string | number)[][]; rowsAffected: number }
+
+// 多 Tab 查询状态
+interface QueryTab {
+  id: string
+  name: string
+  sql: string
+  result: QueryResult | null
+  running: boolean
+  durationMs: number | null
+  sortCol: number | null
+  sortDir: 'asc' | 'desc' | null
+  page: number
+}
 
 const SAMPLE_QUERIES: SavedQuery[] = [
   { id: 'q1', name: '今日涨停股', desc: '涨幅 ≥ 9.5% 的股票', sql: "SELECT code, close, volume\nFROM stock_daily_kline\nWHERE date = '2026-06-25'\n  AND close / LAG(close) OVER (PARTITION BY code ORDER BY date) >= 1.095\nLIMIT 20" },
@@ -155,13 +169,16 @@ function highlightSql(sql: string): React.ReactNode {
   })
 }
 
-type SortDir = 'asc' | 'desc' | null
+const PAGE_SIZE = 8
 
 export function SqlPlaygroundView() {
-  const [sql, setSql] = useState(SAMPLE_QUERIES[0].sql)
-  const [result, setResult] = useState<{ columns: string[]; rows: (string | number)[][]; rowsAffected: number } | null>(null)
-  const [running, setRunning] = useState(false)
-  const [durationMs, setDurationMs] = useState<number | null>(null)
+  // 多 Tab 查询
+  const [tabs, setTabs] = useState<QueryTab[]>([
+    { id: 't1', name: '查询 1', sql: SAMPLE_QUERIES[0].sql, result: null, running: false, durationMs: null, sortCol: null, sortDir: null, page: 0 },
+  ])
+  const [activeTabId, setActiveTabId] = useState<string>('t1')
+  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0]
+
   const [history, setHistory] = useState<QueryHistory[]>([
     { id: 'h1', sql: 'SELECT COUNT(*) FROM stock_daily_kline', ts: '2026-06-25 19:32:01', rows: 1, durationMs: 45, ok: true },
     { id: 'h2', sql: 'SELECT * FROM dim_security_type WHERE type = "ETF"', ts: '2026-06-25 19:30:15', rows: 124, durationMs: 82, ok: true },
@@ -170,36 +187,34 @@ export function SqlPlaygroundView() {
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>(SAMPLE_QUERIES)
   const [selectedTable, setSelectedTable] = useState<string>('stock_daily_kline')
   const [tableSearch, setTableSearch] = useState('')
-  const [sortCol, setSortCol] = useState<number | null>(null)
-  const [sortDir, setSortDir] = useState<SortDir>(null)
-  const [page, setPage] = useState(0)
   const [saveName, setSaveName] = useState('')
   const [showSaveDialog, setShowSaveDialog] = useState(false)
-  const pageSize = 8
+  const [renamingTabId, setRenamingTabId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const tabCounter = useRef(1)
 
   const filteredTables = useMemo(() => {
     if (!tableSearch) return TABLES
     return TABLES.filter(t => t.table.includes(tableSearch.toLowerCase()) || t.cn.includes(tableSearch))
   }, [tableSearch])
 
+  // 更新当前 tab 的辅助函数
+  const updateTab = (id: string, patch: Partial<QueryTab>) => {
+    setTabs(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
+  }
+
   const run = () => {
-    if (!sql.trim()) return
-    setRunning(true)
-    setResult(null)
-    setDurationMs(null)
-    setSortCol(null)
-    setSortDir(null)
-    setPage(0)
+    if (!activeTab.sql.trim()) return
+    const tabId = activeTab.id
+    updateTab(tabId, { running: true, result: null, durationMs: null, sortCol: null, sortDir: null, page: 0 })
     setTimeout(() => {
-      const r = mockExecute(sql)
+      const r = mockExecute(activeTab.sql)
       const ms = Math.floor(Math.random() * 200) + 30
-      setResult(r)
-      setDurationMs(ms)
-      setRunning(false)
+      updateTab(tabId, { result: r, durationMs: ms, running: false })
       setHistory(prev => [{
         id: `h${Date.now()}`,
-        sql: sql.length > 80 ? sql.slice(0, 80) + '...' : sql,
+        sql: activeTab.sql.length > 80 ? activeTab.sql.slice(0, 80) + '...' : activeTab.sql,
         ts: new Date().toLocaleString('zh-CN', { hour12: false }),
         rows: r.rowsAffected,
         durationMs: ms,
@@ -208,59 +223,108 @@ export function SqlPlaygroundView() {
     }, 500 + Math.random() * 400)
   }
 
+  // Tab 操作
+  const addTab = () => {
+    tabCounter.current += 1
+    const newTab: QueryTab = {
+      id: `t${Date.now()}`,
+      name: `查询 ${tabCounter.current}`,
+      sql: '-- 新查询\nSELECT ',
+      result: null, running: false, durationMs: null, sortCol: null, sortDir: null, page: 0,
+    }
+    setTabs(prev => [...prev, newTab])
+    setActiveTabId(newTab.id)
+  }
+
+  const closeTab = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    setTabs(prev => {
+      const idx = prev.findIndex(t => t.id === id)
+      if (prev.length === 1) return prev // 至少保留一个 tab
+      const next = prev.filter(t => t.id !== id)
+      if (activeTabId === id) {
+        const newActive = next[Math.max(0, idx - 1)]
+        setActiveTabId(newActive.id)
+      }
+      return next
+    })
+  }
+
+  const startRenameTab = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const t = tabs.find(x => x.id === id)
+    if (t) {
+      setRenamingTabId(id)
+      setRenameValue(t.name)
+    }
+  }
+
+  const commitRename = () => {
+    if (renamingTabId && renameValue.trim()) {
+      updateTab(renamingTabId, { name: renameValue.trim() })
+    }
+    setRenamingTabId(null)
+    setRenameValue('')
+  }
+
   const insertTable = (tableName: string) => {
-    setSql(prev => prev + (prev && !prev.endsWith('\n') ? '\n' : '') + `${tableName} `)
+    updateTab(activeTab.id, { sql: activeTab.sql + (activeTab.sql && !activeTab.sql.endsWith('\n') ? '\n' : '') + `${tableName} ` })
     textareaRef.current?.focus()
   }
 
   const insertColumn = (col: string) => {
-    setSql(prev => prev + col + ' ')
+    updateTab(activeTab.id, { sql: activeTab.sql + col + ' ' })
     textareaRef.current?.focus()
   }
 
   const toggleSort = (colIdx: number) => {
-    if (sortCol === colIdx) {
-      setSortDir(d => d === 'asc' ? 'desc' : d === 'desc' ? null : 'asc')
-      if (sortDir === 'desc') setSortCol(null)
+    const t = activeTab
+    let newSortCol = t.sortCol
+    let newSortDir = t.sortDir
+    if (t.sortCol === colIdx) {
+      newSortDir = t.sortDir === 'asc' ? 'desc' : t.sortDir === 'desc' ? null : 'asc'
+      if (t.sortDir === 'desc') newSortCol = null
     } else {
-      setSortCol(colIdx)
-      setSortDir('asc')
+      newSortCol = colIdx
+      newSortDir = 'asc'
     }
-    setPage(0)
+    updateTab(t.id, { sortCol: newSortCol, sortDir: newSortDir, page: 0 })
   }
 
   const sortedRows = useMemo(() => {
-    if (!result || sortCol === null || !sortDir) return result?.rows || []
-    const rows = [...result.rows]
+    if (!activeTab.result || activeTab.sortCol === null || !activeTab.sortDir) return activeTab.result?.rows || []
+    const rows = [...activeTab.result.rows]
     rows.sort((a, b) => {
-      const av = a[sortCol]
-      const bv = b[sortCol]
+      const av = a[activeTab.sortCol!]
+      const bv = b[activeTab.sortCol!]
       if (typeof av === 'number' && typeof bv === 'number') {
-        return sortDir === 'asc' ? av - bv : bv - av
+        return activeTab.sortDir === 'asc' ? av - bv : bv - av
       }
-      return sortDir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av))
+      return activeTab.sortDir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av))
     })
     return rows
-  }, [result, sortCol, sortDir])
+  }, [activeTab.result, activeTab.sortCol, activeTab.sortDir])
 
-  const totalPages = result ? Math.max(1, Math.ceil(sortedRows.length / pageSize)) : 0
-  const pagedRows = sortedRows.slice(page * pageSize, (page + 1) * pageSize)
+  const totalPages = activeTab.result ? Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE)) : 0
+  const pagedRows = sortedRows.slice(activeTab.page * PAGE_SIZE, (activeTab.page + 1) * PAGE_SIZE)
 
   const currentTable = TABLES.find(t => t.table === selectedTable)
-
-  // 行号 + 高亮显示
-  const sqlLines = sql.split('\n')
+  const sqlLines = activeTab.sql.split('\n')
 
   const handleSave = () => {
     if (!saveName.trim()) return
-    setSavedQueries(prev => [...prev, { id: `q${Date.now()}`, name: saveName, sql, desc: '用户保存' }])
+    setSavedQueries(prev => [...prev, { id: `q${Date.now()}`, name: saveName, sql: activeTab.sql, desc: '用户保存' }])
     setSaveName('')
     setShowSaveDialog(false)
   }
 
+  const loadQuery = (sql: string) => {
+    updateTab(activeTab.id, { sql })
+  }
+
   const exportCsv = () => {
-    if (!result) return
-    const csv = [result.columns.join(','), ...result.rows.map(r => r.join(','))].join('\n')
+    if (!activeTab.result) return
+    const csv = [activeTab.result.columns.join(','), ...activeTab.result.rows.map(r => r.join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -269,6 +333,17 @@ export function SqlPlaygroundView() {
     a.click()
     URL.revokeObjectURL(url)
   }
+
+  // 简化变量名用于下方 JSX
+  const sql = activeTab.sql
+  const result = activeTab.result
+  const running = activeTab.running
+  const durationMs = activeTab.durationMs
+  const sortCol = activeTab.sortCol
+  const sortDir = activeTab.sortDir
+  const page = activeTab.page
+  const setPage = (p: number) => updateTab(activeTab.id, { page: p })
+  const setSql = (s: string) => updateTab(activeTab.id, { sql: s })
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr_280px] gap-4 h-[calc(100vh-180px)]">
@@ -312,10 +387,76 @@ export function SqlPlaygroundView() {
 
       {/* 中：编辑器 + 结果 */}
       <div className="flex flex-col gap-3 min-h-0">
+        {/* 多 Tab 栏 */}
+        <div className="flex items-center gap-0.5 overflow-x-auto bg-zinc-100 dark:bg-zinc-800/60 rounded-t-lg p-1 pb-0">
+          {tabs.map(t => {
+            const isActive = t.id === activeTabId
+            const isRenaming = renamingTabId === t.id
+            return (
+              <div
+                key={t.id}
+                onClick={() => setActiveTabId(t.id)}
+                className={`group flex items-center gap-1 px-3 py-1.5 rounded-t-md text-xs cursor-pointer transition-colors flex-shrink-0 ${
+                  isActive
+                    ? 'bg-background text-zinc-800 dark:text-zinc-200 border-t-2 border-sky-500 -mb-px'
+                    : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-background/50'
+                }`}
+              >
+                {t.running && <div className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />}
+                {t.result && !t.running && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                {isRenaming ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { setRenamingTabId(null); setRenameValue('') } }}
+                    onBlur={commitRename}
+                    className="bg-transparent outline-none border-b border-sky-500 text-xs w-24"
+                  />
+                ) : (
+                  <span
+                    onDoubleClick={e => startRenameTab(t.id, e)}
+                    className="font-medium truncate max-w-[120px]"
+                    title={t.name + '（双击重命名）'}
+                  >
+                    {t.name}
+                  </span>
+                )}
+                {tabs.length > 1 && (
+                  <button
+                    onClick={e => closeTab(t.id, e)}
+                    className="ml-1 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="关闭 Tab"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+          <button
+            onClick={addTab}
+            className="ml-1 p-1.5 rounded text-zinc-500 hover:text-sky-600 hover:bg-background transition-colors flex-shrink-0"
+            title="新建查询 Tab (Ctrl+T)"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+          <div className="ml-auto px-2 text-[10px] text-zinc-400 flex items-center gap-2">
+            <span>{tabs.length} 个查询</span>
+            <span>·</span>
+            <span className="hidden sm:inline">Ctrl+T 新建 / 双击重命名</span>
+          </div>
+        </div>
+
         {/* 编辑器 */}
-        <Card className="flex flex-col flex-shrink-0">
+        <Card className="flex flex-col flex-shrink-0 -mt-px rounded-tl-none">
           <CardHeader className="pb-2 px-3 py-2.5 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs flex items-center gap-1.5 text-zinc-500"><Terminal className="h-3.5 w-3.5" /> SQL 编辑器</CardTitle>
+            <CardTitle className="text-xs flex items-center gap-1.5 text-zinc-500">
+              <Terminal className="h-3.5 w-3.5" /> SQL 编辑器
+              <span className="text-zinc-400 ml-1">·</span>
+              <span className="font-mono text-zinc-600 dark:text-zinc-300">{activeTab.name}</span>
+            </CardTitle>
             <div className="flex items-center gap-1">
               <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSql('')} title="清空">
                 <Trash2 className="h-3 w-3" />
@@ -346,7 +487,11 @@ export function SqlPlaygroundView() {
                 ref={textareaRef}
                 value={sql}
                 onChange={e => setSql(e.target.value)}
-                onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run() } }}
+                onKeyDown={e => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run() }
+                  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 't') { e.preventDefault(); addTab() }
+                  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') { e.preventDefault(); closeTab(activeTabId) }
+                }}
                 spellCheck={false}
                 className="absolute left-10 top-0 right-0 bottom-0 px-3 py-2 font-mono text-sm leading-relaxed bg-transparent outline-none resize-none text-transparent caret-zinc-700 dark:caret-zinc-200"
                 style={{ caretColor: 'currentColor' }}
@@ -356,9 +501,9 @@ export function SqlPlaygroundView() {
             <div className="px-3 py-1.5 text-[10px] text-zinc-400 border-t flex items-center gap-3 bg-card">
               <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Ctrl+Enter 执行</span>
               <span>·</span>
-              <span>DuckDB SQL 方言</span>
+              <span>Ctrl+T 新建 Tab</span>
               <span>·</span>
-              <span>只读模式</span>
+              <span>Ctrl+W 关闭 Tab</span>
               <span className="ml-auto">{sql.length} 字符 · {sqlLines.length} 行</span>
             </div>
           </CardContent>
@@ -369,6 +514,8 @@ export function SqlPlaygroundView() {
           <CardHeader className="pb-2 px-3 py-2.5 flex flex-row items-center justify-between">
             <CardTitle className="text-xs flex items-center gap-1.5 text-zinc-500">
               <Table2 className="h-3.5 w-3.5" /> 结果
+              <span className="text-zinc-400">·</span>
+              <span className="font-mono text-zinc-600 dark:text-zinc-300">{activeTab.name}</span>
               {result && sortCol !== null && (
                 <Badge variant="outline" className="text-[10px] py-0 px-1.5 ml-1">排序: {result.columns[sortCol]} {sortDir}</Badge>
               )}
@@ -431,14 +578,14 @@ export function SqlPlaygroundView() {
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between px-3 py-2 border-t text-xs">
                       <span className="text-zinc-500">
-                        第 {page * pageSize + 1}-{Math.min((page + 1) * pageSize, sortedRows.length)} / {sortedRows.length} 行
+                        第 {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, sortedRows.length)} / {sortedRows.length} 行
                       </span>
                       <div className="flex items-center gap-1">
-                        <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
+                        <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>
                           <ChevronLeft className="h-3 w-3" />
                         </Button>
                         <span className="text-zinc-500 px-2 font-mono">{page + 1} / {totalPages}</span>
-                        <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
+                        <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}>
                           <ChevR className="h-3 w-3" />
                         </Button>
                       </div>
@@ -467,7 +614,7 @@ export function SqlPlaygroundView() {
               <ScrollArea className="h-[calc(100vh-260px)]">
                 <div className="space-y-1">
                   {savedQueries.map(q => (
-                    <div key={q.id} className="group p-2 rounded border border-zinc-200 dark:border-zinc-700 hover:border-sky-300 dark:hover:border-sky-700 cursor-pointer" onClick={() => setSql(q.sql)}>
+                    <div key={q.id} className="group p-2 rounded border border-zinc-200 dark:border-zinc-700 hover:border-sky-300 dark:hover:border-sky-700 cursor-pointer" onClick={() => loadQuery(q.sql)}>
                       <div className="flex items-center gap-1.5">
                         <ChevronRight className="h-3 w-3 text-zinc-400" />
                         <span className="text-xs font-medium flex-1">{q.name}</span>
@@ -483,7 +630,7 @@ export function SqlPlaygroundView() {
               <ScrollArea className="h-[calc(100vh-260px)]">
                 <div className="space-y-1">
                   {history.map(h => (
-                    <div key={h.id} className={`p-2 rounded border text-xs cursor-pointer hover:border-sky-300 ${h.ok ? 'border-zinc-200 dark:border-zinc-700' : 'border-rose-200 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20'}`} onClick={() => setSql(h.sql)}>
+                    <div key={h.id} className={`p-2 rounded border text-xs cursor-pointer hover:border-sky-300 ${h.ok ? 'border-zinc-200 dark:border-zinc-700' : 'border-rose-200 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20'}`} onClick={() => loadQuery(h.sql)}>
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <History className="h-3 w-3 text-zinc-400" />
                         <span className="text-[10px] text-zinc-400 font-mono">{h.ts.slice(5)}</span>

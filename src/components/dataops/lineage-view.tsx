@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { GitBranch, ArrowDown, ArrowUp, Box, Search, Maximize2, ZoomIn, ZoomOut, Layers, Activity, Database, Network } from 'lucide-react'
+import { GitBranch, ArrowDown, ArrowUp, Box, Search, Maximize2, ZoomIn, ZoomOut, Layers, Activity, Database, Network, Map as MapIcon, X } from 'lucide-react'
 import { formatRows, healthColorClass, typeBadgeClass } from '@/lib/dataops/styles'
 
 interface GraphNode {
@@ -39,7 +39,11 @@ export function LineageView() {
   const [zoom, setZoom] = useState(1)
   const [hovered, setHovered] = useState<string | null>(null)
   const [selectedPath, setSelectedPath] = useState<Set<string>>(new Set())
+  const [nodeOverrides, setNodeOverrides] = useState<Record<string, { x: number; y: number }>>({})
+  const [dragging, setDragging] = useState<string | null>(null)
+  const [showMinimap, setShowMinimap] = useState(true)
   const svgRef = useRef<SVGSVGElement>(null)
+  const dragStartRef = useRef<{ nodeId: string; startMouse: { x: number; y: number }; startNode: { x: number; y: number } } | null>(null)
 
   // 计算上下游 N 层
   const graph = useMemo(() => {
@@ -136,15 +140,68 @@ export function LineageView() {
     }
   }
 
+  // SVG 视图尺寸
+  const viewW = 1700
+  const viewH = 720
+
+  // 获取节点的实际位置（含 override）
+  const getNodePos = (node: GraphNode) => nodeOverrides[node.id] || { x: node.x, y: node.y }
+
+  // 拖拽处理
+  const onNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
+    e.stopPropagation()
+    const node = nodeById.get(nodeId)
+    if (!node) return
+    const svg = svgRef.current
+    if (!svg) return
+    const pt = svg.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return
+    const svgP = pt.matrixTransform(ctm.inverse())
+    const pos = getNodePos(node)
+    dragStartRef.current = {
+      nodeId,
+      startMouse: { x: svgP.x, y: svgP.y },
+      startNode: { x: pos.x, y: pos.y },
+    }
+    setDragging(nodeId)
+  }
+
+  const onSvgMouseMove = (e: React.MouseEvent) => {
+    if (!dragStartRef.current) return
+    const svg = svgRef.current
+    if (!svg) return
+    const pt = svg.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return
+    const svgP = pt.matrixTransform(ctm.inverse())
+    const ds = dragStartRef.current
+    const dx = svgP.x - ds.startMouse.x
+    const dy = svgP.y - ds.startMouse.y
+    setNodeOverrides(prev => ({
+      ...prev,
+      [ds.nodeId]: {
+        x: Math.max(0, Math.min(viewW - 100, ds.startNode.x + dx)),
+        y: Math.max(40, Math.min(viewH - 40, ds.startNode.y + dy)),
+      },
+    }))
+  }
+
+  const onSvgMouseUp = () => {
+    dragStartRef.current = null
+    setDragging(null)
+  }
+
   const resetView = () => {
     setZoom(1)
     setFocus('stock_daily_kline')
     setSelectedPath(new Set())
+    setNodeOverrides({})
   }
-
-  // SVG 视图尺寸
-  const viewW = 1700
-  const viewH = 720
 
   return (
     <div className="space-y-4">
@@ -201,7 +258,7 @@ export function LineageView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-auto bg-zinc-50/50 dark:bg-zinc-950/30" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+            <div className="relative overflow-auto bg-zinc-50/50 dark:bg-zinc-950/30" style={{ maxHeight: 'calc(100vh - 280px)' }}>
               <svg
                 ref={svgRef}
                 viewBox={`0 0 ${viewW} ${viewH}`}
@@ -209,6 +266,9 @@ export function LineageView() {
                 height={viewH * zoom}
                 className="mx-auto"
                 style={{ minWidth: viewW * 0.5 }}
+                onMouseMove={onSvgMouseMove}
+                onMouseUp={onSvgMouseUp}
+                onMouseLeave={onSvgMouseUp}
               >
                 <defs>
                   {/* 箭头标记 */}
@@ -236,13 +296,15 @@ export function LineageView() {
                   const from = nodeById.get(edge.from)
                   const to = nodeById.get(edge.to)
                   if (!from || !to) return null
+                  const fromPos = getNodePos(from)
+                  const toPos = getNodePos(to)
                   const isHL = (isHighlighted(edge.from) && isHighlighted(edge.to)) || hovered === edge.from || hovered === edge.to
                   const isDim = (highlightSet.size > 1 || hovered) && !isHL
                   // 贝塞尔曲线：从 from 底部到 to 顶部
-                  const x1 = from.x + 50
-                  const y1 = from.y + 18
-                  const x2 = to.x + 50
-                  const y2 = to.y - 18
+                  const x1 = fromPos.x + 50
+                  const y1 = fromPos.y + 18
+                  const x2 = toPos.x + 50
+                  const y2 = toPos.y - 18
                   const midY = (y1 + y2) / 2
                   const path = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`
                   return (
@@ -266,24 +328,30 @@ export function LineageView() {
                   const isDim = isDimmed(node.id)
                   const isFocus = focus === node.id
                   const isExt = node.type === 'external'
+                  const isDrag = dragging === node.id
+                  const hasOverride = !!nodeOverrides[node.id]
+                  const pos = getNodePos(node)
                   const fill = isExt ? '#f0f9ff' : node.health === 'green' ? '#f0fdf4' : node.health === 'red' ? '#fef2f2' : node.health === 'yellow' ? '#fffbeb' : '#f4f4f5'
                   const stroke = isExt ? '#7dd3fc' : node.health === 'green' ? '#86efac' : node.health === 'red' ? '#fca5a5' : node.health === 'yellow' ? '#fcd34d' : '#d4d4d8'
-                  const strokeDark = isExt ? '#0c4a6e' : node.health === 'green' ? '#14532d' : node.health === 'red' ? '#7f1d1d' : node.health === 'yellow' ? '#78350f' : '#3f3f46'
                   const labelColor = isExt ? '#0369a1' : node.health === 'green' ? '#166534' : node.health === 'red' ? '#991b1b' : node.health === 'yellow' ? '#854d0e' : '#52525b'
                   return (
                     <g
                       key={node.id}
-                      transform={`translate(${node.x}, ${node.y})`}
+                      transform={`translate(${pos.x}, ${pos.y})`}
                       onClick={() => onNodeClick(node.id)}
+                      onMouseDown={e => onNodeMouseDown(e, node.id)}
                       onMouseEnter={() => setHovered(node.id)}
                       onMouseLeave={() => setHovered(null)}
-                      className="cursor-pointer"
-                      style={{ transition: 'opacity 0.2s' }}
-                      opacity={isDim ? 0.3 : 1}
+                      className={isDrag ? 'cursor-grabbing' : 'cursor-grab'}
+                      style={{ transition: isDrag ? 'none' : 'opacity 0.2s', opacity: isDim ? 0.3 : 1 }}
                     >
                       {/* 焦点光环 */}
                       {isFocus && (
                         <rect x={-4} y={-4} width={108} height={44} rx={8} fill="none" stroke="#d946ef" strokeWidth={2} strokeDasharray="3 3" className="animate-pulse" />
+                      )}
+                      {/* 拖拽指示器 */}
+                      {hasOverride && (
+                        <circle cx={-8} cy={-8} r={3} fill="#f59e0b" title="已移动" />
                       )}
                       <rect
                         x={0}
@@ -295,7 +363,7 @@ export function LineageView() {
                         stroke={isHL ? '#d946ef' : stroke}
                         strokeWidth={isHL ? 2 : 1}
                         strokeDasharray={isExt ? '4 3' : 'none'}
-                        style={{ transition: 'stroke 0.2s, stroke-width 0.2s' }}
+                        style={{ transition: 'stroke 0.2s, stroke-width 0.2s', filter: isDrag ? 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))' : 'none' }}
                       />
                       <text x={50} y={16} textAnchor="middle" className="font-mono" style={{ fontSize: 10, fill: labelColor, fontWeight: isHL ? 600 : 500 }}>
                         {node.label.length > 16 ? node.label.slice(0, 15) + '…' : node.label}
@@ -316,6 +384,64 @@ export function LineageView() {
                   )
                 })}
               </svg>
+
+              {/* Minimap 浮层 */}
+              {showMinimap && (
+                <div className="absolute top-2 right-2 w-44 h-20 bg-white/95 dark:bg-zinc-900/95 border border-zinc-200 dark:border-zinc-800 rounded-md shadow-lg overflow-hidden backdrop-blur-sm">
+                  <div className="px-1.5 py-0.5 text-[9px] text-zinc-500 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800">
+                    <span className="flex items-center gap-0.5"><MapIcon className="h-2.5 w-2.5" /> Minimap</span>
+                    <button onClick={() => setShowMinimap(false)} className="hover:text-zinc-700 dark:hover:text-zinc-300" title="隐藏">
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                  <svg viewBox={`0 0 ${viewW} ${viewH}`} className="w-full" style={{ height: 'calc(100% - 16px)' }} preserveAspectRatio="xMidYMid meet">
+                    {/* 边 */}
+                    {edges.map((edge, i) => {
+                      const from = nodeById.get(edge.from)
+                      const to = nodeById.get(edge.to)
+                      if (!from || !to) return null
+                      const fp = getNodePos(from)
+                      const tp = getNodePos(to)
+                      return <line key={i} x1={fp.x + 50} y1={fp.y} x2={tp.x + 50} y2={tp.y} stroke={edge.type === 'external' ? '#7dd3fc' : '#cbd5e1'} strokeWidth={2} opacity={0.5} />
+                    })}
+                    {/* 节点 */}
+                    {nodes.map(n => {
+                      const p = getNodePos(n)
+                      const isF = focus === n.id
+                      const isExt = n.type === 'external'
+                      const color = isExt ? '#7dd3fc' : n.health === 'green' ? '#10b981' : n.health === 'red' ? '#f43f5e' : n.health === 'yellow' ? '#f59e0b' : '#d4d4d8'
+                      return (
+                        <rect
+                          key={n.id}
+                          x={p.x}
+                          y={p.y}
+                          width={100}
+                          height={36}
+                          rx={4}
+                          fill={color}
+                          opacity={isF ? 1 : 0.6}
+                          stroke={isF ? '#d946ef' : 'none'}
+                          strokeWidth={isF ? 4 : 0}
+                        />
+                      )
+                    })}
+                  </svg>
+                </div>
+              )}
+              {!showMinimap && (
+                <button
+                  onClick={() => setShowMinimap(true)}
+                  className="absolute top-2 right-2 p-1.5 rounded-md bg-white/95 dark:bg-zinc-900/95 border border-zinc-200 dark:border-zinc-800 shadow-lg hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  title="显示 Minimap"
+                >
+                  <MapIcon className="h-3.5 w-3.5 text-zinc-500" />
+                </button>
+              )}
+
+              {/* 拖拽提示 */}
+              <div className="absolute bottom-2 left-2 px-2 py-1 rounded bg-white/90 dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-500 shadow-sm backdrop-blur-sm">
+                拖拽节点重新布局 · {Object.keys(nodeOverrides).length > 0 && <span className="text-amber-600">{Object.keys(nodeOverrides).length} 个已移动 · </span>}点击切换焦点
+              </div>
             </div>
 
             {/* 图例 */}

@@ -268,3 +268,86 @@ Unresolved / 下一阶段优先事项:
 - 接真实 API（E3 阶段）仍是最大未完成项
 - lint engine 12 条规则的 Python 实现仍未做（E1 阶段）
 - log-streamer mini-service 当前用客户端模拟，可切回真实 socket.io（需保活机制）
+
+---
+Task ID: 5 (cron webDevReview 第 4 轮)
+Agent: main (Z.ai Code)
+Task: DataOps 管理台持续开发巡检 — QA 测试 + 修 bug + 新增功能 + 样式打磨（v4）
+
+Work Log:
+- 读取 worklog.md 了解 v3 进展：3 大功能（Dashboard 实时流/Lint 矩阵/Schema Diff）+ 命令面板 footer
+- QA 测试（agent-browser）：
+  - dev server 正常 (port 3000, 200)
+  - 10 视图遍历全部可访问，0 console error
+  - v3 功能验证：Dashboard 实时流触发成功（5 条日志）/ Lint 矩阵 12 行 / Schema Diff 15 处变更
+  - reload 后遍历 0 error
+  - bun run lint 0 error
+- 判断：项目稳定，进入新功能开发
+- 新增功能 1：SQL Playground 多 Tab 查询
+  - 重构为 tabs 数组状态（QueryTab 接口：id/name/sql/result/running/durationMs/sortCol/sortDir/page）
+  - 顶部 Tab 栏：active tab 有 sky 顶边 + 背景，hover 有 X 关闭按钮
+  - Tab 状态图标：running 蓝脉冲圆点 / success 绿对勾
+  - 新建 Tab 按钮（+ 图标）+ Ctrl+T 快捷键 + Ctrl+W 关闭
+  - 双击 Tab 名重命名（内联 input，Enter 确认/Esc 取消）
+  - 至少保留 1 个 tab（无法关闭最后一个）
+  - 每个 tab 独立 sql/result/sort/page 状态
+  - 状态栏新增 Ctrl+T/Ctrl+W 快捷键提示
+  - 编辑器/结果标题显示当前 tab 名
+- 修复 bug：血缘视图 Runtime TypeError
+  - 根因：lucide-react 的 Map 图标覆盖了 JS 原生 Map 构造函数
+  - lineage-view.tsx 的 nodeById useMemo 里 `new Map<string, GraphNode>()` 报错 "Map is not a constructor"
+  - 修复：将 Map 导入重命名为 MapIcon，更新 2 处 JSX 引用
+- 新增功能 2：血缘图谱 minimap + 拖拽节点
+  - 拖拽：onNodeMouseDown/onSvgMouseMove/onSvgMouseUp 三阶段处理
+  - 用 SVG createSVGPoint + getScreenCTM().inverse() 做坐标转换
+  - nodeOverrides 状态记录移动后的位置，边界限制 (0..viewW-100, 40..viewH-40)
+  - 节点 cursor-grab/grabbing + 拖拽时 drop-shadow + 已移动节点左上角 amber 圆点标记
+  - 边用 getNodePos 动态计算起止点，拖拽时边跟随
+  - Minimap 浮层（右上角 176×80）：缩略 SVG 显示所有节点+边，焦点节点 fuchsia 描边
+  - Minimap 可隐藏/显示切换（X 按钮 / MapIcon 按钮恢复）
+  - 底部拖拽提示栏（显示已移动节点数）
+  - resetView 同时清空 nodeOverrides
+- 新增功能 3：健康度视图增强
+  - 7 日健康度趋势堆叠柱状图（success/failed/skipped/pending 四色堆叠）
+  - 每柱顶部显示成功率%，底部日期，hover 颜色加深
+  - 图例 + 7 日均成功率汇总
+  - 按目录分布横条图（4 目录，绿/黄/红/灰四色分段 + 数量标注）
+  - 矩阵新增按目录筛选（全部/入库/计算/策略/工具，筛选后行数变化）
+  - 矩阵表头 flex-wrap 适配窄屏
+- 样式打磨：全局滚动条 + 动画
+  - globals.css 新增 @layer utilities：
+    * Webkit 滚动条：8px 宽，圆角 thumb，hover 加深，dark 模式适配
+    * Firefox：scrollbar-width: thin + scrollbar-color
+  - card-enter 关键帧动画（translateY 8px → 0，0.3s）
+  - pulse-glow 脉冲发光效果（用于实时状态）
+  - cursor-grab/grabbing 光标类
+- 验证：
+  - bun run lint 0 error
+  - agent-browser 验证：
+    * SQL 多 Tab：1→2→3 个 tab，执行后 Tab 1 显示绿色对勾，结果 8 行，VLM 确认 3 tab + 状态图标 + 结果数据
+    * 血缘：修复 Map bug 后 31 个 g 节点渲染，minimap 浮层显示，VLM 评分 8/10，无错误对话框
+    * 健康度：7 根趋势柱 + 4 个目录横条，目录筛选 27→17 行（入库），VLM 确认全部组件
+    * 暗色模式：新功能在暗色下正常
+    * reload 后遍历 10 视图 0 console error
+  - 截图存档：download/v4-qa-* 5 张 + v4-final-* 4 张
+
+Stage Summary:
+- 项目当前状态：稳定，功能持续深化。v4 在 v3 基础上新增 3 大功能 + 1 项样式打磨，修复 1 个 Runtime TypeError
+- 已完成的修改：
+  1. SQL Playground 多 Tab 查询：tabs 数组状态，新建/关闭/重命名，Ctrl+T/W 快捷键，状态图标
+  2. 修复血缘 Map 命名冲突 bug：Map → MapIcon
+  3. 血缘 minimap + 拖拽节点：SVG 坐标转换，nodeOverrides，drop-shadow，已移动标记
+  4. 健康度增强：7 日堆叠柱状图 + 按目录横条图 + 矩阵容目录筛选
+  5. 全局滚动条美化 + card-enter/pulse-glow 动画 + grab 光标
+  6. lint 0 error，reload 后 0 console error
+- 验证结果：所有新功能交互正常（多 Tab 增删/拖拽/minimap/目录筛选），VLM 评分 8/10
+
+Unresolved / 下一阶段优先事项:
+- SQL 多 Tab 可加：tab 持久化（localStorage）、跨 tab 结果对比、tab 拖拽排序
+- 血缘可加：minimap 点击跳转、节点固定（pin）、自动布局算法
+- 健康度可加：异常自动归因、补数任务编排、SLA 阈值配置
+- Dashboard 可加：自定义 KPI 卡片、按时间范围切换
+- 命令面板可加：最近搜索记录、tab 切换快捷键（Ctrl+Tab）
+- 接真实 API（E3 阶段）仍是最大未完成项
+- lint engine 12 条规则的 Python 实现仍未做（E1 阶段）
+- log-streamer mini-service 当前用客户端模拟，可切回真实 socket.io
