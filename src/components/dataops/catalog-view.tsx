@@ -1,32 +1,46 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { TABLES, TableMeta } from '@/lib/dataops/mock-data'
+import { TABLES, TableMeta, PIPELINE_RUNS, genSampleData, getColumnLintIssues, LINT_RULES } from '@/lib/dataops/mock-data'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Search, Filter, Play, RefreshCw, GitBranch, FileText, ListChecks, Database } from 'lucide-react'
-import { formatRows, freshnessClass, healthColorClass, typeBadgeClass } from '@/lib/dataops/styles'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Search, Filter, Play, RefreshCw, GitBranch, FileText, ListChecks, Database, Table2, History, AlertTriangle, CheckCircle2, XCircle, SkipForward, Copy } from 'lucide-react'
+import { formatRows, freshnessClass, healthColorClass, typeBadgeClass, runStatusClass, triggerClass, formatDuration } from '@/lib/dataops/styles'
+import { toast } from 'sonner'
 
 export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string) => void; onRunTable?: (t: string) => void }) {
   const [search, setSearch] = useState('')
   const [dirFilter, setDirFilter] = useState<string>('all')
   const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [healthFilter, setHealthFilter] = useState<string>('all')
+  const [sortBy, setSortBy] = useState<'dir' | 'rows' | 'freshness' | 'table'>('dir')
   const [selected, setSelected] = useState<TableMeta | null>(null)
 
   const filtered = useMemo(() => {
-    return TABLES.filter(t => {
+    const result = TABLES.filter(t => {
       if (search && !t.table.includes(search.toLowerCase()) && !t.cn.includes(search)) return false
       if (dirFilter !== 'all' && t.dir !== dirFilter) return false
       if (typeFilter !== 'all' && t.type !== typeFilter) return false
+      if (healthFilter !== 'all' && t.health !== healthFilter) return false
       return true
-    }).sort((a, b) => {
+    })
+    result.sort((a, b) => {
+      if (sortBy === 'rows') return b.rows - a.rows
+      if (sortBy === 'table') return a.table.localeCompare(b.table)
+      if (sortBy === 'freshness') {
+        const order = { '最新': 0, '滞后': 1, '无日期列': 2, '空表': 3, '—': 4 }
+        return (order[a.freshness as keyof typeof order] ?? 5) - (order[b.freshness as keyof typeof order] ?? 5)
+      }
+      // default: dir
       if (a.dir !== b.dir) return a.dir.localeCompare(b.dir)
       return a.sort.localeCompare(b.sort)
     })
-  }, [search, dirFilter, typeFilter])
+    return result
+  }, [search, dirFilter, typeFilter, healthFilter, sortBy])
 
   return (
     <div className="space-y-4">
@@ -50,6 +64,17 @@ export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string
               { v: 'all', l: '全部' }, { v: '事实', l: '事实' }, { v: '维度', l: '维度' },
               { v: '多表', l: '多表' }, { v: '孤儿', l: '孤儿' },
             ]} />
+            <FilterGroup label="健康度" value={healthFilter} onChange={setHealthFilter} options={[
+              { v: 'all', l: '全部' }, { v: 'green', l: '正常' }, { v: 'yellow', l: '待查' }, { v: 'red', l: '异常' }, { v: 'white', l: 'once' },
+            ]} />
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-zinc-400 flex items-center gap-1"><Filter className="h-3 w-3" />排序</span>
+              <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
+                {([['dir', '目录'], ['rows', '行数'], ['freshness', '新鲜度'], ['table', '表名']] as const).map(([k, l]) => (
+                  <button key={k} onClick={() => setSortBy(k)} className={`px-2 py-0.5 text-xs rounded transition-colors ${sortBy === k ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}>{l}</button>
+                ))}
+              </div>
+            </div>
             <Badge variant="secondary" className="ml-auto">{filtered.length} / {TABLES.length}</Badge>
           </div>
         </CardContent>
@@ -136,17 +161,32 @@ function FilterGroup({ label, value, onChange, options }: { label: string; value
 }
 
 function TableDetail({ table, onNavigate, onRunTable }: { table: TableMeta; onNavigate: (v: string) => void; onRunTable?: (t: string) => void }) {
+  const [activeTab, setActiveTab] = useState<'schema' | 'sample' | 'history' | 'lint'>('schema')
+  const sampleData = useMemo(() => genSampleData(table), [table])
+  const columnIssues = useMemo(() => getColumnLintIssues(table), [table])
+  const tableRuns = useMemo(() => PIPELINE_RUNS.filter(r => r.table === table.table), [table])
+  const tableLintRules = useMemo(() => LINT_RULES.filter(r => r.violations.some(v => v.table === table.table)), [table])
+
+  const copyTableName = () => {
+    navigator.clipboard?.writeText(table.table)
+    toast.success(`已复制表名：${table.table}`)
+  }
+
   return (
     <>
       <SheetHeader>
-        <SheetTitle className="flex items-center gap-2">
+        <SheetTitle className="flex items-center gap-2 flex-wrap">
           <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${typeBadgeClass(table.type)}`}>{table.type}</span>
           <span className="font-mono">{table.table}</span>
+          <button onClick={copyTableName} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400" title="复制表名">
+            <Copy className="h-3 w-3" />
+          </button>
+          {table.hasLintIssue && <Badge variant="outline" className="text-rose-600 border-rose-300 text-[10px]"><AlertTriangle className="h-3 w-3 mr-0.5" />lint</Badge>}
         </SheetTitle>
         <p className="text-sm text-zinc-500 -mt-2">{table.cn}</p>
       </SheetHeader>
 
-      <div className="space-y-5 px-4 pb-8">
+      <div className="space-y-4 px-4 pb-8">
         {/* 元数据 */}
         <div className="grid grid-cols-2 gap-3 text-xs">
           <Meta label="脚本" value={table.script} mono />
@@ -191,28 +231,167 @@ function TableDetail({ table, onNavigate, onRunTable }: { table: TableMeta; onNa
           <Button size="sm" variant="outline" onClick={() => onNavigate('logs')}><FileText className="h-3.5 w-3.5 mr-1" />查日志</Button>
         </div>
 
-        {/* Schema */}
-        <div>
-          <div className="text-xs font-medium text-zinc-500 mb-2 flex items-center gap-1.5"><Database className="h-3.5 w-3.5" />Schema ({table.columns.length} 列)</div>
-          <div className="rounded-md border overflow-hidden">
-            <div className="grid grid-cols-[1fr_90px_1fr_50px] gap-2 px-2 py-1.5 text-[10px] font-medium text-zinc-500 bg-zinc-50 dark:bg-zinc-900/50">
-              <div>列名</div><div>类型</div><div>中文</div><div className="text-center">可空</div>
-            </div>
-            {table.columns.map(c => (
-              <div key={c.name} className="grid grid-cols-[1fr_90px_1fr_50px] gap-2 px-2 py-1.5 text-xs border-t font-mono">
-                <div className="truncate" title={c.name}>
-                  {c.name}
-                  {/[^\x00-\x7F]/.test(c.name) && <span className="ml-1 text-[9px] text-rose-500">⚠中文</span>}
-                </div>
-                <div className="text-sky-600 dark:text-sky-400">{c.type}</div>
-                <div className="text-zinc-500 font-sans truncate">{c.cn}</div>
-                <div className="text-center text-zinc-400">{c.nullable ? '✓' : '—'}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Tabs: Schema / Sample Data / Run History / Lint */}
+        <Tabs value={activeTab} onValueChange={v => setActiveTab(v as 'schema' | 'sample' | 'history' | 'lint')}>
+          <TabsList className="grid grid-cols-4 w-full">
+            <TabsTrigger value="schema" className="text-xs gap-1">
+              <Database className="h-3 w-3" /> Schema
+              <span className="text-[10px] text-zinc-400">{table.columns.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="sample" className="text-xs gap-1">
+              <Table2 className="h-3 w-3" /> 样例
+            </TabsTrigger>
+            <TabsTrigger value="history" className="text-xs gap-1">
+              <History className="h-3 w-3" /> 历史
+              <span className="text-[10px] text-zinc-400">{tableRuns.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="lint" className="text-xs gap-1">
+              <ListChecks className="h-3 w-3" /> Lint
+              {tableLintRules.length > 0 && <span className="text-[10px] text-rose-500">{tableLintRules.length}</span>}
+            </TabsTrigger>
+          </TabsList>
 
-        {/* 依赖关系 */}
+          {/* Schema Tab */}
+          <TabsContent value="schema" className="mt-3">
+            <div className="rounded-md border overflow-hidden">
+              <div className="grid grid-cols-[1fr_90px_1fr_50px] gap-2 px-2 py-1.5 text-[10px] font-medium text-zinc-500 bg-zinc-50 dark:bg-zinc-900/50">
+                <div>列名</div><div>类型</div><div>中文</div><div className="text-center">可空</div>
+              </div>
+              {table.columns.map(c => {
+                const hasIssue = columnIssues.some(i => i.column === c.name)
+                return (
+                  <div key={c.name} className={`grid grid-cols-[1fr_90px_1fr_50px] gap-2 px-2 py-1.5 text-xs border-t font-mono ${hasIssue ? 'bg-rose-50/50 dark:bg-rose-950/20' : ''}`}>
+                    <div className="truncate flex items-center gap-1" title={c.name}>
+                      <span className={hasIssue ? 'text-rose-600 dark:text-rose-400' : ''}>{c.name}</span>
+                      {hasIssue && <AlertTriangle className="h-3 w-3 text-rose-500 flex-shrink-0" />}
+                    </div>
+                    <div className="text-sky-600 dark:text-sky-400">{c.type}</div>
+                    <div className="text-zinc-500 font-sans truncate">{c.cn}</div>
+                    <div className="text-center text-zinc-400">{c.nullable ? '✓' : '—'}</div>
+                  </div>
+                )
+              })}
+            </div>
+          </TabsContent>
+
+          {/* Sample Data Tab */}
+          <TabsContent value="sample" className="mt-3">
+            <div className="text-[11px] text-zinc-400 mb-2 flex items-center gap-1.5">
+              <Table2 className="h-3 w-3" /> 前 {sampleData.rows.length} 行样例数据（mock）
+            </div>
+            <div className="rounded-md border overflow-x-auto">
+              <div className="min-w-full">
+                <div className="grid auto-cols-min grid-flow-col gap-0 bg-zinc-50 dark:bg-zinc-900/50 border-b">
+                  {sampleData.columns.map(c => (
+                    <div key={c} className="px-2 py-1.5 text-[10px] font-medium text-zinc-500 font-mono whitespace-nowrap border-r">{c}</div>
+                  ))}
+                </div>
+                {sampleData.rows.map((row, i) => (
+                  <div key={i} className="grid auto-cols-min grid-flow-col gap-0 text-xs border-b last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900/40 font-mono">
+                    {row.map((cell, j) => (
+                      <div key={j} className={`px-2 py-1 whitespace-nowrap border-r ${typeof cell === 'number' ? 'text-sky-600 dark:text-sky-400 text-right' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                        {String(cell)}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 text-[10px] text-zinc-400 flex items-center gap-2">
+              <Database className="h-3 w-3" />
+              <span>共 {formatRows(table.rows)} 行 · 显示前 {sampleData.rows.length} 行样例</span>
+            </div>
+          </TabsContent>
+
+          {/* Run History Tab */}
+          <TabsContent value="history" className="mt-3">
+            {tableRuns.length === 0 ? (
+              <div className="py-8 text-center text-xs text-zinc-400">该表暂无执行记录</div>
+            ) : (
+              <div className="space-y-1.5">
+                {tableRuns.map(r => (
+                  <div key={r.id} className="p-2 rounded border border-zinc-200 dark:border-zinc-700 text-xs">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-mono text-[10px] text-zinc-400">#{r.id}</span>
+                      <Badge variant="outline" className={`text-[9px] py-0 px-1.5 ${triggerClass(r.trigger)}`}>{r.trigger}</Badge>
+                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${runStatusClass(r.status)}`}>
+                        {r.status === 'success' && <CheckCircle2 className="h-3 w-3 mr-0.5" />}
+                        {r.status === 'failed' && <XCircle className="h-3 w-3 mr-0.5" />}
+                        {r.status === 'skipped' && <SkipForward className="h-3 w-3 mr-0.5" />}
+                        {r.status}
+                      </span>
+                      <span className="ml-auto font-mono text-[10px] text-zinc-400">{r.startedAt.slice(5)}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] text-zinc-500">
+                      <span>耗时 {formatDuration(r.durationSec)}</span>
+                      <span>·</span>
+                      <span>入库 {r.rowsIn ? formatRows(r.rowsIn) : '—'} 行</span>
+                      {r.force && <Badge variant="outline" className="text-[9px] py-0 px-1 text-amber-600 border-amber-300">force</Badge>}
+                    </div>
+                    {r.error && (
+                      <div className="mt-1 p-1.5 rounded bg-rose-50 dark:bg-rose-950/30 text-[10px] text-rose-700 dark:text-rose-300 font-mono">
+                        {r.error}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Lint Tab */}
+          <TabsContent value="lint" className="mt-3">
+            {tableLintRules.length === 0 && columnIssues.length === 0 ? (
+              <div className="py-8 text-center text-xs text-zinc-400 flex flex-col items-center gap-2">
+                <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+                <span>该表无 lint 违规</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {/* 表级 lint 违规 */}
+                {tableLintRules.map(rule => {
+                  const violations = rule.violations.filter(v => v.table === table.table)
+                  return violations.map((v, i) => (
+                    <div key={`${rule.id}-${i}`} className="p-2.5 rounded border border-zinc-200 dark:border-zinc-700 text-xs">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant="outline" className={`text-[9px] py-0 px-1.5 font-mono ${rule.level === 'RED' ? 'text-rose-600 border-rose-300' : rule.level === 'YELLOW' ? 'text-amber-600 border-amber-300' : 'text-sky-600 border-sky-300'}`}>
+                          {rule.level}
+                        </Badge>
+                        <span className="font-mono font-medium">{rule.id}</span>
+                        <span className="text-zinc-600 dark:text-zinc-400">{rule.name}</span>
+                      </div>
+                      <div className="text-zinc-600 dark:text-zinc-400 mb-1.5">{v.detail}</div>
+                      <div className="text-[11px] text-emerald-700 dark:text-emerald-400 flex items-start gap-1">
+                        <RefreshCw className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                        <span>{v.fix}</span>
+                      </div>
+                    </div>
+                  ))
+                })}
+                {/* 列级 lint 违规 */}
+                {columnIssues.length > 0 && (
+                  <div className="p-2.5 rounded border border-rose-200 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20 text-xs">
+                    <div className="font-medium text-rose-700 dark:text-rose-300 mb-1.5 flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5" /> R004: 中文列名 ({columnIssues.length})
+                    </div>
+                    <div className="space-y-1">
+                      {columnIssues.map((issue, i) => (
+                        <div key={i} className="flex items-center gap-2 font-mono text-[11px]">
+                          <span className="text-rose-600 dark:text-rose-400">{issue.column}</span>
+                          <span className="text-zinc-400">→</span>
+                          <span className="text-emerald-600 dark:text-emerald-400">{issue.fix}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <Button size="sm" variant="link" className="h-auto p-0 text-xs text-sky-600" onClick={() => onNavigate('lint')}>查看全部 lint 规则 →</Button>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {/* 依赖关系（始终展示） */}
         <div>
           <div className="text-xs font-medium text-zinc-500 mb-2 flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" />依赖关系</div>
           <div className="space-y-2">
@@ -239,15 +418,6 @@ function TableDetail({ table, onNavigate, onRunTable }: { table: TableMeta; onNa
             </div>
           </div>
         </div>
-
-        {table.hasLintIssue && (
-          <div className="p-3 rounded-md bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900">
-            <div className="text-xs font-medium text-rose-700 dark:text-rose-300 flex items-center gap-1.5 mb-1">
-              <ListChecks className="h-3.5 w-3.5" />该表有规范违规
-            </div>
-            <Button size="sm" variant="link" className="h-auto p-0 text-xs text-rose-600" onClick={() => onNavigate('lint')}>查看 lint 详情 →</Button>
-          </div>
-        )}
       </div>
     </>
   )

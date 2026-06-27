@@ -733,3 +733,177 @@ export const SCRIPT_DISTRIBUTION: { dir: string; tables: number; totalLines: num
   { dir: '3_策略', tables: 1, totalLines: 124 },
   { dir: '4_工具', tables: 1, totalLines: 136 },
 ]
+
+// 样例数据生成器：根据表的列定义生成 mock 前 5 行
+export function genSampleData(table: TableMeta): { columns: string[]; rows: (string | number)[][] } {
+  const cols = table.columns.map(c => c.name)
+  // 根据表名生成不同风格的样例数据
+  if (table.table === 'stock_daily_kline') {
+    return {
+      columns: cols,
+      rows: [
+        ['600519.SH', '2026-06-25', 1685.20, 1702.50, 1678.80, 1698.30, 2456789, 4168000000, 2.35, 0.58, 1.0000],
+        ['000858.SZ', '2026-06-25', 168.50, 171.20, 167.30, 170.45, 15678234, 2670000000, 3.12, 1.85, 1.0000],
+        ['300750.SZ', '2026-06-25', 245.80, 248.60, 244.10, 247.20, 8923456, 2205000000, 1.05, 0.42, 1.0000],
+        ['601318.SH', '2026-06-25', 52.30, 52.85, 51.92, 52.68, 23456789, 1235000000, 0.78, 0.15, 1.0000],
+        ['000333.SZ', '2026-06-25', 78.45, 79.20, 77.80, 78.95, 12345678, 975000000, 1.02, 0.38, 1.0000],
+      ],
+    }
+  }
+  if (table.table.includes('kline')) {
+    return {
+      columns: cols,
+      rows: [
+        ['600519.SH', '2026-06-25 14:55:00', 1698.00, 1699.50, 1697.20, 1698.30, 12500, 21200000],
+        ['600519.SH', '2026-06-25 14:56:00', 1698.30, 1700.00, 1697.80, 1699.20, 8900, 15100000],
+        ['600519.SH', '2026-06-25 14:57:00', 1699.20, 1701.50, 1698.50, 1700.80, 15600, 26500000],
+        ['600519.SH', '2026-06-25 14:58:00', 1700.80, 1702.50, 1700.00, 1701.20, 11200, 19000000],
+        ['600519.SH', '2026-06-25 14:59:00', 1701.20, 1702.50, 1700.50, 1702.10, 23400, 39800000],
+      ],
+    }
+  }
+  if (table.table === 'trading_calendar') {
+    return {
+      columns: cols,
+      rows: [
+        ['2026-06-25', true, 'A股'],
+        ['2026-06-26', true, 'A股'],
+        ['2026-06-27', false, 'A股'],
+        ['2026-06-28', false, 'A股'],
+        ['2026-06-29', true, 'A股'],
+      ],
+    }
+  }
+  if (table.table === 'capital_info') {
+    return {
+      columns: cols,
+      rows: [
+        ['600519.SH', '2026-06-25', 1256.20, 12.56, 12.56, 1256.20],
+        ['000858.SZ', '2026-06-25', 1299.00, 12.99, 12.99, 1299.00],
+        ['300750.SZ', '2026-06-25', 433.40, 4.33, 4.33, 433.40],
+        ['601318.SH', '2026-06-25', 9114.00, 91.14, 91.14, 9114.00],
+        ['000333.SZ', '2026-06-25', 10401.00, 104.01, 104.01, 10401.00],
+      ],
+    }
+  }
+  if (table.table === 'pianpao_daily') {
+    return {
+      columns: cols,
+      rows: [
+        ['600519.SH', '2026-06-25', 95.2],
+        ['000858.SZ', '2026-06-25', 91.8],
+        ['300750.SZ', '2026-06-25', 88.5],
+        ['601318.SH', '2026-06-25', 85.1],
+        ['000333.SZ', '2026-06-25', 82.7],
+      ],
+    }
+  }
+  if (table.table === 'stock_block_relation') {
+    return {
+      columns: cols,
+      rows: [
+        ['人工智能', 'BK0001', '概念板块', 187, '2026-06-25 17:00'],
+        ['芯片', 'BK0002', '概念板块', 156, '2026-06-25 17:00'],
+        ['新能源车', 'BK0003', '概念板块', 142, '2026-06-25 17:00'],
+        ['光伏', 'BK0004', '概念板块', 128, '2026-06-25 17:00'],
+        ['医药', 'BK0005', '行业板块', 119, '2026-06-25 17:00'],
+      ],
+    }
+  }
+  if (table.table === 'dim_security_type') {
+    return {
+      columns: cols,
+      rows: [
+        ['600519.SH', '股票', '主板', 'SH'],
+        ['000858.SZ', '股票', '主板', 'SZ'],
+        ['300750.SZ', '股票', '创业板', 'SZ'],
+        ['510050.SH', 'ETF', '上证ETF', 'SH'],
+        ['159915.SZ', 'ETF', '深证ETF', 'SZ'],
+      ],
+    }
+  }
+  if (table.table === 'stock_industry_3level') {
+    return {
+      columns: cols,
+      rows: [
+        ['IT001', '信息技术', '半导体', '集成电路设计'],
+        ['IT002', '信息技术', '半导体', '集成电路制造'],
+        ['IT003', '信息技术', '软件', '工业软件'],
+        ['MD001', '医药生物', '化学制药', '创新药'],
+        ['MD002', '医药生物', '医疗器械', '体外诊断'],
+      ],
+    }
+  }
+  if (table.table === 't_bk5_19') {
+    return {
+      columns: cols,
+      rows: [
+        ['2026-06-24', 'BK0001', '人工智能', 35.2, 187],
+        ['2026-06-24', 'BK0002', '芯片', 28.5, 156],
+        ['2026-06-24', 'BK0003', '新能源车', 22.1, 142],
+        ['2026-06-24', 'BK0004', '光伏', 18.7, 128],
+        ['2026-06-24', 'BK0005', '医药', 15.3, 119],
+      ],
+    }
+  }
+  // 默认：根据列定义生成通用样例
+  return {
+    columns: cols,
+    rows: Array.from({ length: 5 }, (_, i) => cols.map((c, j) => {
+      if (c.toLowerCase().includes('date') || c === 'date' || c.toLowerCase().includes('time')) return `2026-06-25`
+      if (c.toLowerCase().includes('code') || c === 'code') return `60000${i + 1}.SH`
+      if (j === 0) return `row_${i + 1}`
+      return typeof table.columns[j]?.type === 'string' && table.columns[j]?.type.includes('INT') ? (i + 1) * 100 : `value_${i + 1}`
+    })),
+  }
+}
+
+// 字段级 lint 违规（按表聚合）
+export function getColumnLintIssues(table: TableMeta): { column: string; rule: string; severity: 'RED' | 'YELLOW'; fix: string }[] {
+  const issues: { column: string; rule: string; severity: 'RED' | 'YELLOW'; fix: string }[] = []
+  table.columns.forEach(col => {
+    if (/[^\x00-\x7F]/.test(col.name)) {
+      issues.push({
+        column: col.name,
+        rule: 'R004',
+        severity: 'RED',
+        fix: `rename 为英文（如 change_pct/turnover/adj_factor）`,
+      })
+    }
+  })
+  return issues
+}
+
+// 新鲜度分布（用于 Analytics 视图）
+export const FRESHNESS_DISTRIBUTION: { freshness: string; count: number; color: string }[] = [
+  { freshness: '最新', count: 20, color: 'emerald' },
+  { freshness: '滞后', count: 2, color: 'rose' },
+  { freshness: '无日期列', count: 1, color: 'amber' },
+  { freshness: '空表', count: 1, color: 'rose' },
+  { freshness: '—', count: 2, color: 'zinc' },
+]
+
+// 调度耗时分布（近 7 天每表平均耗时，秒）
+export const DURATION_DISTRIBUTION: { table: string; avgSec: number; maxSec: number; runs: number }[] = [
+  { table: 'stock_kline_1m', avgSec: 1820, maxSec: 2100, runs: 5 },
+  { table: 'stock_kline_5m', avgSec: 980, maxSec: 1200, runs: 5 },
+  { table: 'capital_info', avgSec: 1280, maxSec: 1980, runs: 5 },
+  { table: 'stock_daily_kline', avgSec: 280, maxSec: 320, runs: 5 },
+  { table: 'pianpao_daily', avgSec: 420, maxSec: 480, runs: 5 },
+  { table: 'stock_kline_15m', avgSec: 387, maxSec: 420, runs: 5 },
+  { table: 'stock_kline_30m', avgSec: 198, maxSec: 220, runs: 5 },
+  { table: 'stock_kline_60m', avgSec: 95, maxSec: 110, runs: 5 },
+  { table: 'dim_security_type', avgSec: 7, maxSec: 12, runs: 5 },
+  { table: 'trading_calendar', avgSec: 6, maxSec: 8, runs: 5 },
+]
+
+// 7 日健康度趋势（每天的红/黄/绿表数）
+export const HEALTH_TREND_7D: { date: string; green: number; yellow: number; red: number }[] = [
+  { date: '06-19', green: 24, yellow: 0, red: 0 },
+  { date: '06-20', green: 23, yellow: 1, red: 0 },
+  { date: '06-21', green: 24, yellow: 0, red: 0 },
+  { date: '06-22', green: 24, yellow: 0, red: 0 },
+  { date: '06-23', green: 22, yellow: 1, red: 1 },
+  { date: '06-24', green: 23, yellow: 0, red: 1 },
+  { date: '06-25', green: 21, yellow: 1, red: 2 },
+]

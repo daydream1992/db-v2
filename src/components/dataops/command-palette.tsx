@@ -204,6 +204,26 @@ export function CommandPalette({ open, onOpenChange, onNavigate, onRunTable, onR
           ))}
         </CommandGroup>
       </CommandList>
+      {/* 底部快捷键提示栏 */}
+      <div className="border-t border-zinc-200 dark:border-zinc-800 px-3 py-2 flex items-center justify-between text-[10px] text-zinc-500 bg-zinc-50/50 dark:bg-zinc-900/50">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono text-[9px] shadow-sm">↑↓</kbd>
+            导航
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono text-[9px] shadow-sm">↵</kbd>
+            选择
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono text-[9px] shadow-sm">Esc</kbd>
+            关闭
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-zinc-400">DataOps v3 · {navItems.length + tableItems.length + actionItems.length + alertItems.length + lintItems.length + runItems.length} 项</span>
+        </div>
+      </div>
     </CommandDialog>
   )
 }

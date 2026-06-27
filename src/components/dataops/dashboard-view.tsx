@@ -4,9 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive } from 'lucide-react'
+import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive, Radio, Loader2, XCircle, Play, Pause, Terminal } from 'lucide-react'
 import { ALERTS, PIPELINE_RUNS, ROW_TREND, TABLES, DAILY_STATS, INGEST_TREND, SCRIPT_DISTRIBUTION } from '@/lib/dataops/mock-data'
 import { formatRows, runStatusClass, runStatusDot } from '@/lib/dataops/styles'
+import { useLogStreamer } from '@/hooks/use-log-streamer'
+import { useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 
 export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void }) {
   const totalTables = TABLES.length
@@ -344,6 +347,9 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
         </Card>
       </div>
 
+      {/* 实时执行流 */}
+      <LiveStreamCard onNavigate={onNavigate} />
+
       {/* 快捷入口 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <QuickAction icon={<Zap className="h-4 w-4" />} label="立即执行" desc="手动触发某表" onClick={() => onNavigate('orchestration')} />
@@ -352,6 +358,169 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
         <QuickAction icon={<Database className="h-4 w-4" />} label="数据字典" desc="字段级元数据" onClick={() => onNavigate('dictionary')} />
       </div>
     </div>
+  )
+}
+
+// --- 子组件：实时执行流 ---
+function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
+  const streamer = useLogStreamer()
+  const logEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [streamer.logs.length])
+
+  const handleTrigger = (table: string) => {
+    streamer.trigger(undefined, table)
+    toast.success(`已触发：${table}`, { description: '观察实时日志流' })
+  }
+
+  return (
+    <Card className="border-sky-200/50 dark:border-sky-900/40 overflow-hidden">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Radio className={`h-4 w-4 ${streamer.currentRun?.status === 'running' ? 'text-rose-500 animate-pulse' : 'text-sky-500'}`} />
+            实时执行流
+            {streamer.connected && (
+              <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300 ml-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse mr-1" /> 已连接 :3003
+              </Badge>
+            )}
+            {streamer.currentRun && (
+              <Badge variant="outline" className={`text-[10px] ml-1 ${
+                streamer.currentRun.status === 'running' ? 'text-sky-600 border-sky-300' :
+                streamer.currentRun.status === 'success' ? 'text-emerald-600 border-emerald-300' :
+                'text-rose-600 border-rose-300'
+              }`}>
+                {streamer.currentRun.status === 'running' && <Loader2 className="h-3 w-3 mr-0.5 animate-spin" />}
+                {streamer.currentRun.status === 'success' && <CheckCircle2 className="h-3 w-3 mr-0.5" />}
+                {streamer.currentRun.status === 'failed' && <XCircle className="h-3 w-3 mr-0.5" />}
+                {streamer.currentRun.table} · {streamer.currentRun.progress ?? 0}%
+              </Badge>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-1.5">
+            {streamer.currentRun?.status === 'running' ? (
+              <Button size="sm" variant="outline" className="h-7 text-xs text-rose-600 hover:text-rose-700" onClick={() => streamer.cancel()}>
+                <Pause className="h-3 w-3 mr-1" /> 取消
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => streamer.triggerDaily()}
+                disabled={!!streamer.currentRun}
+                title="触发 daily 全量执行"
+              >
+                <Play className="h-3 w-3 mr-1" /> 触发 daily
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onNavigate('logs')}>
+              <Terminal className="h-3 w-3 mr-1" /> 完整日志
+            </Button>
+          </div>
+        </div>
+        {/* 进度条 */}
+        {streamer.currentRun?.status === 'running' && (
+          <div className="mt-2 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-sky-500 via-fuchsia-500 to-rose-500 transition-all duration-300"
+              style={{ width: `${streamer.currentRun.progress ?? 0}%` }}
+            />
+          </div>
+        )}
+        {streamer.dailyProgress && (
+          <div className="mt-2 flex items-center gap-2 text-[11px]">
+            <Zap className="h-3 w-3 text-amber-500" />
+            <span className="text-zinc-500">daily 全量</span>
+            <div className="flex-1 max-w-[200px] h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+              <div className="h-full bg-amber-500 transition-all" style={{ width: `${(streamer.dailyProgress.completed / streamer.dailyProgress.total) * 100}%` }} />
+            </div>
+            <span className="font-mono text-zinc-400">{streamer.dailyProgress.completed}/{streamer.dailyProgress.total}</span>
+          </div>
+        )}
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
+          {/* 日志流 */}
+          <div className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 overflow-hidden">
+            <div className="px-3 py-1.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-900/50 flex items-center gap-2">
+              <Terminal className="h-3 w-3 text-zinc-400" />
+              <span className="text-[11px] font-mono text-zinc-500">logs/run_live.log</span>
+              {streamer.logs.length > 0 && (
+                <Badge variant="outline" className="ml-auto text-[9px] text-rose-600 border-rose-300 py-0">
+                  <span className="h-1 w-1 rounded-full bg-rose-500 animate-pulse mr-1" /> LIVE · {streamer.logs.length}
+                </Badge>
+              )}
+            </div>
+            <div className="h-[240px] overflow-y-auto font-mono text-[11px] p-2 space-y-0">
+              {streamer.logs.length === 0 && (
+                <div className="py-12 text-center text-zinc-400">
+                  <Terminal className="h-6 w-6 mx-auto opacity-40 mb-2" />
+                  <div className="text-xs">点击右侧剧本触发实时执行</div>
+                  <div className="text-[10px] mt-1">或点击「触发 daily」执行全量</div>
+                </div>
+              )}
+              {streamer.logs.slice(-80).map(l => (
+                <div
+                  key={l.id}
+                  className={`flex gap-2 px-1.5 py-0.5 rounded ${
+                    l.level === 'ERROR' ? 'bg-rose-50 dark:bg-rose-950/30' :
+                    l.level === 'WARNING' ? 'bg-amber-50 dark:bg-amber-950/20' :
+                    l.level === 'INFO' && l.message.startsWith('✔') ? 'bg-emerald-50/50 dark:bg-emerald-950/20' :
+                    ''
+                  }`}
+                >
+                  <span className="text-zinc-400 flex-shrink-0">{l.ts.slice(11)}</span>
+                  <span className={`flex-shrink-0 w-14 font-bold ${
+                    l.level === 'ERROR' ? 'text-rose-600' :
+                    l.level === 'WARNING' ? 'text-amber-600' :
+                    l.level === 'INFO' ? 'text-emerald-600' :
+                    'text-zinc-400'
+                  }`}>{l.level}</span>
+                  <span className="text-sky-600 dark:text-sky-400 flex-shrink-0 w-32 truncate">{l.table}</span>
+                  <span className="text-zinc-700 dark:text-zinc-300 flex-1">{l.message}</span>
+                </div>
+              ))}
+              <div ref={logEndRef} />
+            </div>
+          </div>
+
+          {/* 可触发剧本 */}
+          <div className="rounded-md border border-zinc-200 dark:border-zinc-800 p-2">
+            <div className="text-[11px] text-zinc-500 mb-1.5 flex items-center gap-1">
+              <Zap className="h-3 w-3" /> 可触发剧本 ({streamer.scripts.length})
+            </div>
+            <div className="space-y-1 max-h-[260px] overflow-y-auto pr-1">
+              {streamer.scripts.map(s => {
+                const isRunning = streamer.currentRun?.table === s.table
+                return (
+                  <button
+                    key={s.idx}
+                    onClick={() => handleTrigger(s.table)}
+                    disabled={!!streamer.currentRun}
+                    className={`w-full text-left px-2 py-1.5 rounded text-[11px] font-mono border transition-all flex items-center gap-1.5 ${
+                      isRunning
+                        ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300'
+                        : 'border-zinc-200 dark:border-zinc-700 hover:border-sky-300 dark:hover:border-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/30 disabled:opacity-50 disabled:cursor-not-allowed'
+                    }`}
+                    title={`${s.cn} · ${s.steps} 步日志`}
+                  >
+                    {isRunning ? <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" /> : <Play className="h-3 w-3 flex-shrink-0 opacity-50" />}
+                    <span className="truncate flex-1">{s.table}</span>
+                    <span className="text-zinc-400 text-[10px]">{s.cn}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

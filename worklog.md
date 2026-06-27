@@ -184,3 +184,87 @@ Unresolved / 下一阶段优先事项:
 - 接真实 API（E3 阶段）仍是最大未完成项
 - lint engine 12 条规则的 Python 实现仍未做（E1 阶段）
 - 可加「执行实时进度条」mini-service（socket.io 端口 3003）演示实时日志推送
+
+---
+Task ID: 4 (cron webDevReview 第 3 轮)
+Agent: main (Z.ai Code)
+Task: DataOps 管理台持续开发巡检 — QA 测试 + 新增功能 + 样式打磨（v3）
+
+Work Log:
+- 读取 worklog.md 了解项目进展：v2 已完成 10 视图 + 命令面板 + 通知中心 + 交互式血缘 + 增强 SQL/字典/Dashboard + 实时日志流（log-streamer mini-service + useLogStreamer hook）
+- 发现既有资产：mini-services/log-streamer/index.ts (322 行 socket.io server) + src/hooks/use-log-streamer.ts (272 行客户端模拟) + logs-view 已完整集成实时流
+- QA 测试（agent-browser）：
+  - dev server 正常 (port 3000, 200, 编译无错)
+  - 10 视图遍历全部可访问，h1 标题全部正确
+  - 命令面板：Cmd+K 唤起，60 命令，搜索 "kline" 过滤正确
+  - 通知中心：铃铛打开抽屉正常
+  - SQL 执行：成功，8 行结果，48ms，列头排序生效
+  - 血缘：27 节点渲染，焦点高亮
+  - 暗色切换：html class="dark" 生效
+  - 执行详情抽屉：打开显示 run_id
+  - reload 后遍历所有交互，0 console error
+  - bun run lint 0 error
+- 判断：项目稳定，无 bug 需修复，进入新功能开发
+- 新增功能 1：Dashboard 实时执行流卡片
+  - 复用 useLogStreamer hook，Dashboard 首页直接看实时执行
+  - 左侧日志流（240px 高，自动滚动到底部，LIVE badge + 行数）
+  - 右侧可触发剧本列表（8 个，点击触发实时执行）
+  - 顶部：连接状态 badge + 当前运行 badge（表名+进度%）
+  - 进度条：渐变色（sky→fuchsia→rose）
+  - daily 全量进度条（amber）
+  - 取消按钮 + 触发 daily + 完整日志跳转
+  - 日志按级别着色：ERROR 红/WARNING 黄/INFO 绿/DEBUG 灰
+- 新增功能 2：Lint 规则×表违规矩阵热力图
+  - 12 规则 × ~13 目标 的矩阵表格
+  - 单元格按违规数+规则级别着色：RED≥2 深红/RED 1 浅红/YELLOW 黄/BLUE 蓝/0 灰
+  - 行头：规则 ID + 级别 badge + 名称（点击筛选下方规则列表）
+  - 列头：表名（垂直书写，点击筛选）
+  - Tooltip 悬停显示：规则 ID + 表名 + 违规数/通过
+  - 行合计 + 列合计 + 总计（fuchsia 强调）
+  - 图例：5 种颜色说明
+  - 矩阵单元格 hover scale-110 + ring 效果
+  - 清除筛选按钮（显示当前筛选状态）
+- 新增功能 3：数据字典 Schema Diff 视图
+  - 顶部 Tab 切换：字段视图 / Schema Diff（带变更数 badge）
+  - 版本对比卡：v1.0 (当前) ↔ v0.9 (旧版)，含表数/字段数/作者/备注
+  - 中间箭头 + 变更摘要卡（6 种变更类型计数）
+  - 筛选栏：按变更类型（新增表/新增字段/重命名/类型变更/删除字段）+ 按表名下拉
+  - 变更明细列表：变更类型 + 表 + 字段变更（旧名→新名 / 旧类型→新类型）+ 说明
+  - 6 种变更类型：added_table/removed_table/added_col/removed_col/renamed_col/type_changed
+  - 15 条 mock diff（含 R004 列名英化、capital_info 新增、volume 类型扩大等真实场景）
+  - 每种类型独立配色（绿/红/黄/蓝）
+- 样式打磨 1：命令面板底部快捷键提示栏
+  - 3 个 kbd 键：↑↓ 导航 / ↵ 选择 / Esc 关闭
+  - 右侧显示总项数（DataOps v3 · 60 项）
+  - 浅灰背景 + 顶部 border 分隔
+- 验证：
+  - bun run lint 0 error
+  - agent-browser 验证：
+    * Dashboard 实时流：点击剧本触发，5 条日志实时推送，运行中 badge 显示，VLM 确认 LIVE 标记 + 日志内容正确
+    * Lint 矩阵：12 行 × ~13 列渲染，单元格颜色区分级别，点击 R004 行头筛选规则列表，VLM 评分 8/10
+    * Schema Diff：版本对比卡 + 变更摘要 + 明细列表，点击「重命名」筛选显示 9/15，VLM 评分 8/10
+    * 命令面板 footer：3 个 kbd 提示 + 60 项计数
+    * 暗色模式：新功能在暗色下视觉正常
+    * reload 后遍历 10 视图 0 console error
+  - 截图存档：download/v3-qa-* 共 14 张 + v3-final-* 共 4 张
+
+Stage Summary:
+- 项目当前状态：稳定，功能持续深化。v3 在 v2 基础上新增 3 大功能模块 + 1 项样式打磨，无新增 bug
+- 已完成的修改：
+  1. Dashboard 实时执行流卡片：首页即可触发/观察实时日志流，复用 useLogStreamer，含进度条/daily 全量/取消/剧本列表
+  2. Lint 规则×表违规矩阵热力图：12×13 矩阵，5 级颜色，tooltip + 行列合计 + 点击筛选
+  3. 数据字典 Schema Diff：版本对比 + 6 种变更类型 + 15 条 mock diff + 双重筛选
+  4. 命令面板键盘快捷键 footer：↑↓/↵/Esc 提示 + 项数
+  5. lint 0 error，reload 后 0 console error
+- 验证结果：所有新功能交互正常（实时流触发/矩阵筛选/Schema Diff 筛选/命令面板 footer），VLM 评分 8/10
+
+Unresolved / 下一阶段优先事项:
+- SQL Playground 多 tab 查询（本轮未做，留作下阶段）
+- 血缘图谱可加 minimap + 拖拽节点
+- Dashboard 实时流可加：执行耗时统计、失败自动重试可视化
+- Lint 矩阵可加：导出 CSV、规则修复进度跟踪
+- Schema Diff 可加：三段版本对比、JSON 导出、字段血缘（哪个脚本产出该字段）
+- 命令面板可加：最近搜索记录、命令历史
+- 接真实 API（E3 阶段）仍是最大未完成项
+- lint engine 12 条规则的 Python 实现仍未做（E1 阶段）
+- log-streamer mini-service 当前用客户端模拟，可切回真实 socket.io（需保活机制）
