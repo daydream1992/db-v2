@@ -693,3 +693,31 @@ Unresolved / 下一阶段优先事项:
 - 双击 file:// 打开时，部分浏览器可能限制 JS 执行（Chrome 需启用 file access flag）
 - 可制作独立 ZIP 分发包（dataops-offline.zip）
 - 可考虑 Electron/Tauri 封装为桌面应用
+
+---
+Task ID: 10
+Agent: main (Z.ai Code)
+Task: 创建独立 UI 界面（用户要求有单独的 UI 界面，不依赖端口）
+
+Work Log:
+- 用户澄清需求：要有单独的 UI 界面，而非仅配置文件层面的静态导出
+- 将 out/ 静态导出复制到 0_weihuxiezuo/dataops-ui/ 作为独立交付物
+- 添加 favicon.svg 避免离线访问 404 错误
+- 重写启动脚本（start-dataops.bat / .sh），指向 dataops-ui/ 目录
+- 更新用户使用流程文档，强调"独立 UI 界面"概念
+- agent-browser 验证：静态导出通过 HTTP 服务访问，10 视图全部正常渲染和交互
+- 静态导出 1.8MB，可拷贝到任何电脑直接打开
+
+Stage Summary:
+- 项目当前状态：稳定，独立 UI 界面已完成
+- 已完成的修改：
+  1. dataops-ui/ 目录（1.8MB 独立界面包，双击 index.html 即可打开）
+  2. 启动脚本更新（指向 dataops-ui/）
+  3. favicon.svg 添加
+  4. 用户使用流程文档重写（强调独立 UI + 3 种打开方式 + 浏览器兼容表）
+- 验证结果：静态导出通过 agent-browser 验证，10 视图全部可交互
+
+Unresolved / 下一阶段优先事项:
+- Chrome 双击 file:// 可能空白，需 HTTP 服务或 Edge/Firefox
+- 可制作 ZIP 分发包
+- 可考虑 Electron/Tauri 桌面应用封装

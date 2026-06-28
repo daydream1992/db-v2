@@ -1,0 +1,5 @@
+1:"$Sreact.fragment"
+2:I[97367,["./_next/static/chunks/2f236954d6a65e12.js"],"ViewportBoundary"]
+3:I[97367,["./_next/static/chunks/2f236954d6a65e12.js"],"MetadataBoundary"]
+4:"$Sreact.suspense"
+0:{"buildId":"mVJcfQKxwKhbYd6wvLrQW","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$L3",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"DataOps 管理台 · DB数据库_v2"}],["$","meta","1",{"name":"description","content":"数据管道治理平台 — 脚本目录 / 健康度 / 编排 / 血缘 / 规范校验 / 日志"}],["$","meta","2",{"name":"keywords","content":"DataOps,DuckDB,数据管道,治理"}]]}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}
