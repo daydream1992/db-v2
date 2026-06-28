@@ -6,6 +6,8 @@
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
+    "build:static": "BUILD_MODE=export next build",
+    "preview:static": "bunx serve out -p 8080",
     "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",

@@ -655,3 +655,41 @@ Unresolved / 下一阶段优先事项:
 - Catalog 可加：表依赖关系图、批量操作、schema 变更时间线
 - 接真实 API（E3 阶段）仍是最大未完成项
 - lint engine 12 条规则的 Python 实现仍未做（E1 阶段）
+
+---
+Task ID: 9
+Agent: main (Z.ai Code)
+Task: 离线免端口模式 + 用户使用流程文档
+
+Work Log:
+- 用户需求：线下能不依赖端口浏览器打开？写用户使用流程在 0_weihuxiezuo
+- 修改 next.config.ts：添加 BUILD_MODE 环境变量支持
+  - `BUILD_MODE=export` → `output: "export"` + `images.unoptimized` + `assetPrefix: "./"`
+  - 默认仍为 `output: "standalone"`（开发模式不受影响）
+- 删除占位 API 路由 (`src/app/api/route.ts`)，因与静态导出不兼容且应用未使用
+- 添加 package.json 脚本：
+  - `build:static` → `BUILD_MODE=export next build`（生成 out/ 目录）
+  - `preview:static` → `bunx serve out -p 8080`（本地 HTTP 预览）
+- 构建验证：`BUILD_MODE=export next build` 成功，生成 out/ 目录（1.8MB）
+  - 所有资源路径为相对路径 `./`，支持 file:// 协议直接打开
+  - 字体文件已打包（Geist Sans/Mono woff2）
+- 创建 `db_scripts_analysis/0_weihuxiezuo/` 目录：
+  - `用户使用流程.md`：完整用户指南（9 章：快速开始/首次构建/功能导航/快捷键/核心功能/模式对比/目录结构/FAQ/更新日志）
+  - `start-dataops.bat`：Windows 一键启动脚本
+  - `start-dataops.sh`：macOS/Linux 一键启动脚本
+- 验证：HTTP 服务返回 200 OK，HTML 内容完整；lint 0 error；开发模式正常
+
+Stage Summary:
+- 项目当前状态：稳定，新增离线免端口能力
+- 已完成的修改：
+  1. next.config.ts 支持静态导出模式（BUILD_MODE=export）
+  2. 删除占位 API 路由
+  3. 新增 build:static / preview:static 脚本
+  4. 创建 0_weihuxiezuo 目录（用户使用流程.md + 启动脚本）
+  5. 静态导出 1.8MB，支持双击 index.html 直接打开
+- 验证结果：静态构建成功，HTTP 200 OK，lint 0 error
+
+Unresolved / 下一阶段优先事项:
+- 双击 file:// 打开时，部分浏览器可能限制 JS 执行（Chrome 需启用 file access flag）
+- 可制作独立 ZIP 分发包（dataops-offline.zip）
+- 可考虑 Electron/Tauri 封装为桌面应用
