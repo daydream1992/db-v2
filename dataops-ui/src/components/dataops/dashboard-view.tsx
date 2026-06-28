@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive, Radio, Loader2, XCircle, Play, Pause, Terminal, Calendar, ArrowUpRight, RefreshCw, Download, X, ChevronUp, ChevronDown } from 'lucide-react'
-import { ALERTS, PIPELINE_RUNS, ROW_TREND, TABLES, DAILY_STATS, INGEST_TREND, SCRIPT_DISTRIBUTION } from '@/lib/dataops/mock-data'
+import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive, Radio, Loader2, XCircle, Play, Pause, Terminal, Calendar, ArrowUpRight, RefreshCw, Download, X, ChevronUp, ChevronDown, Info } from 'lucide-react'
+import { ALERTS, PIPELINE_RUNS, ROW_TREND, TABLES, DAILY_STATS, INGEST_TREND, SCRIPT_DISTRIBUTION, isTradingDay, getLastTradingDay, TRADING_CALENDAR } from '@/lib/dataops/mock-data'
 import { APP_CONFIG } from '@/lib/dataops/config'
 import { formatRows, runStatusClass, runStatusDot } from '@/lib/dataops/styles'
 import { useLogStreamer } from '@/hooks/use-log-streamer'
@@ -75,6 +75,8 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
   const redTables = TABLES.filter(t => t.health === 'red').length
   const yellowTables = TABLES.filter(t => t.health === 'yellow').length
   const todayStr = new Date().toISOString().slice(0, 10)
+  const lastTradingDay = getLastTradingDay()
+  const isTodayTradingDay = isTradingDay()
   const todayRuns = PIPELINE_RUNS.filter(r => r.startedAt.startsWith(todayStr))
   const successRate = todayRuns.length > 0
     ? Math.round((todayRuns.filter(r => r.status === 'success').length / todayRuns.length) * 100)
@@ -456,11 +458,30 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
 
   return (
     <div className="space-y-6">
-      {/* 时间范围选择器 + GitHub 同步按钮 */}
+      {/* 非交易日提示 */}
+      {!isTodayTradingDay && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 text-sm">
+          <Info className="h-4 w-4 text-sky-500 flex-shrink-0" />
+          <span className="text-sky-700 dark:text-sky-300 font-medium">当前为非交易日</span>
+          <span className="text-sky-600 dark:text-sky-400">，部分数据指标可能不更新。最近交易日: {lastTradingDay}，下一交易日: {TRADING_CALENDAR.nextTradingDay}</span>
+        </div>
+      )}
+
+      {/* 交易日指示器 + 时间范围选择器 + GitHub 同步按钮 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <Calendar className="h-3.5 w-3.5" />
-          <span>统计区间</span>
+        <div className="flex items-center gap-3 text-xs text-zinc-500">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-3.5 w-3.5" />
+            <span>统计区间</span>
+          </div>
+          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium ${
+            isTodayTradingDay
+              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border border-zinc-200 dark:border-zinc-700'
+          }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${isTodayTradingDay ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+            {isTodayTradingDay ? '交易日' : '休市'}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button

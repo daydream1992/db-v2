@@ -1,11 +1,11 @@
 'use client'
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { TABLES } from '@/lib/dataops/mock-data'
+import { TABLES, isTradingDay, getLastTradingDay, getNextTradingDay, TRADING_CALENDAR } from '@/lib/dataops/mock-data'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { AlertTriangle, CheckCircle2, RefreshCw, Wrench, Activity, TrendingUp, BarChart3, Filter, X, Loader2, Zap, ArrowRight, Clock, GitBranch, Eye, ChevronDown, ChevronRight, HeartPulse } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, RefreshCw, Wrench, Activity, TrendingUp, BarChart3, Filter, X, Loader2, Zap, ArrowRight, Clock, GitBranch, Eye, ChevronDown, ChevronRight, HeartPulse, Calendar, Info } from 'lucide-react'
 import { HEALTH_MATRIX } from '@/lib/dataops/mock-data'
 import { freshnessClass, healthColorClass, healthTextColorClass } from '@/lib/dataops/styles'
 import { toast } from 'sonner'
@@ -129,7 +129,12 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
   const greenTables = TABLES.filter(t => getHealth(t.table) === 'green')
   const whiteTables = TABLES.filter(t => getHealth(t.table) === 'white')
 
-  // Overall health score
+  // Trading calendar awareness
+  const lastTradingDay = getLastTradingDay()
+  const nextTradingDay = getNextTradingDay()
+  const isTodayTradingDay = isTradingDay()
+
+  // Overall health score (calendar-aware: non-trading days don't penalize stale tables)
   const healthScore = useMemo(() => {
     const total = TABLES.length
     if (total === 0) return 100
@@ -137,14 +142,17 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
     const yellowWeight = 60
     const redWeight = 0
     const whiteWeight = 80 // once tables are fine
+    // On non-trading days, treat yellow (stale) tables as green-ish
+    // since data not updating on weekends/holidays is expected
+    const effectiveYellowWeight = isTodayTradingDay ? yellowWeight : 85
     const score = (
       greenTables.length * greenWeight +
-      yellowTables.length * yellowWeight +
+      yellowTables.length * effectiveYellowWeight +
       redTables.length * redWeight +
       whiteTables.length * whiteWeight
     ) / total
     return Math.round(score)
-  }, [greenTables.length, yellowTables.length, redTables.length, whiteTables.length])
+  }, [greenTables.length, yellowTables.length, redTables.length, whiteTables.length, isTodayTradingDay])
 
   const toggle = (table: string) => {
     setSelected(prev => {
@@ -443,6 +451,15 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
 
   return (
     <div className="space-y-5">
+      {/* 非交易日提示 */}
+      {!isTodayTradingDay && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 text-sm">
+          <Info className="h-4 w-4 text-sky-500 flex-shrink-0" />
+          <span className="text-sky-700 dark:text-sky-300 font-medium">当前为非交易日</span>
+          <span className="text-sky-600 dark:text-sky-400">，部分数据指标可能不更新。滞后表不计入健康度扣分。</span>
+        </div>
+      )}
+
       {/* ── Health Score Hero Section ─────────────────────────── */}
       <Card className="overflow-hidden">
         <CardContent className="p-6">
@@ -639,6 +656,43 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
         </Card>
       </div>
 
+      {/* 交易日历信息卡 */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-sky-500" />
+            交易日历
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <div className="text-[11px] text-zinc-400">最近交易日</div>
+              <div className="text-lg font-mono font-semibold text-emerald-600">{lastTradingDay}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-zinc-400">今日是否交易日</div>
+              <div className={`text-lg font-mono font-semibold ${isTodayTradingDay ? 'text-emerald-600' : 'text-zinc-400'}`}>
+                {isTodayTradingDay ? '是' : '否'}
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] text-zinc-400">下一交易日</div>
+              <div className="text-lg font-mono font-semibold text-sky-600">{nextTradingDay}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-zinc-400">市场状态</div>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className={`h-2 w-2 rounded-full ${isTodayTradingDay ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'}`} />
+                <span className={`text-sm font-medium ${isTodayTradingDay ? 'text-emerald-600' : 'text-zinc-500'}`}>
+                  {isTodayTradingDay ? '交易中' : '休市'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 一致性栏 */}
       <Card>
         <CardHeader className="pb-3">
@@ -681,7 +735,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                 ))}
               </div>
             </div>
-            <Badge variant="outline" className="text-[10px]">最后交易日 {new Date().toISOString().slice(0, 10)}</Badge>
+            <Badge variant="outline" className="text-[10px]">最近交易日 {lastTradingDay}</Badge>
           </div>
         </CardHeader>
         <CardContent className="p-0">

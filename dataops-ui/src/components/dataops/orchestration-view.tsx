@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { PIPELINE_RUNS, SCHEDULES, TABLES, PipelineRun } from '@/lib/dataops/mock-data'
+import { PIPELINE_RUNS, SCHEDULES, TABLES, PipelineRun, isTradingDay, getLastTradingDay, TRADING_CALENDAR } from '@/lib/dataops/mock-data'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +9,7 @@ import { Progress } from '@/components/ui/progress'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu'
 import { RunDetailSheet } from './run-detail-sheet'
-import { Play, Clock, CheckCircle2, XCircle, SkipForward, Loader2, Calendar, GitBranch, ChevronRight, ArrowDown, Activity, ZoomIn, ZoomOut, Move, GripVertical, ChevronUp, ChevronDown, Maximize2, Zap, MoreHorizontal, Timer, ArrowRight } from 'lucide-react'
+import { Play, Clock, CheckCircle2, XCircle, SkipForward, Loader2, Calendar, GitBranch, ChevronRight, ArrowDown, Activity, ZoomIn, ZoomOut, Move, GripVertical, ChevronUp, ChevronDown, Maximize2, Zap, MoreHorizontal, Timer, ArrowRight, AlertTriangle } from 'lucide-react'
 import { formatDuration, formatRows, runStatusClass, triggerClass } from '@/lib/dataops/styles'
 import { toast } from 'sonner'
 
@@ -127,8 +127,18 @@ export function OrchestrationView({ onRunTable }: { onRunTable?: (t: string) => 
     setDetailOpen(true)
   }
 
+  const isTodayTradingDay = isTradingDay()
+
   return (
     <div className="space-y-4">
+      {/* Non-trading day notice */}
+      {!isTodayTradingDay && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 text-sm">
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+          <span className="text-sky-700 dark:text-sky-300 font-medium">当前为非交易日</span>
+          <span className="text-sky-600 dark:text-sky-400">，执行 daily 前请确认。最近交易日: {getLastTradingDay()}</span>
+        </div>
+      )}
       <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1 w-fit">
         {([['history', '执行历史'], ['dag', 'DAG 依赖图'], ['schedules', '调度计划']] as const).map(([k, l]) => (
           <button
@@ -1022,7 +1032,21 @@ function HistoryView({ onRunTable, onOpenDetail }: { onRunTable?: (t: string) =>
 
   const handleDailyExecute = () => {
     setDailyLoading(true)
-    toast.success('已触发 daily 全量执行')
+    // Check if today is a trading day
+    if (!isTradingDay()) {
+      toast.warning('当前为非交易日，确认执行？', {
+        description: `最近交易日: ${getLastTradingDay()} · 点击确认将继续执行`,
+        duration: 5000,
+        action: {
+          label: '确认执行',
+          onClick: () => {
+            toast.success('已触发 daily 全量执行（非交易日）')
+          },
+        },
+      })
+    } else {
+      toast.success('已触发 daily 全量执行')
+    }
     setTimeout(() => setDailyLoading(false), 3000)
   }
 
@@ -1069,7 +1093,7 @@ function HistoryView({ onRunTable, onOpenDetail }: { onRunTable?: (t: string) =>
             {/* Execute daily button with loading state */}
             <Button
               size="sm"
-              className="h-9 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className={`h-9 text-xs gap-1.5 text-white ${isTradingDay() ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-500 hover:bg-amber-600'}`}
               onClick={handleDailyExecute}
               disabled={dailyLoading}
             >
@@ -1079,6 +1103,7 @@ function HistoryView({ onRunTable, onOpenDetail }: { onRunTable?: (t: string) =>
                 <Zap className="h-3.5 w-3.5" />
               )}
               {dailyLoading ? '执行中...' : '执行 daily'}
+              {!isTradingDay() && <AlertTriangle className="h-3 w-3 ml-0.5" />}
             </Button>
 
             {/* Last execution time */}
@@ -1131,7 +1156,25 @@ function HistoryView({ onRunTable, onOpenDetail }: { onRunTable?: (t: string) =>
                   } hover:bg-sky-50/70 dark:hover:bg-sky-950/30 hover:shadow-sm`}
                 >
                   <div className="font-mono text-zinc-400">{r.id}</div>
-                  <div className="font-mono truncate" title={r.table}>{r.table}</div>
+                  <div className="font-mono truncate flex items-center gap-1.5" title={r.table}>
+                    {r.table}
+                    {/* Trading day badge: check if the run date is a trading day */}
+                    {(() => {
+                      const runDate = r.startedAt.slice(0, 10)
+                      const runDay = new Date(runDate).getDay()
+                      const isRunTradingDay = runDay >= 1 && runDay <= 5
+                      return (
+                        <span className={`inline-flex items-center gap-0.5 px-1 py-0 rounded text-[8px] font-medium flex-shrink-0 ${
+                          isRunTradingDay
+                            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'
+                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500'
+                        }`}>
+                          <span className={`h-1 w-1 rounded-full ${isRunTradingDay ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                          {isRunTradingDay ? 'T' : '休'}
+                        </span>
+                      )
+                    })()}
+                  </div>
                   <div><Badge variant="outline" className={`text-[10px] py-0 px-1.5 ${triggerClass(r.trigger)}`}>{r.trigger}</Badge></div>
                   <div>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${statusPillClass(r.status)}`}>

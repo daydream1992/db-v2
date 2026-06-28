@@ -17,7 +17,7 @@ import { KeyboardHelp } from '@/components/dataops/keyboard-help'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import { TABLES, ALERTS, PIPELINE_RUNS } from '@/lib/dataops/mock-data'
+import { TABLES, ALERTS, PIPELINE_RUNS, isTradingDay, getLastTradingDay, TRADING_CALENDAR } from '@/lib/dataops/mock-data'
 import { APP_CONFIG } from '@/lib/dataops/config'
 import { useRealtimeAlerts } from '@/hooks/use-realtime-alerts'
 import { toast } from 'sonner'
@@ -134,6 +134,27 @@ export default function Home() {
             <span className="text-xs text-zinc-500">DuckDB 已连接</span>
             <span className="sr-only">数据库连接状态：已连接</span>
           </div>
+          {/* 交易日历指示器 */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium cursor-default ${
+                isTradingDay()
+                  ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border border-zinc-200 dark:border-zinc-700'
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${isTradingDay() ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                {isTradingDay() ? '交易日' : '休市'}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              <div className="space-y-1">
+                <div className="font-medium">交易日历</div>
+                <div>最近交易日: {getLastTradingDay()}</div>
+                <div>下一交易日: {TRADING_CALENDAR.nextTradingDay}</div>
+                <div>今日状态: {isTradingDay() ? '交易日' : '非交易日'}</div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
           <div className="ml-auto flex items-center gap-1">
             <button
               onClick={() => setCmdOpen(true)}

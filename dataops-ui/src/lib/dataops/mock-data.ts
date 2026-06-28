@@ -1404,6 +1404,60 @@ export function getColumnLintIssues(table: TableMeta): { column: string; rule: s
   return issues
 }
 
+// ─── 交易日历 Mock 数据 & 工具函数 ──────────────────────────
+export const TRADING_CALENDAR = {
+  /** 最近交易日 */
+  latestTradingDay: mockDate(0),
+  /** 今天是否为交易日 (简化版: 周一~周五) */
+  isTradingDay: new Date().getDay() >= 1 && new Date().getDay() <= 5,
+  /** 最近 10 个交易日 */
+  recentDays: (() => {
+    const d = new Date()
+    const result: string[] = []
+    // If today is not a trading day, start looking from yesterday
+    if (d.getDay() === 0 || d.getDay() === 6) {
+      d.setDate(d.getDate() - 1)
+    }
+    while (result.length < 10) {
+      const day = d.getDay()
+      if (day >= 1 && day <= 5) {
+        result.unshift(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+      }
+      d.setDate(d.getDate() - 1)
+    }
+    return result
+  })(),
+  /** 下一交易日 */
+  nextTradingDay: (() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })(),
+}
+
+/** 判断指定日期是否为交易日 (简化版: 周一~周五, 真实环境应查 trading_calendar 表) */
+export function isTradingDay(date?: Date): boolean {
+  const d = date || new Date()
+  const day = d.getDay()
+  return day >= 1 && day <= 5 // Mon-Fri (simplified, real: check calendar)
+}
+
+/** 获取最近交易日 (YYYY-MM-DD) */
+export function getLastTradingDay(): string {
+  const d = new Date()
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** 获取下一交易日 (YYYY-MM-DD) */
+export function getNextTradingDay(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 // 新鲜度分布（用于 Analytics 视图）
 export const FRESHNESS_DISTRIBUTION: { freshness: string; count: number; color: string }[] = [
   { freshness: '最新', count: 24, color: 'emerald' },
