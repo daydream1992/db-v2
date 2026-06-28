@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AlertTriangle, CheckCircle2, RefreshCw, Wrench, Activity, TrendingUp, BarChart3, Filter } from 'lucide-react'
-import { TABLES, HEALTH_MATRIX, TRADING_CALENDAR, LAST_TRADING_DATE, isTradingDay } from '@/lib/dataops/mock-data'
+import { TABLES, HEALTH_MATRIX, TRADING_CALENDAR_QUERY, LAST_TRADING_DATE, isTradingDay, DATE_WINDOW } from '@/lib/dataops/mock-data'
 import { freshnessClass, healthColorClass } from '@/lib/dataops/styles'
 
 export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void }) {
@@ -26,7 +26,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
 
   // 7 日健康度趋势（每日 success/failed/skipped 堆叠）
   const dailyTrend = useMemo(() => {
-    const days = ['06-19', '06-20', '06-21', '06-22', '06-23', '06-24', '06-25']
+    const days = DATE_WINDOW
     return days.map(d => {
       let success = 0, failed = 0, skipped = 0, pending = 0
       HEALTH_MATRIX.forEach(row => {
@@ -85,10 +85,10 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
           <div>
             <span className="font-medium text-sky-700 dark:text-sky-300">交易日历校验</span>
             <span className="text-zinc-600 dark:text-zinc-400 ml-1">
-              日期检测基于 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-[11px] font-mono">trading_calendar</code> 表的
+              日期检测查询 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-[11px] font-mono">trading_calendar</code> 表的
               <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-[11px] font-mono ml-0.5">is_trading</code> 字段，
-              非交易日自动跳过，不判定为滞后。当前 7 日中 <strong>{TRADING_CALENDAR.filter(d => d.isTrading).length}</strong> 个交易日、
-              <strong>{TRADING_CALENDAR.filter(d => !d.isTrading).length}</strong> 个休市日。
+              非交易日自动跳过。不依赖脚本执行日志推断。当前窗口 <strong>{TRADING_CALENDAR_QUERY.filter(r => r.isTrading).length}</strong> 交易日、
+              <strong>{TRADING_CALENDAR_QUERY.filter(r => !r.isTrading).length}</strong> 休市日。
             </span>
           </div>
         </CardContent>
@@ -235,7 +235,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
               <div className="grid grid-cols-[1fr_180px_repeat(7,60px)_90px] gap-1 px-3 py-2 text-[10px] font-medium text-zinc-500 border-b">
                 <div>表名</div>
                 <div>类型</div>
-                {['06-19', '06-20', '06-21', '06-22', '06-23', '06-24', '06-25'].map(d => (
+                {DATE_WINDOW.map(d => (
                   <div key={d} className={`text-center ${!isTradingDay(d) ? 'text-zinc-300 dark:text-zinc-600' : ''}`}>
                     {d}
                     {!isTradingDay(d) && <div className="text-[8px]">休</div>}

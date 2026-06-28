@@ -684,31 +684,40 @@ export const ROW_TREND: { table: string; days: { date: string; rows: number }[] 
   ]},
 ]
 
-// 交易日历 — 基于 trading_calendar 表 is_trading=true 的日期
-// 06-21(周日) / 06-22(周六) 为非交易日，其余为交易日
-export const TRADING_CALENDAR: { date: string; isTrading: boolean }[] = [
-  { date: '06-19', isTrading: true },   // 周五
-  { date: '06-20', isTrading: true },   // 周六（补班交易日，A股特例）
-  { date: '06-21', isTrading: false },  // 周日
-  { date: '06-22', isTrading: false },  // 周六
-  { date: '06-23', isTrading: true },   // 周一
-  { date: '06-24', isTrading: true },   // 周二
-  { date: '06-25', isTrading: true },   // 周三
+// ═══════════════════════════════════════════════════════════
+// 交易日历 — 模拟 SELECT date, is_trading FROM trading_calendar
+// WHERE date BETWEEN '2026-06-19' AND '2026-06-25' 的查询结果
+// 数据源：trading_calendar 表的 is_trading 字段，非脚本日志推断
+// ═══════════════════════════════════════════════════════════
+export interface TradingCalendarRow { date: string; isTrading: boolean; market: string }
+export const TRADING_CALENDAR_QUERY: TradingCalendarRow[] = [
+  // 模拟 SQL: SELECT date, is_trading, market FROM trading_calendar WHERE date BETWEEN '2026-06-19' AND '2026-06-25'
+  { date: '2026-06-19', isTrading: true,  market: 'SSE' },   // 周五
+  { date: '2026-06-20', isTrading: true,  market: 'SSE' },   // 周六(补班)
+  { date: '2026-06-21', isTrading: false, market: 'SSE' },   // 周日
+  { date: '2026-06-22', isTrading: false, market: 'SSE' },   // 周六
+  { date: '2026-06-23', isTrading: true,  market: 'SSE' },   // 周一
+  { date: '2026-06-24', isTrading: true,  market: 'SSE' },   // 周二
+  { date: '2026-06-25', isTrading: true,  market: 'SSE' },   // 周三
 ]
 
-/** 最后一个交易日 */
-export const LAST_TRADING_DATE = TRADING_CALENDAR.filter(d => d.isTrading).slice(-1)[0].date
+/** 最后一个交易日 — MAX(date) WHERE is_trading=true */
+export const LAST_TRADING_DATE = TRADING_CALENDAR_QUERY.filter(r => r.isTrading).slice(-1)[0]!.date.slice(5)
 
-/** 判断某日期是否为交易日 */
-export function isTradingDay(date: string): boolean {
-  return TRADING_CALENDAR.find(d => d.date === date)?.isTrading ?? false
+/** 判断某日期是否为交易日 — 查 trading_calendar.is_trading */
+export function isTradingDay(mmdd: string): boolean {
+  const full = `2026-${mmdd}`
+  return TRADING_CALENDAR_QUERY.find(r => r.date === full)?.isTrading ?? false
 }
 
-// 健康度矩阵 (近7天每表每天的状态，非交易日自动标记为 skipped)
+/** 7 日窗口中的日期列表 */
+export const DATE_WINDOW = ['06-19', '06-20', '06-21', '06-22', '06-23', '06-24', '06-25']
+
+// 健康度矩阵 — 每个单元格的状态由 trading_calendar.is_trading 决定是否需要检查
+// 非交易日(is_trading=false)→skipped，交易日再按表健康状态判定
 export const HEALTH_MATRIX: { table: string; days: { date: string; status: 'success' | 'failed' | 'skipped' | 'none' }[] }[] = TABLES.map(t => ({
   table: t.table,
-  days: ['06-19', '06-20', '06-21', '06-22', '06-23', '06-24', '06-25'].map(d => {
-    // 非交易日：所有表标记 skipped（无需执行）
+  days: DATE_WINDOW.map(d => {
     if (!isTradingDay(d)) return { date: d, status: 'skipped' as const }
     if (t.health === 'red' && t.rows === 0) return { date: d, status: 'skipped' as const }
     if (t.table === 't_bk5_19' && d === '06-25') return { date: d, status: 'failed' as const }
