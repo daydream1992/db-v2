@@ -8,13 +8,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Search, FileText, Radio, Pause, Play, Trash2, Activity, Loader2, CheckCircle2, XCircle, Zap, Wifi, WifiOff, Download, ArrowDownToLine, ChevronDown, ChevronRight, ChevronUp, Filter, Copy, Layers, ArrowUp } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Search, FileText, Radio, Pause, Play, Trash2, Activity, Loader2, CheckCircle2, XCircle, Zap, Wifi, WifiOff, Download, ArrowDownToLine, ChevronDown, ChevronRight, ChevronUp, Filter, Copy, Layers, ArrowUp, Clock, AlertTriangle, Bug, Info, ArrowDown } from 'lucide-react'
 import { useLogStreamer } from '@/hooks/use-log-streamer'
 import { toast } from 'sonner'
 
 // ── Constants ──────────────────────────────────────────────────
 const ROW_HEIGHT = 28
-const GROUP_HEADER_HEIGHT = 36
+const GROUP_HEADER_HEIGHT = 40
 const BUFFER_COUNT = 8
 const SCROLL_THRESHOLD = 150 // px from bottom to show scroll-to-bottom button
 
@@ -59,6 +60,7 @@ export function LogsView() {
   const [groupByRun, setGroupByRun] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [hoveredLogId, setHoveredLogId] = useState<string | null>(null)
 
   // Virtual scroll state
   const [scrollTop, setScrollTop] = useState(0)
@@ -350,6 +352,14 @@ export function LogsView() {
     })
   }
 
+  const expandAllGroups = () => {
+    setCollapsedGroups(new Set())
+  }
+
+  const collapseAllGroups = () => {
+    setCollapsedGroups(new Set(groups.map(g => g.runId)))
+  }
+
   const scrollToBottom = useCallback(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({
@@ -370,9 +380,9 @@ export function LogsView() {
 
   // ── Group status helpers ─────────────────────────────────────
   const getGroupBorderColor = (group: LogGroup) => {
-    if (group.hasError) return 'border-l-2 border-rose-400'
-    if (group.hasWarning) return 'border-l-2 border-amber-400'
-    return 'border-l-2 border-emerald-400'
+    if (group.hasError) return 'border-l-[3px] border-rose-500'
+    if (group.hasWarning) return 'border-l-[3px] border-amber-500'
+    return 'border-l-[3px] border-emerald-500'
   }
 
   const getGroupStatusDot = (group: LogGroup) => {
@@ -381,15 +391,41 @@ export function LogsView() {
     return 'bg-emerald-500'
   }
 
-  // ── Row left border color ────────────────────────────────────
+  const getGroupStatus = (group: LogGroup): 'failed' | 'warning' | 'completed' => {
+    if (group.hasError) return 'failed'
+    if (group.hasWarning) return 'warning'
+    return 'completed'
+  }
+
+  const getGroupDuration = (group: LogGroup): string => {
+    if (!group.firstTs || !group.lastTs) return '—'
+    const start = new Date(group.firstTs).getTime()
+    const end = new Date(group.lastTs).getTime()
+    const sec = Math.round((end - start) / 1000)
+    if (sec < 60) return `${sec}s`
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    if (m < 60) return `${m}m ${s}s`
+    const h = Math.floor(m / 60)
+    return `${h}h ${m % 60}m`
+  }
+
+  // ── Row left border color (enhanced with thicker border + bg tint) ──
   const getLevelBorder = (l: LogItem) => {
     switch (l.level) {
-      case 'ERROR': return 'border-l-2 border-rose-400'
-      case 'WARNING': return 'border-l-2 border-amber-400'
-      case 'INFO': return 'border-l-2 border-emerald-400'
-      case 'DEBUG': return 'border-l-2 border-zinc-300 dark:border-zinc-600'
-      default: return 'border-l-2 border-zinc-200 dark:border-zinc-700'
+      case 'ERROR': return 'border-l-[3px] border-rose-500'
+      case 'WARNING': return 'border-l-[3px] border-amber-500'
+      case 'INFO': return 'border-l-[3px] border-sky-500'
+      case 'DEBUG': return 'border-l-[3px] border-zinc-300 dark:border-zinc-600'
+      default: return 'border-l-[3px] border-zinc-200 dark:border-zinc-700'
     }
+  }
+
+  // ── Timestamp recency check ─────────────────────────────────
+  const isRecentLog = (ts: string): boolean => {
+    const logTime = new Date(ts).getTime()
+    const now = Date.now()
+    return (now - logTime) < 60000 // within last minute
   }
 
   // ── Render ───────────────────────────────────────────────────
@@ -535,9 +571,9 @@ export function LogsView() {
         </Card>
       )}
 
-      {/* 筛选栏 + 级别 chips + 分组切换 */}
+      {/* 筛选栏 + 级别 pills + 分组切换 */}
       <Card>
-        <CardContent className="p-3 space-y-2">
+        <CardContent className="p-3 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
@@ -568,6 +604,32 @@ export function LogsView() {
               )}
             </Button>
 
+            {/* Expand/Collapse all when grouped */}
+            {groupByRun && groupCount > 0 && (
+              <div className="flex items-center gap-1">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-9 w-9 p-0" onClick={expandAllGroups}>
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>展开所有组</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-9 w-9 p-0" onClick={collapseAllGroups}>
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>折叠所有组</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            )}
+
             <Button variant="outline" size="sm" className="h-9 text-xs" onClick={handleExport} disabled={filtered.length === 0} title="导出为 .log 文件">
               <Download className="h-3.5 w-3.5 mr-1" />导出
             </Button>
@@ -576,14 +638,14 @@ export function LogsView() {
               {liveMode && streamer.logs.length > 0 && <span className="ml-1 text-rose-500">·{streamer.logs.length} live</span>}
             </Badge>
           </div>
-          {/* 级别 chips */}
+          {/* 级别 pills — enhanced toggle pills */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[11px] text-zinc-400 flex items-center gap-1 mr-1"><Filter className="h-3 w-3" />级别:</span>
-            <LevelChip label="全部" count={allLogs.length} active={level === 'all'} onClick={() => setLevel('all')} color="zinc" />
-            <LevelChip label="ERROR" count={stats.ERROR} active={level === 'ERROR'} onClick={() => setLevel('ERROR')} color="rose" />
-            <LevelChip label="WARNING" count={stats.WARNING} active={level === 'WARNING'} onClick={() => setLevel('WARNING')} color="amber" />
-            <LevelChip label="INFO" count={stats.INFO} active={level === 'INFO'} onClick={() => setLevel('INFO')} color="emerald" />
-            <LevelChip label="DEBUG" count={stats.DEBUG} active={level === 'DEBUG'} onClick={() => setLevel('DEBUG')} color="sky" />
+            <LevelPill label="全部" count={allLogs.length} active={level === 'all'} onClick={() => setLevel('all')} color="zinc" />
+            <LevelPill label="ERROR" count={stats.ERROR} active={level === 'ERROR'} onClick={() => setLevel('ERROR')} color="rose" icon={<Bug className="h-3 w-3" />} />
+            <LevelPill label="WARNING" count={stats.WARNING} active={level === 'WARNING'} onClick={() => setLevel('WARNING')} color="amber" icon={<AlertTriangle className="h-3 w-3" />} />
+            <LevelPill label="INFO" count={stats.INFO} active={level === 'INFO'} onClick={() => setLevel('INFO')} color="sky" icon={<Info className="h-3 w-3" />} />
+            <LevelPill label="DEBUG" count={stats.DEBUG} active={level === 'DEBUG'} onClick={() => setLevel('DEBUG')} color="zinc" icon={<Bug className="h-3 w-3" />} />
           </div>
         </CardContent>
       </Card>
@@ -613,6 +675,9 @@ export function LogsView() {
                   <Layers className="h-3 w-3 mr-0.5" /> {groupCount} 组
                 </Badge>
               )}
+              <Badge variant="outline" className="text-[10px] text-zinc-500 border-zinc-300 ml-2 font-mono">
+                {renderedCount} rendered
+              </Badge>
             </CardTitle>
             <div className="flex items-center gap-2 text-xs">
               <div className="flex items-center gap-1.5">
@@ -637,7 +702,7 @@ export function LogsView() {
             ) : (
               <div className="relative" style={{ height: totalHeight }}>
                 <div className="px-3 py-2 text-xs">
-                  {visibleItems.map(item => {
+                  {visibleItems.map((item, _visibleIdx) => {
                     if (item.type === 'group-header' && item.group) {
                       return (
                         <GroupHeader
@@ -647,6 +712,8 @@ export function LogsView() {
                           onToggle={() => toggleGroupCollapse(item.group!.runId)}
                           borderColor={getGroupBorderColor(item.group)}
                           statusDot={getGroupStatusDot(item.group)}
+                          status={getGroupStatus(item.group)}
+                          duration={getGroupDuration(item.group)}
                           style={{ position: 'sticky', top: 0, zIndex: 10 }}
                           virtualTop={item.top}
                         />
@@ -661,8 +728,12 @@ export function LogsView() {
                           top={item.top}
                           isExpanded={expandedRows.has(item.log.id)}
                           isCopied={copiedId === item.log.id}
+                          isHovered={hoveredLogId === item.log.id}
+                          lineNumber={item.logIndex !== undefined ? item.logIndex + 1 : 0}
+                          isRecent={isRecentLog(item.log.ts)}
                           onToggleExpand={toggleExpand}
                           onCopy={copyLog}
+                          onHover={setHoveredLogId}
                         />
                       )
                     }
@@ -673,7 +744,7 @@ export function LogsView() {
             )}
           </div>
 
-          {/* Floating scroll buttons */}
+          {/* Floating scroll-to-bottom button (enhanced) */}
           {filtered.length > 0 && !isNearTop && (
             <button
               onClick={scrollToTop}
@@ -686,10 +757,10 @@ export function LogsView() {
           {filtered.length > 0 && !isNearBottom && (
             <button
               onClick={scrollToBottom}
-              className="absolute bottom-3 right-3 z-20 h-9 w-9 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-lg flex items-center justify-center text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:shadow-xl transition-all"
+              className="absolute bottom-3 right-3 z-20 h-9 w-9 rounded-full bg-sky-600 hover:bg-sky-700 text-white shadow-lg flex items-center justify-center transition-all hover:shadow-xl"
               title="滚动到底部"
             >
-              <ChevronDown className="h-4 w-4" />
+              <ArrowDown className="h-4 w-4" />
             </button>
           )}
         </CardContent>
@@ -698,13 +769,15 @@ export function LogsView() {
   )
 }
 
-// ── GroupHeader Component (with sticky support) ───────────────
+// ── GroupHeader Component (enhanced with run_id badge, duration, status) ────
 function GroupHeader({
   group,
   isCollapsed,
   onToggle,
   borderColor,
   statusDot,
+  status,
+  duration,
   style,
   virtualTop,
 }: {
@@ -713,14 +786,23 @@ function GroupHeader({
   onToggle: () => void
   borderColor: string
   statusDot: string
+  status: 'failed' | 'warning' | 'completed'
+  duration: string
   style: React.CSSProperties
   virtualTop: number
 }) {
   const timeRange = group.firstTs.slice(11) + ' → ' + group.lastTs.slice(11)
+
+  const statusBadge = {
+    failed: { cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300', icon: <XCircle className="h-3 w-3 mr-0.5" />, text: '失败' },
+    warning: { cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300', icon: <AlertTriangle className="h-3 w-3 mr-0.5" />, text: '警告' },
+    completed: { cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300', icon: <CheckCircle2 className="h-3 w-3 mr-0.5" />, text: '完成' },
+  }[status]
+
   return (
     <div
       style={{ ...style, position: 'absolute', top: virtualTop, left: 0, right: 0, willChange: 'transform' }}
-      className={`flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded cursor-pointer select-none ${borderColor}`}
+      className={`flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800/90 rounded cursor-pointer select-none ${borderColor} hover:bg-zinc-200 dark:hover:bg-zinc-700/90 transition-colors`}
       onClick={onToggle}
     >
       {/* Collapse toggle */}
@@ -733,8 +815,22 @@ function GroupHeader({
       {/* Status dot */}
       <span className={`h-2 w-2 rounded-full flex-shrink-0 ${statusDot}`} />
 
-      {/* Run ID */}
-      <span className="font-mono text-xs font-medium text-zinc-700 dark:text-zinc-300">{group.runId}</span>
+      {/* Run ID as clickable badge */}
+      <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 h-5 border-sky-300 text-sky-700 dark:text-sky-400 dark:border-sky-700 cursor-pointer hover:bg-sky-50 dark:hover:bg-sky-950/30">
+        {group.runId}
+      </Badge>
+
+      {/* Status badge */}
+      <span className={`inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium ${statusBadge.cls}`}>
+        {statusBadge.icon}
+        {statusBadge.text}
+      </span>
+
+      {/* Duration */}
+      <span className="flex items-center gap-0.5 text-[10px] text-zinc-500">
+        <Clock className="h-2.5 w-2.5" />
+        {duration}
+      </span>
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -750,32 +846,37 @@ function GroupHeader({
   )
 }
 
-// ── MemoizedLogRow Component ──────────────────────────────────
+// ── MemoizedLogRow Component (enhanced with line numbers, monospace, copy on hover, timestamp highlighting) ──
 interface LogRowProps {
   log: LogItem
   height: number
   top: number
   isExpanded: boolean
   isCopied: boolean
+  isHovered: boolean
+  lineNumber: number
+  isRecent: boolean
   onToggleExpand: (id: string) => void
   onCopy: (msg: string, id: string) => void
+  onHover: (id: string | null) => void
 }
 
-const LogRowInner = ({ log, height, top, isExpanded, isCopied, onToggleExpand, onCopy }: LogRowProps) => {
+const LogRowInner = ({ log, height, top, isExpanded, isCopied, isHovered, lineNumber, isRecent, onToggleExpand, onCopy, onHover }: LogRowProps) => {
   const l = log
   const isLive = l.isLive
   const hasLong = l.message.length > 80
   const levelBorder = getLevelBorderStatic(l.level)
   const levelCls = levelColorStatic(l.level)
   const bgCls =
-    l.level === 'ERROR' ? 'bg-rose-50 dark:bg-rose-950/30' :
-    l.level === 'WARNING' ? 'bg-amber-50 dark:bg-amber-950/20' :
+    l.level === 'ERROR' ? 'bg-rose-50/80 dark:bg-rose-950/30' :
+    l.level === 'WARNING' ? 'bg-amber-50/80 dark:bg-amber-950/20' :
     isLive ? 'bg-sky-50/50 dark:bg-sky-950/20' :
-    'hover:bg-zinc-50 dark:hover:bg-zinc-900/40'
+    isHovered ? 'bg-zinc-50 dark:bg-zinc-800/50' :
+    ''
 
   return (
     <div
-      className={`group row-hover-gradient flex gap-2 py-0.5 px-2 rounded ${levelBorder} ${bgCls}`}
+      className={`group flex gap-2 py-0.5 px-2 rounded-sm transition-colors ${levelBorder} ${bgCls}`}
       style={{
         position: 'absolute',
         top,
@@ -786,14 +887,35 @@ const LogRowInner = ({ log, height, top, isExpanded, isCopied, onToggleExpand, o
         contentVisibility: 'auto',
         containIntrinsicSize: `${ROW_HEIGHT}px`,
       }}
+      onMouseEnter={() => onHover(l.id)}
+      onMouseLeave={() => onHover(null)}
     >
-      <span className="text-zinc-400 flex-shrink-0 w-20">{l.ts.slice(5)}</span>
-      <span className={`flex-shrink-0 w-20 font-bold ${levelCls}`}>
+      {/* Line number */}
+      <span className="text-zinc-300 dark:text-zinc-600 flex-shrink-0 w-8 text-right select-none text-[10px] leading-6">{lineNumber}</span>
+
+      {/* Timestamp with recency highlighting */}
+      <span className={`flex-shrink-0 w-[7.5rem] text-[11px] leading-6 ${isRecent ? 'text-sky-600 dark:text-sky-400 font-medium' : 'text-zinc-400'}`}>
+        {l.ts.slice(5)}
+        {isRecent && <span className="ml-1 inline-block h-1 w-1 rounded-full bg-sky-500 animate-pulse" />}
+      </span>
+
+      {/* Level badge with icon */}
+      <span className={`flex-shrink-0 w-20 font-bold text-[11px] leading-6 flex items-center gap-0.5 ${levelCls}`}>
+        {l.level === 'ERROR' && <XCircle className="h-3 w-3" />}
+        {l.level === 'WARNING' && <AlertTriangle className="h-3 w-3" />}
+        {l.level === 'INFO' && <Info className="h-3 w-3" />}
+        {l.level === 'DEBUG' && <Bug className="h-3 w-3" />}
         {l.level}
         {isLive && <span className="ml-1 text-rose-500">●</span>}
       </span>
-      <span className="text-sky-600 dark:text-sky-400 flex-shrink-0 w-40 truncate" title={l.table}>{l.table}</span>
-      <span className={`text-zinc-700 dark:text-zinc-300 flex-1 ${!isExpanded && hasLong ? 'truncate' : ''}`}>{l.message}</span>
+
+      {/* Table name */}
+      <span className="text-sky-600 dark:text-sky-400 flex-shrink-0 w-40 truncate text-[11px] leading-6" title={l.table}>{l.table}</span>
+
+      {/* Message */}
+      <span className={`text-zinc-700 dark:text-zinc-300 flex-1 text-[11px] leading-6 ${!isExpanded && hasLong ? 'truncate' : ''}`}>{l.message}</span>
+
+      {/* Copy button per line (on hover) */}
       <div className="flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity relative">
         {hasLong && (
           <button onClick={() => onToggleExpand(l.id)} className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400" title={isExpanded ? '收起' : '展开'}>
@@ -819,36 +941,32 @@ const LogRowInner = ({ log, height, top, isExpanded, isCopied, onToggleExpand, o
 
 const MemoizedLogRow = React.memo(LogRowInner)
 
-// ── LevelChip Component ────────────────────────────────────────
-function LevelChip({ label, count, active, onClick, color }: { label: string; count: number; active: boolean; onClick: () => void; color: 'zinc' | 'rose' | 'amber' | 'emerald' | 'sky' }) {
+// ── LevelPill Component (enhanced toggle pills with icons) ──────
+function LevelPill({ label, count, active, onClick, color, icon }: { label: string; count: number; active: boolean; onClick: () => void; color: 'zinc' | 'rose' | 'amber' | 'sky'; icon?: React.ReactNode }) {
   const colorMap = {
-    zinc: active ? 'bg-zinc-700 text-white border-zinc-700' : 'text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800',
-    rose: active ? 'bg-rose-600 text-white border-rose-600' : 'text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-50 dark:hover:bg-rose-950/30',
-    amber: active ? 'bg-amber-500 text-white border-amber-500' : 'text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900 hover:bg-amber-50 dark:hover:bg-amber-950/30',
-    emerald: active ? 'bg-emerald-600 text-white border-emerald-600' : 'text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900 hover:bg-emerald-50 dark:hover:bg-emerald-950/30',
-    sky: active ? 'bg-sky-600 text-white border-sky-600' : 'text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900 hover:bg-sky-50 dark:hover:bg-sky-950/30',
+    zinc: active ? 'bg-zinc-700 text-white border-zinc-700 shadow-sm' : 'text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800',
+    rose: active ? 'bg-rose-600 text-white border-rose-600 shadow-sm' : 'text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-50 dark:hover:bg-rose-950/30',
+    amber: active ? 'bg-amber-500 text-white border-amber-500 shadow-sm' : 'text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900 hover:bg-amber-50 dark:hover:bg-amber-950/30',
+    sky: active ? 'bg-sky-600 text-white border-sky-600 shadow-sm' : 'text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900 hover:bg-sky-50 dark:hover:bg-sky-950/30',
   }
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-medium border transition-all ${colorMap[color]}`}
+      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono font-medium border transition-all ${colorMap[color]}`}
     >
+      {icon}
       {label}
-      <span className={`px-1 rounded text-[10px] ${active ? 'bg-white/20' : 'bg-zinc-100 dark:bg-zinc-800'}`}>{count}</span>
+      <span className={`px-1.5 rounded-full text-[10px] ${active ? 'bg-white/20' : 'bg-zinc-100 dark:bg-zinc-800'}`}>{count}</span>
     </button>
   )
 }
 
 // ── Utility Functions ──────────────────────────────────────────
-function levelColor(l: string): string {
-  return levelColorStatic(l)
-}
-
 function levelColorStatic(l: string): string {
   switch (l) {
     case 'ERROR': return 'text-rose-600'
     case 'WARNING': return 'text-amber-600'
-    case 'INFO': return 'text-emerald-600'
+    case 'INFO': return 'text-sky-600'
     case 'DEBUG': return 'text-zinc-400'
     default: return 'text-zinc-500'
   }
@@ -856,11 +974,11 @@ function levelColorStatic(l: string): string {
 
 function getLevelBorderStatic(level: string): string {
   switch (level) {
-    case 'ERROR': return 'border-l-2 border-rose-400'
-    case 'WARNING': return 'border-l-2 border-amber-400'
-    case 'INFO': return 'border-l-2 border-emerald-400'
-    case 'DEBUG': return 'border-l-2 border-zinc-300 dark:border-zinc-600'
-    default: return 'border-l-2 border-zinc-200 dark:border-zinc-700'
+    case 'ERROR': return 'border-l-[3px] border-rose-500'
+    case 'WARNING': return 'border-l-[3px] border-amber-500'
+    case 'INFO': return 'border-l-[3px] border-sky-500'
+    case 'DEBUG': return 'border-l-[3px] border-zinc-300 dark:border-zinc-600'
+    default: return 'border-l-[3px] border-zinc-200 dark:border-zinc-700'
   }
 }
 

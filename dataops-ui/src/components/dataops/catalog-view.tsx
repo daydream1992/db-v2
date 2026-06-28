@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Search, Filter, Play, RefreshCw, GitBranch, FileText, ListChecks, Database, Table2, History, AlertTriangle, CheckCircle2, XCircle, SkipForward, Copy, Share2, Network, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
+import { Search, Filter, Play, RefreshCw, GitBranch, FileText, ListChecks, Database, Table2, History, AlertTriangle, CheckCircle2, XCircle, SkipForward, Copy, Share2, Network, ZoomIn, ZoomOut, Maximize2, ChevronDown, ChevronRight, Clock, TrendingUp } from 'lucide-react'
 import { formatRows, freshnessClass, healthColorClass, typeBadgeClass, runStatusClass, triggerClass, formatDuration } from '@/lib/dataops/styles'
 import { toast } from 'sonner'
 
@@ -726,21 +726,93 @@ function DependencyGraphView() {
   )
 }
 
+// ─── Schedule badge colors ───
+const scheduleBadgeClass = (s: string): string => {
+  switch (s) {
+    case 'daily': return 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300'
+    case 'weekly': return 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300'
+    case 'monthly': return 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+    case 'once': return 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+    default: return 'bg-zinc-100 text-zinc-500'
+  }
+}
+
+// ─── Status pill badge ───
+const statusPillClass = (h: string): string => {
+  switch (h) {
+    case 'green': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+    case 'yellow': return 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+    case 'red': return 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+    case 'white': return 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+    default: return 'bg-zinc-100 text-zinc-500'
+  }
+}
+
+const statusLabel = (h: string): string => {
+  switch (h) {
+    case 'green': return '正常'
+    case 'yellow': return '延迟'
+    case 'red': return '异常'
+    case 'white': return 'once'
+    default: return h
+  }
+}
+
+// ─── Highlight matching text ───
+function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>
+  const lowerText = text.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  const idx = lowerText.indexOf(lowerQuery)
+  if (idx === -1) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-amber-200/70 dark:bg-amber-800/50 rounded-sm px-0.5">{text.slice(idx, idx + query.length)}</mark>
+      {text.slice(idx + query.length)}
+    </>
+  )
+}
+
+// ─── Format number with commas ───
+function formatRowsComma(n: number): string {
+  return n.toLocaleString()
+}
+
 export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string) => void; onRunTable?: (t: string) => void }) {
   const [search, setSearch] = useState('')
   const [dirFilter, setDirFilter] = useState<string>('all')
-  const [typeFilter, setTypeFilter] = useState<string>('all')
   const [healthFilter, setHealthFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<'dir' | 'rows' | 'freshness' | 'table'>('dir')
   const [selected, setSelected] = useState<TableMeta | null>(null)
+  const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [expandedDepGraph, setExpandedDepGraph] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list')
 
+  // Compute counts for filter badges
+  const counts = useMemo(() => {
+    const dirCounts: Record<string, number> = { all: TABLES.length }
+    const healthCounts: Record<string, number> = { all: TABLES.length }
+    TABLES.forEach(t => {
+      dirCounts[t.dir] = (dirCounts[t.dir] || 0) + 1
+      healthCounts[t.health] = (healthCounts[t.health] || 0) + 1
+    })
+    return { dir: dirCounts, health: healthCounts }
+  }, [])
+
+  // Statistics for the header
+  const stats = useMemo(() => {
+    const greenCount = TABLES.filter(t => t.health === 'green').length
+    const yellowCount = TABLES.filter(t => t.health === 'yellow').length
+    const redCount = TABLES.filter(t => t.health === 'red').length
+    const totalRows = TABLES.reduce((sum, t) => sum + t.rows, 0)
+    return { greenCount, yellowCount, redCount, totalRows, total: TABLES.length }
+  }, [])
+
   const filtered = useMemo(() => {
     const result = TABLES.filter(t => {
-      if (search && !t.table.includes(search.toLowerCase()) && !t.cn.includes(search)) return false
+      if (search && !t.table.toLowerCase().includes(search.toLowerCase()) && !t.cn.includes(search)) return false
       if (dirFilter !== 'all' && t.dir !== dirFilter) return false
-      if (typeFilter !== 'all' && t.type !== typeFilter) return false
       if (healthFilter !== 'all' && t.health !== healthFilter) return false
       return true
     })
@@ -756,62 +828,157 @@ export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string
       return a.sort.localeCompare(b.sort)
     })
     return result
-  }, [search, dirFilter, typeFilter, healthFilter, sortBy])
+  }, [search, dirFilter, healthFilter, sortBy])
+
+  const toggleRow = (tableName: string) => {
+    setExpandedRow(prev => prev === tableName ? null : tableName)
+  }
 
   const toggleDepGraph = (tableName: string) => {
     setExpandedDepGraph(prev => prev === tableName ? null : tableName)
   }
 
+  // Directory filter options with counts
+  const dirOptions = [
+    { v: 'all', l: '全部', count: counts.dir.all },
+    { v: '1_入库', l: '入库', count: counts.dir['1_入库'] || 0 },
+    { v: '2_计算', l: '计算', count: counts.dir['2_计算'] || 0 },
+    { v: '3_策略', l: '策略', count: counts.dir['3_策略'] || 0 },
+    { v: '4_工具', l: '工具', count: counts.dir['4_工具'] || 0 },
+  ]
+
+  // Health filter options with counts
+  const healthOptions = [
+    { v: 'all', l: '全部', count: counts.health.all },
+    { v: 'green', l: '正常', count: counts.health.green || 0 },
+    { v: 'yellow', l: '延迟', count: counts.health.yellow || 0 },
+    { v: 'red', l: '异常', count: counts.health.red || 0 },
+  ]
+
   return (
     <div className="space-y-4">
-      {/* 筛选栏 */}
+      {/* ── Statistics Header ── */}
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{stats.total} 表</span>
+        <span className="text-zinc-300 dark:text-zinc-600">·</span>
+        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300" variant="secondary">{stats.greenCount} 正常</Badge>
+        <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300" variant="secondary">{stats.yellowCount} 延迟</Badge>
+        <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 dark:bg-rose-950 dark:text-rose-300" variant="secondary">{stats.redCount} 异常</Badge>
+        <span className="text-zinc-300 dark:text-zinc-600">·</span>
+        <span className="text-xs text-zinc-500">总行数 <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">{formatRows(stats.totalRows)}</span></span>
+        <div className="ml-auto flex items-center gap-1">
+          <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-2.5 py-1 text-xs rounded transition-colors flex items-center gap-1 ${viewMode === 'list' ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}
+            >
+              <FileText className="h-3 w-3" /> 列表
+            </button>
+            <button
+              onClick={() => setViewMode('graph')}
+              className={`px-2.5 py-1 text-xs rounded transition-colors flex items-center gap-1 ${viewMode === 'graph' ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}
+            >
+              <Network className="h-3 w-3" /> 依赖图
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Search + Filter Bar ── */}
       <Card>
-        <CardContent className="p-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-              <Input
-                placeholder="搜索表名 / 中文名..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-9"
-              />
+        <CardContent className="p-3 space-y-3">
+          {/* Search input */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+            <Input
+              placeholder="搜索表名 / 中文名..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-9 h-9"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              >
+                <XCircle className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Directory filter pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-zinc-400 flex items-center gap-1 min-w-fit"><Filter className="h-3 w-3" />目录</span>
+            <div className="flex flex-wrap gap-1.5">
+              {dirOptions.map(o => (
+                <button
+                  key={o.v}
+                  onClick={() => setDirFilter(o.v)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition-all ${
+                    dirFilter === o.v
+                      ? 'bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 shadow-sm font-medium'
+                      : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                  }`}
+                >
+                  {o.l}
+                  <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-[10px] font-medium ${
+                    dirFilter === o.v
+                      ? 'bg-white/20 text-white dark:bg-black/20 dark:text-zinc-900'
+                      : 'bg-zinc-200 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'
+                  }`}>{o.count}</span>
+                </button>
+              ))}
             </div>
-            <FilterGroup label="目录" value={dirFilter} onChange={setDirFilter} options={[
-              { v: 'all', l: '全部' }, { v: '1_入库', l: '1_入库' }, { v: '2_计算', l: '2_计算' },
-            ]} />
-            <FilterGroup label="类型" value={typeFilter} onChange={setTypeFilter} options={[
-              { v: 'all', l: '全部' }, { v: '事实', l: '事实' }, { v: '维度', l: '维度' },
-              { v: '多表', l: '多表' }, { v: '孤儿', l: '孤儿' },
-            ]} />
-            <FilterGroup label="健康度" value={healthFilter} onChange={setHealthFilter} options={[
-              { v: 'all', l: '全部' }, { v: 'green', l: '正常' }, { v: 'yellow', l: '待查' }, { v: 'red', l: '异常' }, { v: 'white', l: 'once' },
-            ]} />
+          </div>
+
+          {/* Health filter pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-zinc-400 flex items-center gap-1 min-w-fit"><Filter className="h-3 w-3" />健康度</span>
+            <div className="flex flex-wrap gap-1.5">
+              {healthOptions.map(o => (
+                <button
+                  key={o.v}
+                  onClick={() => setHealthFilter(o.v)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition-all ${
+                    healthFilter === o.v
+                      ? o.v === 'green' ? 'bg-emerald-600 text-white shadow-sm font-medium'
+                        : o.v === 'yellow' ? 'bg-amber-500 text-white shadow-sm font-medium'
+                        : o.v === 'red' ? 'bg-rose-600 text-white shadow-sm font-medium'
+                        : 'bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900 shadow-sm font-medium'
+                      : o.v === 'green' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-950'
+                        : o.v === 'yellow' ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950'
+                        : o.v === 'red' ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950'
+                        : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                  }`}
+                >
+                  {o.v !== 'all' && <span className={`h-2 w-2 rounded-full ${
+                    o.v === 'green' ? 'bg-emerald-500'
+                      : o.v === 'yellow' ? 'bg-amber-500'
+                      : o.v === 'red' ? 'bg-rose-500'
+                      : 'bg-zinc-400'
+                  }`} />}
+                  {o.l}
+                  <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-[10px] font-medium ${
+                    healthFilter === o.v
+                      ? 'bg-white/20 text-white'
+                      : 'bg-white/80 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'
+                  }`}>{o.count}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sort + result count */}
+          <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-zinc-400 flex items-center gap-1"><Filter className="h-3 w-3" />排序</span>
+              <span className="text-xs text-zinc-400">排序</span>
               <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
                 {([['dir', '目录'], ['rows', '行数'], ['freshness', '新鲜度'], ['table', '表名']] as const).map(([k, l]) => (
-                  <button key={k} onClick={() => setSortBy(k)} className={`px-2 py-0.5 text-xs rounded transition-colors ${sortBy === k ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}>{l}</button>
+                  <button key={k} onClick={() => setSortBy(k)} className={`px-2 py-1 text-xs rounded transition-colors ${sortBy === k ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}>{l}</button>
                 ))}
               </div>
             </div>
             <Badge variant="secondary" className="ml-auto">{filtered.length} / {TABLES.length}</Badge>
-
-            {/* View mode toggle */}
-            <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
-              <button
-                onClick={() => setViewMode('list')}
-                className={`px-2.5 py-1 text-xs rounded transition-colors flex items-center gap-1 ${viewMode === 'list' ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}
-              >
-                <FileText className="h-3 w-3" /> 列表
-              </button>
-              <button
-                onClick={() => setViewMode('graph')}
-                className={`px-2.5 py-1 text-xs rounded transition-colors flex items-center gap-1 ${viewMode === 'graph' ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}
-              >
-                <Network className="h-3 w-3" /> 依赖图
-              </button>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -823,71 +990,219 @@ export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string
         /* 表格 */
         <Card>
           <CardContent className="p-0">
-            <ScrollArea className="h-[calc(100vh_-_280px)]">
-              <div className="min-w-[900px]">
-                <div className="grid grid-cols-[44px_1fr_120px_80px_90px_70px_90px_100px_110px_110px] gap-2 px-3 py-2 text-[11px] font-medium text-zinc-500 border-b sticky top-0 bg-card z-10">
+            <ScrollArea className="h-[calc(100vh_-_340px)]">
+              <div className="min-w-[960px]">
+                {/* Table header */}
+                <div className="grid grid-cols-[32px_44px_1fr_100px_80px_80px_70px_100px_110px_110px_36px] gap-1.5 px-3 py-2.5 text-xs font-medium text-zinc-500 border-b sticky top-0 bg-card z-10">
+                  <div />
                   <div>类型</div>
                   <div>表名 / 中文名</div>
-                  <div>脚本</div>
-                  <div>sort</div>
                   <div>目录</div>
-                  <div>schedule</div>
-                  <div>mode</div>
+                  <div>调度</div>
+                  <div>模式</div>
                   <div className="text-right">行数</div>
                   <div>最新日期</div>
-                  <div className="text-center">操作</div>
+                  <div className="text-center">状态</div>
+                  <div>脚本</div>
+                  <div />
                 </div>
-                {filtered.map(t => (
-                  <div key={t.table}>
-                    <button
-                      onClick={() => setSelected(t)}
-                      className="w-full grid grid-cols-[44px_1fr_120px_80px_90px_70px_90px_100px_110px_110px] gap-2 px-3 py-2 text-xs items-center border-b last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 text-left transition-colors"
-                    >
-                      <div><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${typeBadgeClass(t.type)}`}>{t.type}</span></div>
-                      <div className="min-w-0">
-                        <div className="font-mono font-medium truncate flex items-center gap-1.5">
-                          {t.table}
-                          {t.hasLintIssue && <span title="有 lint 违规" className="h-1.5 w-1.5 rounded-full bg-rose-500 flex-shrink-0" />}
+                {/* Table rows */}
+                {filtered.map((t, idx) => {
+                  const isExpanded = expandedRow === t.table
+                  const isDepGraph = expandedDepGraph === t.table
+                  const isEven = idx % 2 === 0
+                  return (
+                    <div key={t.table}>
+                      {/* Main row */}
+                      <div
+                        className={`grid grid-cols-[32px_44px_1fr_100px_80px_80px_70px_100px_110px_110px_36px] gap-1.5 px-3 py-2.5 text-xs items-center border-b cursor-pointer transition-all ${
+                          isExpanded
+                            ? 'bg-sky-50/80 dark:bg-sky-950/30 border-l-2 border-l-sky-500'
+                            : isEven
+                              ? 'bg-white dark:bg-zinc-950/20 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 border-l-2 border-l-transparent hover:border-l-sky-300'
+                              : 'bg-zinc-50/80 dark:bg-zinc-900/30 hover:bg-zinc-100/80 dark:hover:bg-zinc-900/50 border-l-2 border-l-transparent hover:border-l-sky-300'
+                        }`}
+                        onClick={() => toggleRow(t.table)}
+                      >
+                        {/* Expand chevron */}
+                        <div className="flex items-center justify-center">
+                          {isExpanded
+                            ? <ChevronDown className="h-3.5 w-3.5 text-sky-500" />
+                            : <ChevronRight className="h-3.5 w-3.5 text-zinc-300" />
+                          }
                         </div>
-                        <div className="text-[11px] text-zinc-500 truncate">{t.cn}</div>
-                      </div>
-                      <div className="font-mono text-[10px] text-zinc-500 truncate" title={t.script}>{t.script}</div>
-                      <div className="font-mono text-zinc-500">{t.sort}</div>
-                      <div className="text-zinc-500">{t.dir}</div>
-                      <div className="text-zinc-600 dark:text-zinc-400">{t.schedule}</div>
-                      <div><Badge variant="outline" className="text-[10px] py-0 px-1.5">{t.mode}</Badge></div>
-                      <div className="text-right font-mono text-zinc-600 dark:text-zinc-400">{formatRows(t.rows)}</div>
-                      <div className={`font-mono text-[11px] ${freshnessClass(t.freshness)}`}>{t.maxDate || '—'}</div>
-                      <div className="flex items-center justify-center gap-1" onClick={e => e.stopPropagation()}>
-                        <span className={`h-2.5 w-2.5 rounded-full ${healthColorClass(t.health).split(' ')[0]}`} title={t.freshness} />
-                        <button
-                          onClick={(e) => { e.stopPropagation(); toggleDepGraph(t.table) }}
-                          className={`p-1 rounded hover:bg-sky-100 dark:hover:bg-sky-900/30 transition-colors ${expandedDepGraph === t.table ? 'text-sky-600 bg-sky-50 dark:bg-sky-950/40' : 'text-zinc-400 hover:text-sky-500'}`}
-                          title="依赖图"
-                          aria-label="查看依赖图"
-                        >
-                          <Share2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </button>
-                    {/* Expanded dependency mini-graph */}
-                    {expandedDepGraph === t.table && (
-                      <div className="border-b bg-zinc-50/50 dark:bg-zinc-900/30 px-4 py-2 animate-fade-in">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Share2 className="h-3 w-3 text-fuchsia-500" />
-                          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">依赖关系图</span>
-                          <span className="text-[10px] text-zinc-400">上游 {t.dependsOn.length} · 下游 {t.downstream.length}</span>
-                          <div className="ml-auto flex items-center gap-3 text-[10px] text-zinc-400">
-                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-sky-200 dark:bg-sky-800 border border-sky-400" />上游</span>
-                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-fuchsia-200 dark:bg-fuchsia-800 border border-fuchsia-400" />当前</span>
-                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-200 dark:bg-emerald-800 border border-emerald-400" />下游</span>
+                        {/* Type badge */}
+                        <div><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${typeBadgeClass(t.type)}`}>{t.type}</span></div>
+                        {/* Table name + CN */}
+                        <div className="min-w-0">
+                          <div className="font-mono text-sm font-medium truncate flex items-center gap-1.5 text-zinc-800 dark:text-zinc-200">
+                            <HighlightText text={t.table} query={search} />
+                            {t.hasLintIssue && <span title="有 lint 违规" className="h-2 w-2 rounded-full bg-rose-500 flex-shrink-0" />}
+                          </div>
+                          <div className="text-[11px] text-zinc-500 truncate">
+                            <HighlightText text={t.cn} query={search} />
                           </div>
                         </div>
-                        <DependencyMiniGraph table={t} />
+                        {/* Directory */}
+                        <div className="text-zinc-600 dark:text-zinc-400 text-[11px]">{t.dir}</div>
+                        {/* Schedule badge */}
+                        <div>
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${scheduleBadgeClass(t.schedule)}`}>{t.schedule}</span>
+                        </div>
+                        {/* Mode */}
+                        <div><Badge variant="outline" className="text-[10px] py-0 px-1.5">{t.mode}</Badge></div>
+                        {/* Row count with commas */}
+                        <div className="text-right font-mono text-zinc-600 dark:text-zinc-400 text-[11px]" title={formatRowsComma(t.rows)}>{formatRows(t.rows)}</div>
+                        {/* Freshness / max date */}
+                        <div className={`font-mono text-[11px] ${freshnessClass(t.freshness)}`}>{t.maxDate || '—'}</div>
+                        {/* Status pill */}
+                        <div className="flex items-center justify-center">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${statusPillClass(t.health)}`}>
+                            <span className={`h-2.5 w-2.5 rounded-full ${
+                              t.health === 'green' ? 'bg-emerald-500'
+                                : t.health === 'yellow' ? 'bg-amber-500'
+                                : t.health === 'red' ? 'bg-rose-500'
+                                : 'bg-zinc-400'
+                            }`} />
+                            {statusLabel(t.health)}
+                          </span>
+                        </div>
+                        {/* Script */}
+                        <div className="font-mono text-[10px] text-zinc-400 truncate" title={t.script}>{t.script}</div>
+                        {/* Actions */}
+                        <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleDepGraph(t.table) }}
+                            className={`p-1 rounded hover:bg-sky-100 dark:hover:bg-sky-900/30 transition-colors ${isDepGraph ? 'text-sky-600 bg-sky-50 dark:bg-sky-950/40' : 'text-zinc-400 hover:text-sky-500'}`}
+                            title="依赖图"
+                            aria-label="查看依赖图"
+                          >
+                            <Share2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {/* Inline expanded detail panel */}
+                      <div
+                        className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                          isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
+                        }`}
+                      >
+                        <div className="px-4 py-3 bg-zinc-50/80 dark:bg-zinc-900/40 border-b">
+                          {/* Detail header */}
+                          <div className="flex items-center gap-3 mb-3">
+                            <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${typeBadgeClass(t.type)}`}>{t.type}</span>
+                            <span className="font-mono text-sm font-semibold text-zinc-800 dark:text-zinc-200">{t.table}</span>
+                            <span className="text-xs text-zinc-500">{t.cn}</span>
+                            <div className="ml-auto flex items-center gap-2">
+                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSelected(t)}>
+                                <FileText className="h-3 w-3 mr-1" />详情
+                              </Button>
+                              {onRunTable && (
+                                <Button size="sm" className="h-7 text-xs" onClick={() => onRunTable(t.table)}>
+                                  <Play className="h-3 w-3 mr-1" />执行
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Info grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                            <div className="rounded-lg bg-white dark:bg-zinc-800/60 p-2.5">
+                              <div className="text-[10px] text-zinc-400 mb-0.5">行数</div>
+                              <div className="font-mono text-sm font-semibold text-zinc-800 dark:text-zinc-200">{formatRowsComma(t.rows)}</div>
+                            </div>
+                            <div className="rounded-lg bg-white dark:bg-zinc-800/60 p-2.5">
+                              <div className="text-[10px] text-zinc-400 mb-0.5">最新日期</div>
+                              <div className={`font-mono text-sm font-semibold ${freshnessClass(t.freshness)}`}>{t.maxDate || '—'}</div>
+                            </div>
+                            <div className="rounded-lg bg-white dark:bg-zinc-800/60 p-2.5">
+                              <div className="text-[10px] text-zinc-400 mb-0.5">调度</div>
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="h-3 w-3 text-zinc-400" />
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${scheduleBadgeClass(t.schedule)}`}>{t.schedule}</span>
+                                <span className="text-[10px] text-zinc-400">·</span>
+                                <Badge variant="outline" className="text-[10px] py-0 px-1.5">{t.mode}</Badge>
+                              </div>
+                            </div>
+                            <div className="rounded-lg bg-white dark:bg-zinc-800/60 p-2.5">
+                              <div className="text-[10px] text-zinc-400 mb-0.5">健康度</div>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${statusPillClass(t.health)}`}>
+                                  <span className={`h-2.5 w-2.5 rounded-full ${
+                                    t.health === 'green' ? 'bg-emerald-500'
+                                      : t.health === 'yellow' ? 'bg-amber-500'
+                                      : t.health === 'red' ? 'bg-rose-500'
+                                      : 'bg-zinc-400'
+                                  }`} />
+                                  {statusLabel(t.health)}
+                                </span>
+                                <span className="text-[10px] text-zinc-400">{t.freshness}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Columns preview */}
+                          <div className="rounded-lg bg-white dark:bg-zinc-800/60 overflow-hidden">
+                            <div className="px-3 py-1.5 text-[10px] font-medium text-zinc-500 bg-zinc-50 dark:bg-zinc-900/50 border-b flex items-center gap-1">
+                              <Database className="h-3 w-3" />
+                              列定义 ({t.columns.length})
+                              <TrendingUp className="h-3 w-3 ml-2 text-zinc-300" />
+                              <span className="text-zinc-400">行数趋势: {formatRows(t.rows)} 行</span>
+                            </div>
+                            <div className="grid grid-cols-[1fr_80px_1fr_40px] gap-2 px-3 py-1 text-[10px] font-medium text-zinc-400 border-b">
+                              <div>列名</div><div>类型</div><div>中文</div><div className="text-center">可空</div>
+                            </div>
+                            <div className="max-h-32 overflow-y-auto">
+                              {t.columns.map(c => {
+                                const hasIssue = t.hasLintIssue && /[^\x00-\x7F]/.test(c.name)
+                                return (
+                                  <div key={c.name} className={`grid grid-cols-[1fr_80px_1fr_40px] gap-2 px-3 py-1 text-[10px] border-b last:border-0 font-mono ${hasIssue ? 'bg-rose-50/50 dark:bg-rose-950/20' : ''}`}>
+                                    <div className="truncate flex items-center gap-1" title={c.name}>
+                                      <span className={hasIssue ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-700 dark:text-zinc-300'}>{c.name}</span>
+                                      {hasIssue && <AlertTriangle className="h-2.5 w-2.5 text-rose-500 flex-shrink-0" />}
+                                    </div>
+                                    <div className="text-sky-600 dark:text-sky-400">{c.type}</div>
+                                    <div className="text-zinc-500 font-sans truncate">{c.cn}</div>
+                                    <div className="text-center text-zinc-400">{c.nullable ? '✓' : '—'}</div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Dependencies + last run */}
+                          <div className="mt-3 flex flex-wrap gap-2 text-[10px]">
+                            <span className="text-zinc-400">上游: {t.dependsOn.length > 0 ? t.dependsOn.join(', ') : '无'}</span>
+                            <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                            <span className="text-zinc-400">下游: {t.downstream.length > 0 ? t.downstream.join(', ') : '无'}</span>
+                            <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                            <span className="text-zinc-400">脚本: <span className="font-mono">{t.script}</span></span>
+                            <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                            <span className="text-zinc-400">去重键: <span className="font-mono">{t.dedupKey.join(', ') || '—'}</span></span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Expanded dependency mini-graph */}
+                      {isDepGraph && (
+                        <div className="border-b bg-zinc-50/50 dark:bg-zinc-900/30 px-4 py-2 animate-fade-in">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Share2 className="h-3 w-3 text-fuchsia-500" />
+                            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">依赖关系图</span>
+                            <span className="text-[10px] text-zinc-400">上游 {t.dependsOn.length} · 下游 {t.downstream.length}</span>
+                            <div className="ml-auto flex items-center gap-3 text-[10px] text-zinc-400">
+                              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-sky-200 dark:bg-sky-800 border border-sky-400" />上游</span>
+                              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-fuchsia-200 dark:bg-fuchsia-800 border border-fuchsia-400" />当前</span>
+                              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-200 dark:bg-emerald-800 border border-emerald-400" />下游</span>
+                            </div>
+                          </div>
+                          <DependencyMiniGraph table={t} />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
                 {filtered.length === 0 && (
                   <div className="py-16 text-center text-zinc-400 text-sm">无匹配表</div>
                 )}
@@ -907,24 +1222,7 @@ export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string
   )
 }
 
-function FilterGroup({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { v: string; l: string }[] }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-xs text-zinc-400 flex items-center gap-1"><Filter className="h-3 w-3" />{label}</span>
-      <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
-        {options.map(o => (
-          <button
-            key={o.v}
-            onClick={() => onChange(o.v)}
-            className={`px-2 py-0.5 text-xs rounded transition-colors ${value === o.v ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}
-          >
-            {o.l}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
+// FilterGroup component removed — replaced by inline pill filters in CatalogView
 
 function TableDetail({ table, onNavigate, onRunTable }: { table: TableMeta; onNavigate: (v: string) => void; onRunTable?: (t: string) => void }) {
   const [activeTab, setActiveTab] = useState<'schema' | 'sample' | 'history' | 'lint'>('schema')

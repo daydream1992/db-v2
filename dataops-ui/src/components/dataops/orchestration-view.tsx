@@ -5,8 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Progress } from '@/components/ui/progress'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu'
 import { RunDetailSheet } from './run-detail-sheet'
-import { Play, Clock, CheckCircle2, XCircle, SkipForward, Loader2, Calendar, GitBranch, ChevronRight, ArrowDown, Activity, ZoomIn, ZoomOut, Move, GripVertical } from 'lucide-react'
+import { Play, Clock, CheckCircle2, XCircle, SkipForward, Loader2, Calendar, GitBranch, ChevronRight, ArrowDown, Activity, ZoomIn, ZoomOut, Move, GripVertical, ChevronUp, ChevronDown, Maximize2, Zap, MoreHorizontal, Timer, ArrowRight } from 'lucide-react'
 import { formatDuration, formatRows, runStatusClass, triggerClass } from '@/lib/dataops/styles'
 import { toast } from 'sonner'
 
@@ -49,12 +52,47 @@ function snapToGrid(ts: number): number {
   return Math.round(ts / FIVE_MIN) * FIVE_MIN
 }
 
+// ─── Enhanced status bar colors (green=success, amber=running, red=failed, gray=skipped) ───
 const STATUS_BAR_COLOR: Record<string, { fill: string; stroke: string; text: string }> = {
   success: { fill: '#10b981', stroke: '#059669', text: '#fff' },
   failed:  { fill: '#f43f5e', stroke: '#e11d48', text: '#fff' },
-  running: { fill: '#38bdf8', stroke: '#0ea5e9', text: '#fff' },
+  running: { fill: '#f59e0b', stroke: '#d97706', text: '#fff' },
   skipped: { fill: '#a1a1aa', stroke: '#71717a', text: '#fff' },
   pending: { fill: '#d4d4d8', stroke: '#a1a1aa', text: '#71717a' },
+}
+
+// ─── Status pill badge styles ───
+function statusPillClass(s: string): string {
+  switch (s) {
+    case 'success': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+    case 'failed': return 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+    case 'running': return 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800 animate-pulse'
+    case 'skipped': return 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700'
+    case 'pending': return 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700'
+    default: return 'bg-zinc-100 text-zinc-500'
+  }
+}
+
+function statusIcon(s: string) {
+  switch (s) {
+    case 'success': return <CheckCircle2 className="h-3 w-3 mr-1" />
+    case 'failed': return <XCircle className="h-3 w-3 mr-1" />
+    case 'running': return <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+    case 'skipped': return <SkipForward className="h-3 w-3 mr-1" />
+    default: return <Clock className="h-3 w-3 mr-1" />
+  }
+}
+
+// ─── Human-readable duration ───
+function humanDuration(sec: number | null): string {
+  if (sec === null) return '—'
+  if (sec < 60) return `${sec}s`
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (m < 60) return `${m}m ${s}s`
+  const h = Math.floor(m / 60)
+  const rm = m % 60
+  return `${h}h ${rm}m`
 }
 
 interface GanttTooltip {
@@ -468,6 +506,11 @@ function GanttTimeline({ onOpenDetail }: { onOpenDetail: (r: PipelineRun) => voi
     return lines
   }, [runsState, toX])
 
+  // Current time indicator (now as a vertical red line)
+  const nowTs = Date.now()
+  const nowX = toX(nowTs)
+  const showNowLine = nowX > 0 && nowX < CHART_W
+
   return (
     <Card className="animate-fade-in">
       <CardHeader className="pb-2">
@@ -483,7 +526,7 @@ function GanttTimeline({ onOpenDetail }: { onOpenDetail: (r: PipelineRun) => voi
             <span className="flex items-center gap-1.5 ml-2">
               <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> success
               <span className="inline-block h-2 w-2 rounded-full bg-rose-500 ml-1.5" /> failed
-              <span className="inline-block h-2 w-2 rounded-full bg-sky-400 ml-1.5" /> running
+              <span className="inline-block h-2 w-2 rounded-full bg-amber-500 ml-1.5" /> running
               <span className="inline-block h-2 w-2 rounded-full bg-zinc-400 ml-1.5" /> skipped
             </span>
           </div>
@@ -570,8 +613,8 @@ function GanttTimeline({ onOpenDetail }: { onOpenDetail: (r: PipelineRun) => voi
             onPointerMove={dragMode && barDrag ? handleBarPointerMove : undefined}
             onPointerUp={dragMode && barDrag ? handleBarPointerUp : undefined}
           >
-            {/* Grid lines */}
-            {timeLabels.map(tl => {
+            {/* Enhanced Grid lines with solid + dashed pattern */}
+            {timeLabels.map((tl, idx) => {
               const x = LABEL_W + toX(tl.ts)
               return (
                 <line
@@ -580,12 +623,59 @@ function GanttTimeline({ onOpenDetail }: { onOpenDetail: (r: PipelineRun) => voi
                   x2={x} y2={SVG_H - 4}
                   stroke="currentColor"
                   className="text-zinc-200 dark:text-zinc-800"
-                  strokeWidth={1}
-                  strokeDasharray="3,3"
+                  strokeWidth={idx % 3 === 0 ? 0.8 : 0.4}
+                  strokeDasharray={idx % 3 === 0 ? 'none' : '4,4'}
                   style={{ transition: 'x1 0.3s ease, x2 0.3s ease' }}
                 />
               )
             })}
+
+            {/* Horizontal row grid lines for better readability */}
+            {runsState.map((_run, i) => {
+              const y = HEADER_H + i * ROW_H
+              return (
+                <line
+                  key={`hline-${i}`}
+                  x1={LABEL_W} y1={y + ROW_H}
+                  x2={SVG_W - CHART_RIGHT} y2={y + ROW_H}
+                  stroke="currentColor"
+                  className="text-zinc-100 dark:text-zinc-800/50"
+                  strokeWidth={0.5}
+                />
+              )
+            })}
+
+            {/* Current time indicator (red vertical line) */}
+            {showNowLine && (
+              <g>
+                <line
+                  x1={LABEL_W + nowX} y1={HEADER_H - 4}
+                  x2={LABEL_W + nowX} y2={SVG_H - 4}
+                  stroke="#ef4444"
+                  strokeWidth={1.5}
+                  strokeDasharray="4,2"
+                  opacity={0.8}
+                />
+                {/* Now label */}
+                <rect
+                  x={LABEL_W + nowX - 18} y={2}
+                  width={36} height={14}
+                  rx={3}
+                  fill="#ef4444"
+                  opacity={0.9}
+                />
+                <text
+                  x={LABEL_W + nowX} y={12}
+                  className="fill-white"
+                  fontSize={8}
+                  fontFamily="monospace"
+                  textAnchor="middle"
+                  fontWeight="bold"
+                >
+                  NOW
+                </text>
+              </g>
+            )}
 
             {/* Time axis labels */}
             {timeLabels.map(tl => {
@@ -630,7 +720,7 @@ function GanttTimeline({ onOpenDetail }: { onOpenDetail: (r: PipelineRun) => voi
               />
             )}
 
-            {/* Dependency lines */}
+            {/* Dependency lines with arrows */}
             {dependencyLines.map(line => (
               <g key={line.key}>
                 <line
@@ -725,7 +815,7 @@ function GanttTimeline({ onOpenDetail }: { onOpenDetail: (r: PipelineRun) => voi
                     />
                   )}
 
-                  {/* Bar */}
+                  {/* Bar — colored by status */}
                   <rect
                     x={barX} y={barY}
                     width={barW} height={BAR_H}
@@ -828,37 +918,40 @@ function GanttTimeline({ onOpenDetail }: { onOpenDetail: (r: PipelineRun) => voi
             {/* Gradient definitions */}
             <defs>
               <linearGradient id="runningGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#38bdf8" />
-                <stop offset="100%" stopColor="#0ea5e9" />
+                <stop offset="0%" stopColor="#f59e0b" />
+                <stop offset="100%" stopColor="#d97706" />
               </linearGradient>
               <linearGradient id="runningPulse" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#7dd3fc" stopOpacity={0.8} />
-                <stop offset="50%" stopColor="#38bdf8" stopOpacity={0.2} />
-                <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.8} />
+                <stop offset="0%" stopColor="#fbbf24" stopOpacity={0.8} />
+                <stop offset="50%" stopColor="#f59e0b" stopOpacity={0.2} />
+                <stop offset="100%" stopColor="#d97706" stopOpacity={0.8} />
                 <animate attributeName="x1" values="0%;100%;0%" dur="2s" repeatCount="indefinite" />
               </linearGradient>
             </defs>
           </svg>
 
-          {/* Tooltip (hover info) */}
+          {/* Enhanced Tooltip on hover showing task details */}
           {tooltip && !dragMode && (
             <div
-              className="absolute z-50 pointer-events-none rounded-lg border bg-card p-2.5 shadow-lg text-[11px] max-w-[260px]"
+              className="absolute z-50 pointer-events-none rounded-lg border bg-card p-3 shadow-lg text-[11px] max-w-[280px]"
               style={{ left: Math.min(tooltip.x + 12, 600), top: tooltip.y + 12 }}
             >
-              <div className="font-medium font-mono text-xs mb-1">{tooltip.run.table}</div>
-              <div className="flex items-center gap-1 mb-1">
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${tooltip.run.status === 'success' ? 'bg-emerald-500' : tooltip.run.status === 'failed' ? 'bg-rose-500' : tooltip.run.status === 'running' ? 'bg-sky-400' : 'bg-zinc-400'}`} />
-                <span className="capitalize">{tooltip.run.status}</span>
+              <div className="font-medium font-mono text-xs mb-1.5">{tooltip.run.table}</div>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium ${statusPillClass(tooltip.run.status)}`}>
+                  {statusIcon(tooltip.run.status)}
+                  {tooltip.run.status}
+                </span>
               </div>
-              <div className="text-zinc-500 font-mono">
-                {fmtDateHourMin(parseTs(tooltip.run.startedAt))} → {tooltip.run.finishedAt ? fmtDateHourMin(parseTs(tooltip.run.finishedAt)) : '…'}
+              <div className="text-zinc-500 font-mono space-y-0.5">
+                <div>开始: {fmtDateHourMin(parseTs(tooltip.run.startedAt))}</div>
+                <div>结束: {tooltip.run.finishedAt ? fmtDateHourMin(parseTs(tooltip.run.finishedAt)) : '运行中…'}</div>
+                <div className="flex items-center gap-1">耗时: <Timer className="h-3 w-3" />{tooltip.run.durationSec !== null ? humanDuration(tooltip.run.durationSec) : '运行中'}</div>
+                {tooltip.run.rowsIn !== null && <div>行数: {formatRows(tooltip.run.rowsIn)}</div>}
               </div>
-              <div className="text-zinc-500">耗时: {tooltip.run.durationSec !== null ? formatDuration(tooltip.run.durationSec) : '运行中'}</div>
-              {tooltip.run.rowsIn !== null && <div className="text-zinc-500">行数: {formatRows(tooltip.run.rowsIn)}</div>}
-              {tooltip.run.error && <div className="text-rose-500 mt-0.5">⚠ {tooltip.run.error}</div>}
+              {tooltip.run.error && <div className="text-rose-500 mt-1.5 pt-1 border-t border-rose-200 dark:border-rose-800">⚠ {tooltip.run.error}</div>}
               {isZoomed && (
-                <div className="mt-1 pt-1 border-t text-[10px] text-zinc-400">
+                <div className="mt-1.5 pt-1 border-t text-[10px] text-zinc-400">
                   缩放范围: {fmtTime(rangeStart)} → {fmtTime(rangeEnd)}
                 </div>
               )}
@@ -884,6 +977,12 @@ function GanttTimeline({ onOpenDetail }: { onOpenDetail: (r: PipelineRun) => voi
               依赖关系线
             </span>
           )}
+          {showNowLine && (
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-4 h-0 border-t-2 border-dashed border-rose-500" />
+              当前时间
+            </span>
+          )}
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-2 bg-fuchsia-500 rounded-sm opacity-70" />
             拖拽手柄
@@ -900,9 +999,105 @@ function GanttTimeline({ onOpenDetail }: { onOpenDetail: (r: PipelineRun) => voi
 }
 
 function HistoryView({ onRunTable, onOpenDetail }: { onRunTable?: (t: string) => void; onOpenDetail: (r: PipelineRun) => void }) {
+  const [dailyLoading, setDailyLoading] = useState(false)
+
+  // Last execution time
+  const lastExecTime = useMemo(() => {
+    const sorted = [...PIPELINE_RUNS].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+    return sorted[0]?.startedAt ?? '—'
+  }, [])
+
+  // Batch trigger handlers
+  const handleBatchTrigger = (type: string) => {
+    const targets = type === 'all'
+      ? PIPELINE_RUNS.filter(r => r.status === 'failed').map(r => r.table)
+      : PIPELINE_RUNS.filter(r => r.trigger === type).map(r => r.table)
+    if (targets.length === 0) {
+      toast.info('没有匹配的执行记录')
+      return
+    }
+    toast.success(`批量触发 ${targets.length} 个任务`, { description: targets.slice(0, 5).join(', ') + (targets.length > 5 ? '...' : '') })
+    targets.forEach(t => onRunTable?.(t))
+  }
+
+  const handleDailyExecute = () => {
+    setDailyLoading(true)
+    toast.success('已触发 daily 全量执行')
+    setTimeout(() => setDailyLoading(false), 3000)
+  }
+
   return (
     <div className="space-y-4">
       <GanttTimeline onOpenDetail={onOpenDetail} />
+
+      {/* Trigger Actions Bar */}
+      <Card>
+        <CardContent className="p-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Batch trigger dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5">
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                  批量触发
+                  <ChevronDown className="h-3 w-3 ml-0.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuLabel>选择触发类型</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => handleBatchTrigger('all')}>
+                  <XCircle className="h-3.5 w-3.5 mr-2 text-rose-500" />
+                  重跑失败任务
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleBatchTrigger('schedule')}>
+                  <Clock className="h-3.5 w-3.5 mr-2 text-zinc-500" />
+                  重跑调度任务
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleBatchTrigger('manual')}>
+                  <Play className="h-3.5 w-3.5 mr-2 text-sky-500" />
+                  重跑手动触发
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => handleBatchTrigger('all')}>
+                  <Zap className="h-3.5 w-3.5 mr-2 text-amber-500" />
+                  全部重跑
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Execute daily button with loading state */}
+            <Button
+              size="sm"
+              className="h-9 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleDailyExecute}
+              disabled={dailyLoading}
+            >
+              {dailyLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Zap className="h-3.5 w-3.5" />
+              )}
+              {dailyLoading ? '执行中...' : '执行 daily'}
+            </Button>
+
+            {/* Last execution time */}
+            <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 ml-2">
+              <Clock className="h-3 w-3" />
+              <span>上次执行: </span>
+              <span className="font-mono text-zinc-700 dark:text-zinc-300">{lastExecTime.slice(5)}</span>
+            </div>
+
+            <div className="flex-1" />
+
+            <Badge variant="secondary" className="text-[10px]">
+              {PIPELINE_RUNS.length} 条记录
+            </Badge>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Execution History Table */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -914,7 +1109,7 @@ function HistoryView({ onRunTable, onOpenDetail }: { onRunTable?: (t: string) =>
         <CardContent className="p-0">
           <ScrollArea className="h-[calc(100vh-520px)]">
             <div className="min-w-[1000px]">
-              <div className="grid grid-cols-[50px_1fr_90px_90px_140px_70px_90px_1fr_30px] gap-2 px-3 py-2 text-[11px] font-medium text-zinc-500 border-b sticky top-0 bg-card z-10">
+              <div className="grid grid-cols-[50px_1fr_90px_100px_140px_80px_90px_1fr_30px] gap-2 px-3 py-2 text-[11px] font-medium text-zinc-500 border-b sticky top-0 bg-card z-10">
                 <div>#</div>
                 <div>表名</div>
                 <div>触发</div>
@@ -925,24 +1120,40 @@ function HistoryView({ onRunTable, onOpenDetail }: { onRunTable?: (t: string) =>
                 <div>错误</div>
                 <div></div>
               </div>
-              {PIPELINE_RUNS.map(r => (
+              {PIPELINE_RUNS.map((r, idx) => (
                 <button
                   key={r.id}
                   onClick={() => onOpenDetail(r)}
-                  className="w-full grid grid-cols-[50px_1fr_90px_90px_140px_70px_90px_1fr_30px] gap-2 px-3 py-2 text-xs items-center border-b last:border-0 hover:bg-sky-50/50 dark:hover:bg-sky-950/20 text-left transition-colors group"
+                  className={`w-full grid grid-cols-[50px_1fr_90px_100px_140px_80px_90px_1fr_30px] gap-2 px-3 py-2 text-xs items-center border-b last:border-0 text-left transition-colors group ${
+                    idx % 2 === 0
+                      ? 'bg-white dark:bg-zinc-950/20'
+                      : 'bg-zinc-50/50 dark:bg-zinc-900/20'
+                  } hover:bg-sky-50/70 dark:hover:bg-sky-950/30 hover:shadow-sm`}
                 >
                   <div className="font-mono text-zinc-400">{r.id}</div>
                   <div className="font-mono truncate" title={r.table}>{r.table}</div>
                   <div><Badge variant="outline" className={`text-[10px] py-0 px-1.5 ${triggerClass(r.trigger)}`}>{r.trigger}</Badge></div>
-                  <div><span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${runStatusClass(r.status)}`}>
-                    {r.status === 'success' && <CheckCircle2 className="h-3 w-3 mr-0.5" />}
-                    {r.status === 'failed' && <XCircle className="h-3 w-3 mr-0.5" />}
-                    {r.status === 'skipped' && <SkipForward className="h-3 w-3 mr-0.5" />}
-                    {r.status === 'running' && <Loader2 className="h-3 w-3 mr-0.5 animate-spin" />}
-                    {r.status}
-                  </span></div>
+                  <div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${statusPillClass(r.status)}`}>
+                      {statusIcon(r.status)}
+                      {r.status}
+                    </span>
+                  </div>
                   <div className="font-mono text-[11px] text-zinc-500">{r.startedAt.slice(5)}</div>
-                  <div className="text-right font-mono text-zinc-500">{formatDuration(r.durationSec)}</div>
+                  <div className="text-right">
+                    {/* Progress bar for running executions */}
+                    {r.status === 'running' ? (
+                      <div className="flex items-center gap-1.5">
+                        <Progress value={65} className="h-1.5 flex-1" />
+                        <span className="font-mono text-zinc-500 text-[10px]">65%</span>
+                      </div>
+                    ) : (
+                      <span className="font-mono text-zinc-500 flex items-center justify-end gap-1">
+                        <Timer className="h-3 w-3 text-zinc-400" />
+                        {humanDuration(r.durationSec)}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-right font-mono text-zinc-500">{r.rowsIn ? formatRows(r.rowsIn) : '—'}</div>
                   <div className="text-[11px] text-rose-600 truncate" title={r.error || ''}>{r.error || '—'}</div>
                   <div className="text-zinc-300 group-hover:text-sky-500 transition-colors">
@@ -961,6 +1172,8 @@ function HistoryView({ onRunTable, onOpenDetail }: { onRunTable?: (t: string) =>
 function DagView() {
   // 改进的 DAG：显示节点 + 连线 + 健康度 + 详情
   const [hovered, setHovered] = useState<string | null>(null)
+  const [allExpanded, setAllExpanded] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   const layers: { name: string; desc: string; tables: string[] }[] = [
     { name: '外部数据源', desc: 'TQ API / TDX 二进制 / 文本', tables: ['TQ API', 'TDX .day', 'TDX .lc5', 'TDX .lc1', 'TDX gpsz', 'TDX signals'] },
@@ -970,13 +1183,58 @@ function DagView() {
   ]
   const healthOf = (name: string) => TABLES.find(t => t.table === name)?.health || 'external'
 
+  // Total node count
+  const totalNodes = layers.reduce((acc, l) => acc + l.tables.length, 0)
+
+  // Health indicator for node
+  const healthIndicator = (health: string) => {
+    switch (health) {
+      case 'green': return { dot: 'bg-emerald-500', ring: 'ring-emerald-300' }
+      case 'yellow': return { dot: 'bg-amber-500', ring: 'ring-amber-300' }
+      case 'red': return { dot: 'bg-rose-500 animate-pulse', ring: 'ring-rose-300' }
+      case 'white': return { dot: 'bg-zinc-300', ring: 'ring-zinc-200' }
+      default: return { dot: 'bg-sky-500', ring: 'ring-sky-300' } // external
+    }
+  }
+
+  const handleFitToView = () => {
+    if (containerRef.current) {
+      containerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
   return (
-    <Card>
+    <Card ref={containerRef}>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <GitBranch className="h-4 w-4 text-fuchsia-500" />
-          DAG 依赖图（拓扑分层 · 可悬停查看）
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <GitBranch className="h-4 w-4 text-fuchsia-500" />
+            DAG 依赖图（拓扑分层 · 可悬停查看）
+            <Badge variant="secondary" className="ml-2 text-[10px]">{totalNodes} 节点</Badge>
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={handleFitToView}>
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>适配视图</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => setAllExpanded(v => !v)}>
+                    {allExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{allExpanded ? '折叠' : '展开'}全部</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-1">
@@ -987,18 +1245,20 @@ function DagView() {
                   <div className="text-[10px] text-zinc-400 font-mono">LAYER {i}</div>
                   <div className="text-xs font-medium leading-tight">{layer.name}</div>
                   <div className="text-[10px] text-zinc-400 leading-tight mt-0.5">{layer.desc}</div>
+                  <Badge variant="outline" className="text-[10px] mt-1 w-fit px-1.5 py-0 h-4">{layer.tables.length} 节点</Badge>
                 </div>
                 <div className="flex-1 flex flex-wrap gap-1.5 items-center">
                   {layer.tables.map(t => {
                     const h = healthOf(t)
                     const isExternal = h === 'external'
                     const isHovered = hovered === t
+                    const healthInd = healthIndicator(h)
                     return (
                       <div
                         key={t}
                         onMouseEnter={() => setHovered(t)}
                         onMouseLeave={() => setHovered(null)}
-                        className={`px-2.5 py-1.5 rounded-md border text-xs font-mono cursor-default transition-all ${
+                        className={`relative px-2.5 py-1.5 rounded-md border text-xs font-mono cursor-default transition-all ${
                           h === 'green' ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300' :
                           h === 'red' ? 'border-rose-300 bg-rose-50 dark:bg-rose-950/30 dark:border-rose-800 text-rose-700 dark:text-rose-300' :
                           h === 'white' ? 'border-zinc-200 bg-zinc-50 dark:bg-zinc-800/50 dark:border-zinc-700 text-zinc-500' :
@@ -1007,16 +1267,24 @@ function DagView() {
                         } ${isHovered ? 'scale-105 shadow-md ring-2 ring-offset-1 ring-zinc-300 dark:ring-zinc-600' : ''}`}
                         title={isExternal ? `外部源: ${t}` : `${t} (${TABLES.find(x => x.table === t)?.cn || ''})`}
                       >
+                        {/* Health indicator dot */}
+                        <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ring-1 ${healthInd.dot} ${isHovered ? healthInd.ring : 'ring-white dark:ring-zinc-900'}`} />
                         {t}
-                        {h === 'red' && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-rose-500" />}
+                        {h === 'red' && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />}
                       </div>
                     )
                   })}
                 </div>
               </div>
+              {/* Edge arrows between layers */}
               {i < layers.length - 1 && (
                 <div className="ml-32 flex items-center gap-2 text-zinc-300 dark:text-zinc-700 py-1">
-                  <div className="h-4 w-px bg-current ml-2" />
+                  <div className="flex items-center">
+                    {Array.from({ length: 5 }).map((_, j) => (
+                      <div key={j} className="h-4 w-px bg-current ml-3 first:ml-2" />
+                    ))}
+                  </div>
+                  <ArrowRight className="h-3 w-3" />
                   <ArrowDown className="h-3 w-3" />
                   <div className="text-[10px] text-zinc-400">数据流向下游</div>
                 </div>
@@ -1027,6 +1295,7 @@ function DagView() {
         <div className="mt-4 pt-3 border-t flex items-center gap-4 text-[11px] text-zinc-500 flex-wrap">
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded border border-emerald-300 bg-emerald-50" /> 正常 (green)</span>
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded border border-rose-300 bg-rose-50" /> 异常 (red)</span>
+          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded border border-amber-300 bg-amber-50" /> 警告 (yellow)</span>
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded border border-zinc-300 bg-zinc-50" /> once/不适用</span>
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded border border-dashed border-sky-300 bg-sky-50" /> 外部数据源</span>
           <span className="ml-auto text-zinc-400">悬停节点查看详情 · 拓扑排序自动决定执行顺序</span>

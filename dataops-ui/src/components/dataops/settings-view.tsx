@@ -18,7 +18,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Database, Settings, Bell, HardDrive, Clock, Webhook, Save, RotateCcw, Shield, Sliders, AlertTriangle, CheckCircle2, Cloud, FileDown, KeyRound, Activity, Zap, Calendar, Mail, MessageSquare, FileUp, FileCode2, ClipboardCopy, Globe, Github, RefreshCw, Upload, Loader2, XCircle, AlertCircle, Plus, Trash2, Pencil, Copy, Download, FileUp as ImportIcon } from 'lucide-react'
-import { LINT_RULES } from '@/lib/dataops/mock-data'
+import { LINT_RULES, TABLES } from '@/lib/dataops/mock-data'
 import { APP_CONFIG } from '@/lib/dataops/config'
 import { toast } from 'sonner'
 import { useGitHubSync, type SyncStatus } from '@/hooks/use-github-sync'
@@ -1322,6 +1322,96 @@ export function SettingsView() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* 版本信息 + 关于 */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="h-4 w-4 text-amber-500" />
+            版本信息
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row items-start gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-gradient-to-br from-emerald-500 to-sky-600 text-white shadow-md">
+                <Database className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">DataOps 管理台</span>
+                  <Badge className="bg-emerald-600 text-[10px]">v1.0.0</Badge>
+                  <Badge variant="outline" className="text-[10px]">2026-06-25</Badge>
+                </div>
+                <div className="text-[11px] text-zinc-500 mt-0.5">DuckDB {state.duckdbVersion} · React 19 · Next.js 16</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 sm:ml-auto">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => toast.success('当前已是最新版本', { description: 'v1.0.0 · 2026-06-25' })}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                检查更新
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 关于 */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Github className="h-4 w-4 text-zinc-500" />
+            关于
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+              DataOps 管理台是一套面向量化交易数据管线的 DevOps 平台，覆盖数据入库、计算、策略产出的全生命周期管理。
+              核心理念：把"靠人记的规范"变成"机器校验的契约"——lint engine、血缘 DAG、schema diff、健康度监控四件套。
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-500">
+              <span className="flex items-center gap-1"><Github className="h-3 w-3" />{APP_CONFIG.gitHubRepo}</span>
+              <span className="flex items-center gap-1"><Database className="h-3 w-3" />{TABLES.length} 表</span>
+              <span className="flex items-center gap-1"><Shield className="h-3 w-3" />{LINT_RULES.length} Lint 规则</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 键盘快捷键 */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="h-4 w-4 text-sky-500" />
+            键盘快捷键
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {[
+              { keys: 'Ctrl + S', desc: '保存当前配置' },
+              { keys: 'Ctrl + Enter', desc: 'SQL Playground 执行查询' },
+              { keys: 'Ctrl + 滚轮', desc: '血缘图谱缩放' },
+              { keys: 'Esc', desc: '关闭弹窗/抽屉' },
+              { keys: 'Ctrl + K', desc: '全局搜索（规划中）' },
+              { keys: '1-9', desc: '切换侧栏视图（规划中）' },
+            ].map(shortcut => (
+              <div key={shortcut.keys} className="flex items-center justify-between px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-700 text-xs">
+                <span className="text-zinc-600 dark:text-zinc-400">{shortcut.desc}</span>
+                <kbd className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-mono text-[10px] text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                  {shortcut.keys}
+                </kbd>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="p-3 rounded-md bg-zinc-50 dark:bg-zinc-900/50 text-xs text-zinc-500 flex items-center gap-2">
         <Settings className="h-4 w-4" />

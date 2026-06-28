@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Database, Search, BookOpen, Download, Copy, Hash, Type, AlertTriangle, Check, FileText, GitCompare, ArrowRight, Plus, Minus, Edit3, TableProperties, Github, Loader2 } from 'lucide-react'
+import { Database, Search, BookOpen, Download, Copy, Hash, Type, AlertTriangle, Check, FileText, GitCompare, ArrowRight, Plus, Minus, Edit3, TableProperties, Github, Loader2, Rows3 } from 'lucide-react'
 import { toast } from 'sonner'
 import { APP_CONFIG } from '@/lib/dataops/config'
 
@@ -367,6 +367,12 @@ export function DictionaryView() {
                   <Copy className="h-3 w-3 opacity-50" />
                 </button>
                 <Badge variant="outline" className="ml-1">{selected?.columns.length} 列</Badge>
+                {selected && (
+                  <Badge variant="secondary" className="ml-1 text-[10px] gap-1">
+                    <Rows3 className="h-2.5 w-2.5" />
+                    {selected.rows.toLocaleString()} 行
+                  </Badge>
+                )}
               </CardTitle>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={exportDict}>
@@ -383,13 +389,17 @@ export function DictionaryView() {
           <CardContent className="p-0 flex-1 min-h-0">
             <ScrollArea className="h-full">
               <div className="min-w-[700px]">
-                <div className="grid grid-cols-[1fr_120px_1fr_60px_1fr] gap-2 px-4 py-2 text-[11px] font-medium text-zinc-500 border-b sticky top-0 bg-card z-10">
-                  <div>列名</div><div>类型</div><div>中文名</div><div className="text-center">可空</div><div>备注</div>
+                <div className="grid grid-cols-[1fr_120px_1fr_60px_1fr_36px] gap-2 px-4 py-2 text-[11px] font-medium text-zinc-500 border-b sticky top-0 bg-card z-10">
+                  <div>列名</div><div>类型</div><div>中文名</div><div className="text-center">可空</div><div>备注</div><div></div>
                 </div>
-                {filteredColumns.map(c => {
+                {filteredColumns.map((c, idx) => {
                   const hasChinese = /[^\x00-\x7F]/.test(c.name)
+                  const copyFieldName = () => {
+                    navigator.clipboard?.writeText(c.name)
+                    toast.success(`已复制: ${c.name}`)
+                  }
                   return (
-                    <div key={c.name} className="grid grid-cols-[1fr_120px_1fr_60px_1fr] gap-2 px-4 py-2 text-xs border-b last:border-0 items-center hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
+                    <div key={c.name} className={`grid grid-cols-[1fr_120px_1fr_60px_1fr_36px] gap-2 px-4 py-2 text-xs border-b last:border-0 items-center hover:bg-zinc-50 dark:hover:bg-zinc-900/40 ${idx % 2 === 0 ? 'bg-zinc-50/50 dark:bg-zinc-900/20' : ''}`}>
                       <div className="font-mono flex items-center gap-1.5">
                         <span className={hasChinese ? 'text-rose-600 dark:text-rose-400' : ''}>{c.name}</span>
                         {hasChinese && <span className="text-[9px] px-1 py-0 rounded bg-rose-100 text-rose-600 dark:bg-rose-950 dark:text-rose-400">中文</span>}
@@ -405,7 +415,16 @@ export function DictionaryView() {
                         {c.nullable ? <Check className="h-3.5 w-3.5 text-emerald-500 inline" /> : <span className="text-zinc-300">—</span>}
                       </div>
                       <div className="text-[11px] text-zinc-400">
-                        {hasChinese ? '建议改英文，中文含义放 FIELD_MAP' : c.nullable ? '允许 NULL' : '主键/非空'}
+                        {hasChinese ? '建议改英文' : c.nullable ? '允许 NULL' : '主键/非空'}
+                      </div>
+                      <div className="flex justify-center">
+                        <button
+                          onClick={copyFieldName}
+                          className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                          title="复制字段名"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
                       </div>
                     </div>
                   )
@@ -417,7 +436,7 @@ export function DictionaryView() {
         </Card>
       </div>
 
-      {/* 底部：类型分布 */}
+      {/* 底部：类型分布 + 饼图 */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -426,14 +445,61 @@ export function DictionaryView() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {typeDist.map(([type, count]) => (
-              <div key={type} className="px-3 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 text-xs flex items-center gap-2 hover:border-sky-300 transition-colors">
-                <Badge variant="outline" className="font-mono text-[10px] py-0 px-1.5 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800">{type}</Badge>
-                <span className="font-mono text-zinc-600 dark:text-zinc-400">{count}</span>
-                <span className="text-zinc-400 text-[10px]">{Math.round(count / totalCols * 100)}%</span>
+          <div className="flex flex-col md:flex-row items-start gap-6">
+            {/* Donut chart */}
+            <div className="flex-shrink-0">
+              <svg width="160" height="160" viewBox="0 0 160 160">
+                {(() => {
+                  const total = typeDist.reduce((s, [, c]) => s + c, 0)
+                  let cumulative = 0
+                  const colors = ['#0ea5e9', '#f59e0b', '#10b981', '#f43f5e', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16']
+                  return typeDist.map(([type, count], i) => {
+                    const pct = count / total
+                    const startAngle = cumulative * 360
+                    cumulative += pct
+                    const endAngle = cumulative * 360
+                    const startRad = (startAngle - 90) * Math.PI / 180
+                    const endRad = (endAngle - 90) * Math.PI / 180
+                    const largeArc = pct > 0.5 ? 1 : 0
+                    const outerR = 72
+                    const innerR = 44
+                    const x1o = 80 + outerR * Math.cos(startRad)
+                    const y1o = 80 + outerR * Math.sin(startRad)
+                    const x2o = 80 + outerR * Math.cos(endRad)
+                    const y2o = 80 + outerR * Math.sin(endRad)
+                    const x1i = 80 + innerR * Math.cos(endRad)
+                    const y1i = 80 + innerR * Math.sin(endRad)
+                    const x2i = 80 + innerR * Math.cos(startRad)
+                    const y2i = 80 + innerR * Math.sin(startRad)
+                    const d = `M ${x1o} ${y1o} A ${outerR} ${outerR} 0 ${largeArc} 1 ${x2o} ${y2o} L ${x1i} ${y1i} A ${innerR} ${innerR} 0 ${largeArc} 0 ${x2i} ${y2i} Z`
+                    return (
+                      <path key={type} d={d} fill={colors[i % colors.length]} opacity={0.85}>
+                        <title>{type}: {count} ({Math.round(pct * 100)}%)</title>
+                      </path>
+                    )
+                  })
+                })()}
+                <text x="80" y="76" textAnchor="middle" className="text-lg font-bold fill-zinc-700 dark:fill-zinc-200" style={{ fontSize: 18 }}>{totalCols}</text>
+                <text x="80" y="92" textAnchor="middle" className="fill-zinc-400" style={{ fontSize: 10 }}>字段总数</text>
+              </svg>
+            </div>
+            {/* Legend + stats */}
+            <div className="flex-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {typeDist.map(([type, count], i) => {
+                  const colors = ['bg-sky-500', 'bg-amber-500', 'bg-emerald-500', 'bg-rose-500', 'bg-violet-500', 'bg-pink-500', 'bg-teal-500', 'bg-orange-500', 'bg-indigo-500', 'bg-lime-500']
+                  return (
+                    <div key={type} className="px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-700 text-xs flex items-center gap-2 hover:border-sky-300 transition-colors">
+                      <span className={`h-3 w-3 rounded-full flex-shrink-0 ${colors[i % colors.length]}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-mono font-medium truncate">{type}</div>
+                        <div className="text-zinc-400 text-[10px]">{count} · {Math.round(count / totalCols * 100)}%</div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
+            </div>
           </div>
         </CardContent>
       </Card>

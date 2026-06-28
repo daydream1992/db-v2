@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { AlertTriangle, CheckCircle2, RefreshCw, Wrench, Activity, TrendingUp, BarChart3, Filter, X, Loader2, Zap, ArrowRight, Clock, GitBranch, Eye } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, RefreshCw, Wrench, Activity, TrendingUp, BarChart3, Filter, X, Loader2, Zap, ArrowRight, Clock, GitBranch, Eye, ChevronDown, ChevronRight, HeartPulse } from 'lucide-react'
 import { HEALTH_MATRIX } from '@/lib/dataops/mock-data'
 import { freshnessClass, healthColorClass, healthTextColorClass } from '@/lib/dataops/styles'
 import { toast } from 'sonner'
@@ -17,6 +17,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from '@/components/ui/tooltip'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 
 type HealthStatus = 'green' | 'yellow' | 'red' | 'white'
 
@@ -36,6 +46,57 @@ interface RemediationStep {
   isForce: boolean
 }
 
+// ── Health Score Ring Component ─────────────────────────────────
+function HealthScoreRing({ score, size = 160 }: { score: number; size?: number }) {
+  const [animatedScore, setAnimatedScore] = useState(0)
+  const strokeWidth = 10
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (animatedScore / 100) * circumference
+
+  useEffect(() => {
+    const timer = setTimeout(() => setAnimatedScore(score), 100)
+    return () => clearTimeout(timer)
+  }, [score])
+
+  const color = score >= 90 ? '#10b981' : score >= 70 ? '#f59e0b' : '#f43f5e' // emerald-500 / amber-500 / rose-500
+  const colorClass = score >= 90 ? 'text-emerald-500' : score >= 70 ? 'text-amber-500' : 'text-rose-500'
+
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        {/* Background circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          className="text-zinc-200 dark:text-zinc-800"
+          strokeWidth={strokeWidth}
+        />
+        {/* Animated progress circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="transition-[stroke-dashoffset] duration-1000 ease-out"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={`text-3xl font-bold tabular-nums ${colorClass}`}>{animatedScore}</span>
+        <span className="text-xs text-zinc-500">%</span>
+      </div>
+    </div>
+  )
+}
+
 export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [dirFilter, setDirFilter] = useState<string>('all')
@@ -43,6 +104,8 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
   const [runningTables, setRunningTables] = useState<string[]>([])
   const [completedTables, setCompletedTables] = useState<Set<string>>(new Set())
   const [flashTables, setFlashTables] = useState<Set<string>>(new Set())
+  const [refreshing, setRefreshing] = useState(false)
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
   // C5: Batch remediation state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
@@ -66,8 +129,34 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
   const greenTables = TABLES.filter(t => getHealth(t.table) === 'green')
   const whiteTables = TABLES.filter(t => getHealth(t.table) === 'white')
 
+  // Overall health score
+  const healthScore = useMemo(() => {
+    const total = TABLES.length
+    if (total === 0) return 100
+    const greenWeight = 100
+    const yellowWeight = 60
+    const redWeight = 0
+    const whiteWeight = 80 // once tables are fine
+    const score = (
+      greenTables.length * greenWeight +
+      yellowTables.length * yellowWeight +
+      redTables.length * redWeight +
+      whiteTables.length * whiteWeight
+    ) / total
+    return Math.round(score)
+  }, [greenTables.length, yellowTables.length, redTables.length, whiteTables.length])
+
   const toggle = (table: string) => {
     setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(table)) next.delete(table)
+      else next.add(table)
+      return next
+    })
+  }
+
+  const toggleRow = (table: string) => {
+    setExpandedRows(prev => {
       const next = new Set(prev)
       if (next.has(table)) next.delete(table)
       else next.add(table)
@@ -98,6 +187,17 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
 
   const handleForceRetry = () => {
     setShowConfirmDialog(true)
+  }
+
+  // 刷新健康度
+  const handleRefreshHealth = () => {
+    setRefreshing(true)
+    setTimeout(() => {
+      setRefreshing(false)
+      toast.success('健康度已刷新', {
+        description: `当前评分 ${healthScore}% · ${greenTables.length} 健康 / ${redTables.length} 异常 / ${yellowTables.length} 待查`,
+      })
+    }, 1500)
   }
 
   // ── Topological sort for dependency ordering ────────────────
@@ -343,13 +443,55 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
 
   return (
     <div className="space-y-5">
-      {/* 顶部统计 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard icon={<CheckCircle2 className="h-4 w-4" />} label="健康" value={greenTables.length} color="emerald" />
-        <StatCard icon={<AlertTriangle className="h-4 w-4" />} label="异常/滞后" value={redTables.length} color="rose" />
-        <StatCard icon={<AlertTriangle className="h-4 w-4" />} label="待查" value={yellowTables.length} color="amber" />
-        <StatCard icon={<Activity className="h-4 w-4" />} label="不适用(once)" value={whiteTables.length} color="zinc" />
-      </div>
+      {/* ── Health Score Hero Section ─────────────────────────── */}
+      <Card className="overflow-hidden">
+        <CardContent className="p-6">
+          <div className="flex flex-col md:flex-row items-center gap-6">
+            {/* Circular progress ring */}
+            <div className="flex flex-col items-center gap-2">
+              <HealthScoreRing score={healthScore} size={160} />
+              <span className="text-sm text-zinc-500 font-medium">健康度评分</span>
+            </div>
+
+            {/* Stats + description */}
+            <div className="flex-1 space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <HeartPulse className="h-5 w-5 text-emerald-500" />
+                  数据管线健康度总览
+                </h2>
+                <p className="text-xs text-zinc-500 mt-1">
+                  基于 {TABLES.length} 张表的新鲜度、执行状态、一致性综合评分
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <StatCard icon={<CheckCircle2 className="h-4 w-4" />} label="健康" value={greenTables.length} color="emerald" />
+                <StatCard icon={<AlertTriangle className="h-4 w-4" />} label="异常/滞后" value={redTables.length} color="rose" />
+                <StatCard icon={<AlertTriangle className="h-4 w-4" />} label="待查" value={yellowTables.length} color="amber" />
+                <StatCard icon={<Activity className="h-4 w-4" />} label="不适用(once)" value={whiteTables.length} color="zinc" />
+              </div>
+
+              {/* 刷新健康度 button */}
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleRefreshHealth}
+                  disabled={refreshing}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  {refreshing ? (
+                    <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />刷新中...</>
+                  ) : (
+                    <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />刷新健康度</>
+                  )}
+                </Button>
+                <span className="text-[11px] text-zinc-400">上次刷新: {new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 7 日健康度趋势 + 按目录分布 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -362,29 +504,59 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-end gap-2 h-40 mb-3">
-              {dailyTrend.map(d => {
-                const maxTotal = Math.max(...dailyTrend.map(x => x.total), 1)
-                const unit = 140 / maxTotal
-                return (
-                  <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group">
-                    <div className="text-[9px] text-zinc-500 font-mono">{d.rate}%</div>
-                    <div className="w-full flex flex-col-reverse rounded overflow-hidden" style={{ height: `${(d.total / maxTotal) * 140}px` }}>
-                      <div className="bg-emerald-500 group-hover:bg-emerald-600 transition-colors" style={{ height: `${d.success * unit}px` }} title={`成功 ${d.success}`} />
-                      <div className="bg-rose-500 group-hover:bg-rose-600 transition-colors" style={{ height: `${d.failed * unit}px` }} title={`失败 ${d.failed}`} />
-                      <div className="bg-zinc-300 dark:bg-zinc-600 group-hover:bg-zinc-400 transition-colors" style={{ height: `${d.skipped * unit}px` }} title={`跳过 ${d.skipped}`} />
-                      <div className="bg-zinc-100 dark:bg-zinc-800 group-hover:bg-zinc-200 transition-colors" style={{ height: `${d.pending * unit}px` }} title={`待执行 ${d.pending}`} />
-                    </div>
-                    <div className="text-[10px] text-zinc-400">{d.date}</div>
+            <div className="relative">
+              {/* Grid lines */}
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none" style={{ height: '164px', paddingBottom: '24px' }}>
+                {[0, 25, 50, 75, 100].map(pct => (
+                  <div key={pct} className="flex items-center gap-1">
+                    <span className="text-[9px] text-zinc-400 font-mono w-6 text-right">{pct}%</span>
+                    <div className="flex-1 border-t border-dashed border-zinc-200 dark:border-zinc-800" />
                   </div>
-                )
-              })}
+                ))}
+              </div>
+
+              {/* Bar chart */}
+              <div className="flex items-end gap-2 h-40 mb-3 pl-7">
+                {dailyTrend.map((d, idx) => {
+                  const maxTotal = Math.max(...dailyTrend.map(x => x.total), 1)
+                  const unit = 140 / maxTotal
+                  return (
+                    <Tooltip key={d.date}>
+                      <TooltipTrigger asChild>
+                        <div
+                          className="flex-1 flex flex-col items-center gap-1 group animate-fade-in"
+                          style={{ animationDelay: `${idx * 80}ms`, animationFillMode: 'both' }}
+                        >
+                          <div className="text-[9px] text-zinc-500 font-mono font-medium">{d.rate}%</div>
+                          <div className="w-full flex flex-col-reverse rounded overflow-hidden" style={{ height: `${(d.total / maxTotal) * 140}px` }}>
+                            <div className="bg-emerald-500 group-hover:bg-emerald-600 transition-colors" style={{ height: `${d.success * unit}px` }} />
+                            <div className="bg-rose-500 group-hover:bg-rose-600 transition-colors" style={{ height: `${d.failed * unit}px` }} />
+                            <div className="bg-amber-500 group-hover:bg-amber-600 transition-colors" style={{ height: `${d.skipped * unit}px` }} />
+                            <div className="bg-zinc-200 dark:bg-zinc-700 group-hover:bg-zinc-300 dark:group-hover:bg-zinc-600 transition-colors" style={{ height: `${d.pending * unit}px` }} />
+                          </div>
+                          <div className="text-[10px] text-zinc-400">{d.date}</div>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        <div className="space-y-0.5">
+                          <div className="font-medium">{d.date}</div>
+                          <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-emerald-500" /> 成功: {d.success}</div>
+                          <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-rose-500" /> 失败: {d.failed}</div>
+                          <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-amber-500" /> 跳过: {d.skipped}</div>
+                          <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-zinc-300" /> 待执行: {d.pending}</div>
+                          <div className="border-t border-white/20 pt-0.5 mt-0.5">成功率: {d.rate}%</div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  )
+                })}
+              </div>
             </div>
             <div className="flex items-center gap-4 text-[10px] text-zinc-500">
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> 成功</span>
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> 失败</span>
-              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-zinc-300" /> 跳过</span>
-              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-200" /> 待执行</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-amber-500" /> 跳过</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600" /> 待执行</span>
               <span className="ml-auto text-zinc-400">7 日均成功率 {Math.round(dailyTrend.reduce((s, d) => s + d.rate, 0) / dailyTrend.length)}%</span>
             </div>
           </CardContent>
@@ -398,26 +570,66 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {dirHealth.map(d => {
                 const total = d.total || 1
+                const greenPct = Math.round((d.green / total) * 100)
+                const yellowPct = Math.round((d.yellow / total) * 100)
+                const redPct = Math.round((d.red / total) * 100)
+                const whitePct = 100 - greenPct - yellowPct - redPct
                 return (
                   <div key={d.dir}>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-mono">{d.dir}</span>
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="font-mono font-medium">{d.dir}</span>
                       <span className="text-zinc-500">{d.total} 表</span>
                     </div>
-                    <div className="flex h-3 rounded overflow-hidden">
-                      <div className="bg-emerald-500" style={{ width: `${(d.green / total) * 100}%` }} title={`健康 ${d.green}`} />
-                      <div className="bg-amber-400" style={{ width: `${(d.yellow / total) * 100}%` }} title={`待查 ${d.yellow}`} />
-                      <div className="bg-rose-500" style={{ width: `${(d.red / total) * 100}%` }} title={`异常 ${d.red}`} />
-                      <div className="bg-zinc-300 dark:bg-zinc-700" style={{ width: `${(d.white / total) * 100}%` }} title={`once ${d.white}`} />
+                    {/* Horizontal stacked bar */}
+                    <div className="flex h-5 rounded-md overflow-hidden">
+                      <div
+                        className="bg-emerald-500 flex items-center justify-center transition-all duration-500"
+                        style={{ width: `${greenPct}%` }}
+                        title={`健康 ${d.green} (${greenPct}%)`}
+                      >
+                        {greenPct >= 15 && <span className="text-[9px] text-white font-medium">{greenPct}%</span>}
+                      </div>
+                      <div
+                        className="bg-amber-500 flex items-center justify-center transition-all duration-500"
+                        style={{ width: `${yellowPct}%` }}
+                        title={`待查 ${d.yellow} (${yellowPct}%)`}
+                      >
+                        {yellowPct >= 15 && <span className="text-[9px] text-white font-medium">{yellowPct}%</span>}
+                      </div>
+                      <div
+                        className="bg-rose-500 flex items-center justify-center transition-all duration-500"
+                        style={{ width: `${redPct}%` }}
+                        title={`异常 ${d.red} (${redPct}%)`}
+                      >
+                        {redPct >= 15 && <span className="text-[9px] text-white font-medium">{redPct}%</span>}
+                      </div>
+                      <div
+                        className="bg-zinc-300 dark:bg-zinc-700 flex items-center justify-center transition-all duration-500"
+                        style={{ width: `${whitePct}%` }}
+                        title={`once ${d.white} (${whitePct}%)`}
+                      >
+                        {whitePct >= 15 && <span className="text-[9px] text-zinc-600 dark:text-zinc-400 font-medium">{whitePct}%</span>}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-400">
-                      <span className="text-emerald-600">{d.green}</span>
-                      <span className="text-amber-600">{d.yellow}</span>
-                      <span className="text-rose-600">{d.red}</span>
-                      <span>{d.white}</span>
+                    {/* Legend row with counts */}
+                    <div className="flex items-center gap-3 mt-1.5 text-[10px]">
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                        <span className="h-2 w-2 rounded-sm bg-emerald-500" /> {d.green} 健康
+                      </span>
+                      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                        <span className="h-2 w-2 rounded-sm bg-amber-500" /> {d.yellow} 待查
+                      </span>
+                      <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400">
+                        <span className="h-2 w-2 rounded-sm bg-rose-500" /> {d.red} 异常
+                      </span>
+                      {d.white > 0 && (
+                        <span className="flex items-center gap-1 text-zinc-500">
+                          <span className="h-2 w-2 rounded-sm bg-zinc-300 dark:bg-zinc-700" /> {d.white} once
+                        </span>
+                      )}
                     </div>
                   </div>
                 )
@@ -436,20 +648,20 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
               <div className="text-[11px] text-zinc-400">孤儿表（有表无脚本）</div>
-              <div className="text-lg font-mono font-semibold text-rose-600">0</div>
+              <div className="text-lg font-mono font-semibold text-emerald-600">0</div>
             </div>
             <div>
               <div className="text-[11px] text-zinc-400">死脚本（有脚本无表）</div>
-              <div className="text-lg font-mono font-semibold text-rose-600">2</div>
+              <div className="text-lg font-mono font-semibold text-rose-500">2</div>
               <div className="text-[10px] text-zinc-400">sector_stocks / t_bk5_19</div>
             </div>
             <div>
               <div className="text-[11px] text-zinc-400">字段中文待补充</div>
-              <div className="text-lg font-mono font-semibold text-amber-600">3</div>
+              <div className="text-lg font-mono font-semibold text-amber-500">3</div>
             </div>
             <div>
               <div className="text-[11px] text-zinc-400">lint 通过率</div>
-              <div className="text-lg font-mono font-semibold text-amber-600">70+</div>
+              <div className="text-lg font-mono font-semibold text-amber-500">70+</div>
             </div>
           </div>
         </CardContent>
@@ -475,14 +687,15 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <div className="min-w-[840px]">
-              <div className="grid grid-cols-[32px_1fr_180px_repeat(7,60px)_90px] gap-1 px-3 py-2 text-[10px] font-medium text-zinc-500 border-b">
+              <div className="grid grid-cols-[32px_20px_1fr_180px_repeat(7,60px)_90px] gap-1 px-3 py-2 text-[10px] font-medium text-zinc-500 border-b bg-zinc-50/50 dark:bg-zinc-900/30">
+                <div />
                 <div />
                 <div>表名</div>
                 <div>类型</div>
                 {['06-19', '06-20', '06-21', '06-22', '06-23', '06-24', '06-25'].map(d => <div key={d} className="text-center">{d}</div>)}
                 <div className="text-center">操作</div>
               </div>
-              {filteredMatrix.map(row => {
+              {filteredMatrix.map((row, rowIdx) => {
                 const t = TABLES.find(x => x.table === row.table)!
                 const currentHealth = getHealth(row.table)
                 const isRed = currentHealth === 'red'
@@ -491,58 +704,112 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                 const isRunning = runningTables.includes(row.table)
                 const isCompleted = completedTables.has(row.table)
                 const isFlashing = flashTables.has(row.table)
+                const isExpanded = expandedRows.has(row.table)
+                const isAltRow = rowIdx % 2 === 1
                 return (
-                  <div
-                    key={row.table}
-                    className={`grid grid-cols-[32px_1fr_180px_repeat(7,60px)_90px] gap-1 px-3 py-1.5 text-xs items-center border-b last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900/40 ${
-                      isSelected ? 'bg-rose-50 dark:bg-rose-950/20' : ''
-                    } ${isFlashing ? 'animate-pulse bg-emerald-50 dark:bg-emerald-950/30' : ''} ${
-                      isRunning ? 'bg-amber-50 dark:bg-amber-950/20' : ''
-                    }`}
-                  >
-                    <div className="flex justify-center">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggle(row.table)}
-                        disabled={isRunning || isCompleted}
-                        className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 text-amber-600 focus:ring-amber-500 cursor-pointer accent-amber-600"
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-mono truncate flex items-center gap-1.5">
-                        {row.table}
-                        {isRed && <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />}
-                        {isRunning && <Loader2 className="h-3 w-3 text-amber-500 animate-spin" />}
-                        {isCompleted && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                  <Collapsible key={row.table} open={isExpanded} onOpenChange={() => toggleRow(row.table)}>
+                    <div
+                      className={`grid grid-cols-[32px_20px_1fr_180px_repeat(7,60px)_90px] gap-1 px-3 py-2 text-xs items-center border-b last:border-0 transition-colors ${
+                        isAltRow ? 'bg-zinc-50/50 dark:bg-zinc-900/20' : ''
+                      } hover:bg-amber-50/40 dark:hover:bg-amber-950/10 ${
+                        isSelected ? 'bg-rose-50 dark:bg-rose-950/20' : ''
+                      } ${isFlashing ? 'animate-pulse bg-emerald-50 dark:bg-emerald-950/30' : ''} ${
+                        isRunning ? 'bg-amber-50 dark:bg-amber-950/20' : ''
+                      }`}
+                    >
+                      <div className="flex justify-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggle(row.table)}
+                          disabled={isRunning || isCompleted}
+                          className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 text-amber-600 focus:ring-amber-500 cursor-pointer accent-amber-600"
+                        />
                       </div>
-                      <div className="text-[10px] text-zinc-400 truncate">{t.cn}</div>
-                    </div>
-                    <div>
-                      <div className="text-[11px] text-zinc-500">{t.rows > 0 ? `${(t.rows / 10000).toFixed(1)}万行` : '0行'}</div>
-                      <div className={`text-[11px] font-medium ${freshnessClass(t.freshness)}`}>{t.freshness}</div>
-                    </div>
-                    {row.days.map(d => (
-                      <div key={d.date} className="flex justify-center">
-                        <span className={`h-5 w-5 rounded flex items-center justify-center text-[9px] ${dayStatusClass(d.status)}`}>
-                          {d.status === 'success' ? '✓' : d.status === 'failed' ? '✗' : d.status === 'skipped' ? '–' : ''}
-                        </span>
+                      <CollapsibleTrigger asChild>
+                        <button className="flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
+                          {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        </button>
+                      </CollapsibleTrigger>
+                      <div className="min-w-0">
+                        <div className="font-mono truncate flex items-center gap-1.5">
+                          {row.table}
+                          {/* Colored pill badge for health status */}
+                          <HealthPillBadge status={currentHealth} />
+                          {isRunning && <Loader2 className="h-3 w-3 text-amber-500 animate-spin" />}
+                          {isCompleted && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 truncate">{t.cn}</div>
                       </div>
-                    ))}
-                    <div className="flex justify-center">
-                      {isRunning ? (
-                        <Badge variant="outline" className="text-amber-600 border-amber-300 py-0 text-[10px]">
-                          <Loader2 className="h-3 w-3 mr-0.5 animate-spin" />补数中
-                        </Badge>
-                      ) : isRed || isYellow ? (
-                        <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px]" onClick={() => onRunTable?.(row.table)}>
-                          <RefreshCw className="h-3 w-3 mr-0.5" />补数
-                        </Button>
-                      ) : (
-                        <span className={`text-[10px] ${healthTextColorClass(currentHealth)}`}>●</span>
-                      )}
+                      <div>
+                        <div className="text-[11px] text-zinc-500">{t.rows > 0 ? `${(t.rows / 10000).toFixed(1)}万行` : '0行'}</div>
+                        <div className={`text-[11px] font-medium ${freshnessClass(t.freshness)}`}>{t.freshness}</div>
+                      </div>
+                      {row.days.map(d => (
+                        <div key={d.date} className="flex justify-center">
+                          <span className={`h-5 w-5 rounded flex items-center justify-center text-[9px] ${dayStatusClass(d.status)}`}>
+                            {d.status === 'success' ? '✓' : d.status === 'failed' ? '✗' : d.status === 'skipped' ? '–' : ''}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="flex justify-center">
+                        {isRunning ? (
+                          <Badge variant="outline" className="text-amber-600 border-amber-300 py-0 text-[10px]">
+                            <Loader2 className="h-3 w-3 mr-0.5 animate-spin" />补数中
+                          </Badge>
+                        ) : isRed || isYellow ? (
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px]" onClick={() => onRunTable?.(row.table)}>
+                            <RefreshCw className="h-3 w-3 mr-0.5" />补数
+                          </Button>
+                        ) : (
+                          <span className={`text-[10px] ${healthTextColorClass(currentHealth)}`}>●</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
+
+                    {/* Expanded detail row */}
+                    <CollapsibleContent>
+                      <div className={`px-3 py-3 border-b text-xs ${isAltRow ? 'bg-zinc-50/30 dark:bg-zinc-900/10' : ''} bg-zinc-50/60 dark:bg-zinc-900/20`}>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 ml-[52px]">
+                          <div>
+                            <div className="text-[10px] text-zinc-400 mb-0.5">调度频率</div>
+                            <div className="text-sm font-medium">{t.schedule}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-zinc-400 mb-0.5">写入模式</div>
+                            <div className="text-sm font-medium">{t.mode}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-zinc-400 mb-0.5">行数</div>
+                            <div className="text-sm font-mono font-medium">{t.rows.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-zinc-400 mb-0.5">新鲜度</div>
+                            <div className={`text-sm font-medium ${freshnessClass(t.freshness)}`}>{t.freshness}</div>
+                          </div>
+                        </div>
+                        {t.dependsOn.length > 0 && (
+                          <div className="mt-2 ml-[52px] flex items-center gap-1.5 text-[11px] text-zinc-500">
+                            <GitBranch className="h-3 w-3" />
+                            <span>依赖:</span>
+                            {t.dependsOn.map(d => (
+                              <span key={d} className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-[10px]">{d}</span>
+                            ))}
+                          </div>
+                        )}
+                        {t.downstream.length > 0 && (
+                          <div className="mt-1 ml-[52px] flex items-center gap-1.5 text-[11px] text-zinc-500">
+                            <ArrowRight className="h-3 w-3" />
+                            <span>下游:</span>
+                            {t.downstream.slice(0, 3).map(d => (
+                              <span key={d} className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-[10px]">{d}</span>
+                            ))}
+                            {t.downstream.length > 3 && <span className="text-zinc-400">+{t.downstream.length - 3}</span>}
+                          </div>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
                 )
               })}
             </div>
@@ -554,9 +821,9 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
       {redTables.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2 text-rose-600">
+            <CardTitle className="text-base flex items-center gap-2 text-rose-500">
               <AlertTriangle className="h-4 w-4" />异常表自动归因 ({redTables.length})
-              <Badge variant="outline" className="text-[10px] text-rose-600 border-rose-300 ml-1">ROOT CAUSE</Badge>
+              <Badge variant="outline" className="text-[10px] text-rose-500 border-rose-300 ml-1">ROOT CAUSE</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -568,7 +835,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono font-medium text-sm">{t.table}</span>
                       <span className="text-xs text-zinc-500">{t.cn}</span>
-                      <Badge variant="outline" className={`text-[9px] py-0 px-1.5 ${attribution.severity === 'critical' ? 'text-rose-600 border-rose-400 bg-rose-100/50 dark:bg-rose-950/40' : 'text-amber-600 border-amber-400'}`}>
+                      <Badge variant="outline" className={`text-[9px] py-0 px-1.5 ${attribution.severity === 'critical' ? 'text-rose-500 border-rose-400 bg-rose-100/50 dark:bg-rose-950/40' : 'text-amber-500 border-amber-400'}`}>
                         {attribution.severity === 'critical' ? 'CRITICAL' : 'WARNING'}
                       </Badge>
                       <Badge variant="outline" className="text-[9px] py-0 px-1.5 text-zinc-500">{attribution.category}</Badge>
@@ -581,14 +848,14 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
                     {/* 根因 */}
                     <div className="p-2 rounded bg-rose-100/40 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900">
-                      <div className="text-[10px] font-medium text-rose-700 dark:text-rose-300 mb-1 flex items-center gap-1">
+                      <div className="text-[10px] font-medium text-rose-600 dark:text-rose-400 mb-1 flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3" />根因
                       </div>
                       <div className="text-zinc-700 dark:text-zinc-300 leading-relaxed">{attribution.cause}</div>
                     </div>
                     {/* 影响 */}
                     <div className="p-2 rounded bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
-                      <div className="text-[10px] font-medium text-amber-700 dark:text-amber-300 mb-1 flex items-center gap-1">
+                      <div className="text-[10px] font-medium text-amber-600 dark:text-amber-400 mb-1 flex items-center gap-1">
                         <Activity className="h-3 w-3" />下游影响
                       </div>
                       <div className="text-zinc-700 dark:text-zinc-300 leading-relaxed">
@@ -602,7 +869,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                     </div>
                     {/* 修复建议 */}
                     <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900">
-                      <div className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300 mb-1 flex items-center gap-1">
+                      <div className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mb-1 flex items-center gap-1">
                         <Wrench className="h-3 w-3" />修复建议
                       </div>
                       <div className="text-zinc-700 dark:text-zinc-300 leading-relaxed">{attribution.fix}</div>
@@ -627,7 +894,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                     <span>·</span>
                     <span>重试次数: {attribution.retries}/3</span>
                     <span>·</span>
-                    <span className={attribution.estimatedFix !== '5min' ? 'text-amber-600' : 'text-emerald-600'}>预计修复: {attribution.estimatedFix}</span>
+                    <span className={attribution.estimatedFix !== '5min' ? 'text-amber-500' : 'text-emerald-500'}>预计修复: {attribution.estimatedFix}</span>
                   </div>
                 </div>
               )
@@ -640,12 +907,12 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
       {selected.size > 0 && !showConfirmDialog && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 duration-200">
           <div className="flex items-center gap-3 px-5 py-3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl shadow-2xl border border-zinc-700 dark:border-zinc-300">
-            <Badge className="bg-amber-600 text-white border-0 hover:bg-amber-700">
+            <Badge className="bg-amber-500 text-white border-0 hover:bg-amber-600">
               已选 {selected.size} 张表
             </Badge>
             <Button
               size="sm"
-              className="bg-amber-600 hover:bg-amber-700 text-white h-8"
+              className="bg-amber-500 hover:bg-amber-600 text-white h-8"
               onClick={openBatchDialog}
             >
               <Zap className="h-3.5 w-3.5 mr-1" />
@@ -675,12 +942,12 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
       {/* Running progress bar */}
       {runningTables.length > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-          <div className="flex items-center gap-3 px-5 py-3 bg-amber-600 text-white rounded-xl shadow-2xl">
+          <div className="flex items-center gap-3 px-5 py-3 bg-amber-500 text-white rounded-xl shadow-2xl">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span className="text-sm font-medium">
               正在补数... {completedTables.size}/{selected.size + completedTables.size + runningTables.length}
             </span>
-            <div className="w-32 h-2 bg-amber-800 rounded-full overflow-hidden">
+            <div className="w-32 h-2 bg-amber-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-white rounded-full transition-all duration-300"
                 style={{ width: `${(completedTables.size / (runningTables.length + completedTables.size)) * 100}%` }}
@@ -700,7 +967,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
               </div>
               批量补数任务编排
               {batchCompleted && (
-                <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-[10px]">
+                <Badge variant="outline" className="text-emerald-500 border-emerald-300 text-[10px]">
                   <CheckCircle2 className="h-3 w-3 mr-0.5" />已完成
                 </Badge>
               )}
@@ -801,7 +1068,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                     <span className="font-mono text-xs font-medium">{step.table}</span>
                     <span className="text-[10px] text-zinc-400">{step.cn}</span>
                     {step.isForce && (
-                      <Badge variant="outline" className="text-[9px] py-0 px-1 text-amber-600 border-amber-300">FORCE</Badge>
+                      <Badge variant="outline" className="text-[9px] py-0 px-1 text-amber-500 border-amber-300">FORCE</Badge>
                     )}
                   </div>
                   {step.dependsOn.length > 0 && (
@@ -820,9 +1087,9 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                     <Clock className="h-2.5 w-2.5" />{step.estimatedTime}
                   </span>
                   <Badge variant="outline" className={`text-[9px] py-0 px-1.5 ${
-                    step.status === 'running' ? 'text-amber-600 border-amber-300' :
-                    step.status === 'success' ? 'text-emerald-600 border-emerald-300' :
-                    step.status === 'failed' ? 'text-rose-600 border-rose-300' :
+                    step.status === 'running' ? 'text-amber-500 border-amber-300' :
+                    step.status === 'success' ? 'text-emerald-500 border-emerald-300' :
+                    step.status === 'failed' ? 'text-rose-500 border-rose-300' :
                     'text-zinc-400 border-zinc-300'
                   }`}>
                     {step.status === 'waiting' && '等待中'}
@@ -859,7 +1126,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                 </Button>
               </>
             ) : batchExecuting ? (
-              <Button variant="outline" size="sm" className="text-rose-600 border-rose-300" onClick={cancelBatch}>
+              <Button variant="outline" size="sm" className="text-rose-500 border-rose-300" onClick={cancelBatch}>
                 <X className="h-3.5 w-3.5 mr-1" />取消执行
               </Button>
             ) : (
@@ -867,7 +1134,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                 <Button variant="outline" size="sm" onClick={() => setShowBatchDialog(false)}>
                   取消
                 </Button>
-                <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={executeBatch}>
+                <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={executeBatch}>
                   <Zap className="h-3.5 w-3.5 mr-1" />
                   开始执行 ({batchSteps.length} 张表)
                 </Button>
@@ -894,12 +1161,12 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
             {/* Summary stats */}
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-center">
-                <div className="text-2xl font-bold text-emerald-600">{batchSummary.success.length}</div>
-                <div className="text-[10px] text-emerald-600">成功</div>
+                <div className="text-2xl font-bold text-emerald-500">{batchSummary.success.length}</div>
+                <div className="text-[10px] text-emerald-500">成功</div>
               </div>
               <div className="p-3 rounded-md border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/20 text-center">
-                <div className="text-2xl font-bold text-rose-600">{batchSummary.failed.length}</div>
-                <div className="text-[10px] text-rose-600">失败</div>
+                <div className="text-2xl font-bold text-rose-500">{batchSummary.failed.length}</div>
+                <div className="text-[10px] text-rose-500">失败</div>
               </div>
               <div className="p-3 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/30 text-center">
                 <div className="text-2xl font-bold text-zinc-600">{batchSummary.total}</div>
@@ -910,14 +1177,14 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
             {/* Failed tables detail */}
             {batchSummary.failed.length > 0 && (
               <div className="p-3 rounded-md border border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20">
-                <div className="text-xs font-medium text-rose-700 dark:text-rose-300 mb-2 flex items-center gap-1">
+                <div className="text-xs font-medium text-rose-600 dark:text-rose-400 mb-2 flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3" />失败表详情
                 </div>
                 <div className="space-y-1">
                   {batchSummary.failed.map(step => (
                     <div key={step.table} className="flex items-center justify-between text-xs">
                       <span className="font-mono">{step.table}</span>
-                      <Button size="sm" variant="ghost" className="h-6 text-[10px] text-rose-600" onClick={() => {
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px] text-rose-500" onClick={() => {
                         onRunTable?.(step.table)
                         setShowSummaryDialog(false)
                       }}>
@@ -977,7 +1244,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
             </div>
             <div className="px-5 py-3 border-t flex items-center justify-end gap-2 bg-zinc-50/50 dark:bg-zinc-950/30 rounded-b-xl">
               <Button size="sm" variant="outline" onClick={() => setShowConfirmDialog(false)}>取消</Button>
-              <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={confirmForceRetry}>
+              <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={confirmForceRetry}>
                 <Zap className="h-3 w-3 mr-1" />
                 确认补数 ({selected.size})
               </Button>
@@ -989,12 +1256,28 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
   )
 }
 
+// ── Status Pill Badge ─────────────────────────────────────────
+function HealthPillBadge({ status }: { status: HealthStatus }) {
+  const config: Record<HealthStatus, { label: string; className: string }> = {
+    green: { label: '健康', className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' },
+    yellow: { label: '待查', className: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20' },
+    red: { label: '异常', className: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20' },
+    white: { label: 'once', className: 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20' },
+  }
+  const { label, className } = config[status]
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0 rounded-full text-[9px] font-medium border ${className}`}>
+      {label}
+    </span>
+  )
+}
+
 function dayStatusClass(s: string): string {
   switch (s) {
     case 'success': return 'bg-emerald-500 text-white'
     case 'failed': return 'bg-rose-500 text-white'
-    case 'skipped': return 'bg-zinc-300 text-zinc-600'
-    default: return 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400'
+    case 'skipped': return 'bg-amber-500 text-white'
+    default: return 'bg-zinc-200 dark:bg-zinc-700 text-zinc-400'
   }
 }
 
@@ -1047,10 +1330,10 @@ function getAttribution(table: string): Attribution {
 
 function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: 'emerald' | 'rose' | 'amber' | 'zinc' }) {
   const map = {
-    emerald: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40',
-    rose: 'text-rose-600 bg-rose-50 dark:bg-rose-950/40',
-    amber: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40',
-    zinc: 'text-zinc-600 bg-zinc-100 dark:bg-zinc-800',
+    emerald: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40',
+    rose: 'text-rose-500 bg-rose-50 dark:bg-rose-950/40',
+    amber: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40',
+    zinc: 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800',
   }
   return (
     <Card>

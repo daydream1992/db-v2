@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive, Radio, Loader2, XCircle, Play, Pause, Terminal, Calendar, ArrowUpRight, RefreshCw, Download } from 'lucide-react'
+import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive, Radio, Loader2, XCircle, Play, Pause, Terminal, Calendar, ArrowUpRight, RefreshCw, Download, X, ChevronUp, ChevronDown } from 'lucide-react'
 import { ALERTS, PIPELINE_RUNS, ROW_TREND, TABLES, DAILY_STATS, INGEST_TREND, SCRIPT_DISTRIBUTION } from '@/lib/dataops/mock-data'
 import { APP_CONFIG } from '@/lib/dataops/config'
 import { formatRows, runStatusClass, runStatusDot } from '@/lib/dataops/styles'
@@ -13,6 +13,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { useGitHubSync } from '@/hooks/use-github-sync'
+import { motion } from 'framer-motion'
 
 type TimeRange = '7d' | '30d' | '90d'
 
@@ -59,9 +60,15 @@ function genScaledIngest(range: TimeRange): { date: string; rows: number }[] {
   return result
 }
 
+// Format number with commas (e.g., 19,800,000)
+function formatNumberComma(n: number): string {
+  return n.toLocaleString('en-US')
+}
+
 export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void }) {
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
   const [runningElapsed, setRunningElapsed] = useState(0)
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set())
 
   const totalTables = TABLES.length
   const greenTables = TABLES.filter(t => t.health === 'green').length
@@ -103,7 +110,28 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
   // Top 大表
   const topTables = [...TABLES].filter(t => t.rows > 0).sort((a, b) => b.rows - a.rows).slice(0, 6)
 
+  // Active alerts (not dismissed)
+  const activeAlerts = ALERTS.filter(a => !dismissedAlerts.has(a.id))
+
   const { refetch: refetchGitHub, loading: syncLoading } = useGitHubSync()
+
+  // Trend calculations for KPI cards
+  const kpiTrends = useMemo(() => {
+    const lastHalf = Math.floor(scaledStats.length / 2)
+    const firstHalfStats = scaledStats.slice(0, lastHalf)
+    const secondHalfStats = scaledStats.slice(lastHalf)
+    const firstRate = firstHalfStats.length > 0 ? firstHalfStats.reduce((s, d) => s + d.success, 0) / Math.max(firstHalfStats.reduce((s, d) => s + d.total, 0), 1) * 100 : 0
+    const secondRate = secondHalfStats.length > 0 ? secondHalfStats.reduce((s, d) => s + d.success, 0) / Math.max(secondHalfStats.reduce((s, d) => s + d.total, 0), 1) * 100 : 0
+    const successTrend = Math.round(secondRate - firstRate)
+
+    const firstIngest = firstHalfStats.reduce((s, d) => s + (scaledIngest[firstHalfStats.indexOf(d)]?.rows ?? 0), 0)
+    const secondIngest = secondHalfStats.reduce((s, d) => s + (scaledIngest[lastHalf + secondHalfStats.indexOf(d)]?.rows ?? 0), 0)
+    const ingestTrend = firstIngest > 0 ? Math.round(((secondIngest - firstIngest) / firstIngest) * 100) : 0
+
+    const alertTrend = ALERTS.length > 5 ? 1 : -1 // mock trend
+
+    return { successTrend, ingestTrend, alertTrend }
+  }, [scaledStats, scaledIngest])
 
   // 导出 PNG 报表
   const handleExportReport = () => {
@@ -421,6 +449,11 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
     }
   }
 
+  const dismissAlert = (id: string) => {
+    setDismissedAlerts(prev => new Set(prev).add(id))
+    toast.success('已忽略该告警')
+  }
+
   return (
     <div className="space-y-6">
       {/* 时间范围选择器 + GitHub 同步按钮 */}
@@ -468,13 +501,14 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
       </div>
 
       {/* KPI 卡片 */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         <KpiCard
           icon={<Database className="h-5 w-5" />}
           label="数据表总数"
           value={totalTables.toString()}
           sub={`${greenTables} 健康 · ${redTables} 异常 · ${yellowTables} 待查`}
           tone="sky"
+          trend={{ value: 2, direction: 'up' }}
           spark={<Sparkline data={[20, 22, 22, 23, 25, 25, 26]} color="sky" />}
           onClick={() => onNavigate('health')}
           navigable
@@ -485,6 +519,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
           value={`${rangeRate}%`}
           sub={`${rangeSuccess}/${rangeTotal} 成功 · 今日 ${successRate}%`}
           tone={rangeRate >= 90 ? 'emerald' : 'amber'}
+          trend={{ value: Math.abs(kpiTrends.successTrend), direction: kpiTrends.successTrend >= 0 ? 'up' : 'down' }}
           spark={<Sparkline data={scaledStats.slice(-7).map(d => d.total > 0 ? Math.round((d.success / d.total) * 100) : 0)} color={rangeRate >= 90 ? 'emerald' : 'amber'} />}
           popover={<SuccessRatePopover stats={scaledStats} onNavigate={onNavigate} />}
         />
@@ -494,15 +529,17 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
           value={formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0))}
           sub={`日均 ${formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0) / scaledIngest.filter(d => d.rows > 0).length || 1)}`}
           tone="fuchsia"
+          trend={{ value: Math.abs(kpiTrends.ingestTrend), direction: kpiTrends.ingestTrend >= 0 ? 'up' : 'down' }}
           spark={<Sparkline data={scaledIngest.slice(-7).map(d => Math.round(d.rows / 1000000 * 10) / 10)} color="fuchsia" suffix="M" />}
           popover={<IngestRowsPopover onNavigate={onNavigate} />}
         />
         <KpiCard
           icon={<AlertTriangle className="h-5 w-5" />}
           label="待处理告警"
-          value={ALERTS.length.toString()}
+          value={activeAlerts.length.toString()}
           sub={`${ALERTS.filter(a => a.level === 'red').length} 红 · ${ALERTS.filter(a => a.level === 'yellow').length} 黄`}
           tone={ALERTS.filter(a => a.level === 'red').length > 0 ? 'rose' : 'amber'}
+          trend={{ value: ALERTS.length, direction: kpiTrends.alertTrend >= 0 ? 'up' : 'down' }}
           spark={<Sparkline data={[3, 4, 5, 6, 7, 8, 8]} color="rose" />}
           onClick={() => onNavigate('lint')}
           navigable
@@ -512,9 +549,9 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 执行时间线 */}
         <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Activity className="h-4 w-4 text-sky-500" />
+          <CardHeader className="flex flex-row items-center justify-between pb-3 px-6 pt-6">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Activity className="h-4 w-4 text-emerald-500" />
               今日执行时间线
               <Badge variant="outline" className="text-[10px] ml-1">{todayRuns.length} 次</Badge>
             </CardTitle>
@@ -522,9 +559,9 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
               查看全部 <ArrowRight className="ml-1 h-3 w-3" />
             </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-6 pb-6">
             {runningRun && (
-              <div className="mb-3 p-2 rounded-md bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sm flex items-center gap-2">
+              <div className="mb-3 p-3 rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sm flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
                 <span className="font-medium text-sky-700 dark:text-sky-300">运行中：</span>
                 <span className="text-sky-700 dark:text-sky-300 font-mono">{runningRun.table}</span>
@@ -538,8 +575,8 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
                 const left = ((start - minStart) / totalSpan) * 100
                 const width = ((end - start) / totalSpan) * 100
                 return (
-                  <div key={r.id} className="flex items-center gap-2 text-xs group">
-                    <div className="w-32 truncate text-zinc-600 dark:text-zinc-400 font-mono text-[11px]">{r.table}</div>
+                  <div key={r.id} className="flex items-center gap-2 text-sm group">
+                    <div className="w-32 truncate text-zinc-600 dark:text-zinc-400 font-mono text-xs">{r.table}</div>
                     <div className="flex-1 relative h-5 bg-zinc-100 dark:bg-zinc-800/60 rounded">
                       <div
                         className={`absolute top-0 h-5 rounded ${runStatusDot(r.status)} transition-all group-hover:brightness-110`}
@@ -552,7 +589,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
                 )
               })}
             </div>
-            <div className="mt-3 flex items-center gap-4 text-[11px] text-zinc-500">
+            <div className="mt-3 flex items-center gap-4 text-xs text-zinc-500">
               <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> 成功</span>
               <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-500" /> 失败</span>
               <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-zinc-300" /> 跳过</span>
@@ -562,29 +599,60 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
           </CardContent>
         </Card>
 
-        {/* 告警列表 */}
+        {/* 告警列表 - Redesigned */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-3 px-6 pt-6">
+            <CardTitle className="text-lg flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-500" />
               待处理告警
+              <Badge variant="outline" className="text-[10px] ml-1">{activeAlerts.length} 条</Badge>
             </CardTitle>
             <Button variant="ghost" size="sm" onClick={() => onNavigate('lint')}>规范</Button>
           </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[320px] pr-3">
-              <div className="space-y-2">
-                {ALERTS.map(a => (
-                  <div key={a.id} className={`p-2.5 rounded-md border text-xs ${a.level === 'red' ? 'border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30' : 'border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30'}`}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`h-2 w-2 rounded-full ${a.level === 'red' ? 'bg-rose-500' : 'bg-amber-400'}`} />
-                      <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">{a.table}</span>
-                      <Badge variant="outline" className="ml-auto text-[10px] py-0 px-1.5">{a.type}</Badge>
+          <CardContent className="px-6 pb-6">
+            <ScrollArea className="h-[320px] pr-1">
+              <div className="space-y-3">
+                {activeAlerts.map(a => (
+                  <motion.div
+                    key={a.id}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className={`relative rounded-lg border-l-4 p-4 text-sm ${
+                      a.level === 'red'
+                        ? 'border-l-rose-500 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60'
+                        : 'border-l-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`h-2 w-2 rounded-full flex-shrink-0 ${a.level === 'red' ? 'bg-rose-500' : 'bg-amber-400'}`} />
+                          <span className="font-mono font-semibold text-zinc-700 dark:text-zinc-300 truncate">{a.table}</span>
+                          <Badge variant="outline" className="text-[10px] py-0 px-1.5 flex-shrink-0">{a.type}</Badge>
+                          <Badge variant="secondary" className="text-[9px] py-0 px-1.5 flex-shrink-0 ml-auto">
+                            <Clock className="h-2.5 w-2.5 mr-0.5" />{a.ts.slice(11)}
+                          </Badge>
+                        </div>
+                        <div className="text-zinc-600 dark:text-zinc-400 leading-relaxed text-xs pl-4">{a.message}</div>
+                      </div>
+                      <button
+                        onClick={() => dismissAlert(a.id)}
+                        className="flex-shrink-0 p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                        title="忽略此告警"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                    <div className="text-zinc-600 dark:text-zinc-400 leading-relaxed">{a.message}</div>
-                    <div className="text-[10px] text-zinc-400 mt-1 flex items-center gap-1"><Clock className="h-3 w-3" />{a.ts}</div>
-                  </div>
+                  </motion.div>
                 ))}
+                {activeAlerts.length === 0 && (
+                  <div className="py-8 text-center text-zinc-400">
+                    <CheckCircle2 className="h-8 w-8 mx-auto opacity-40 mb-2 text-emerald-500" />
+                    <div className="text-sm">所有告警已处理</div>
+                    <div className="text-xs mt-1">暂无待处理告警</div>
+                  </div>
+                )}
               </div>
             </ScrollArea>
           </CardContent>
@@ -595,14 +663,14 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 7日成功率环形图 */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
+          <CardHeader className="pb-3 px-6 pt-6">
+            <CardTitle className="text-lg flex items-center gap-2">
               <Gauge className="h-4 w-4 text-emerald-500" />
               {rangeLabel}执行成功率
               <Badge variant="outline" className="text-[10px] ml-1">{scaledStats.length} 天</Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-6 pb-6">
             <div className="flex items-center gap-4">
               <DonutChart
                 value={rangeRate}
@@ -610,7 +678,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
                 label={`${rangeRate}%`}
                 subLabel={rangeLabel}
               />
-              <div className="flex-1 space-y-1 text-xs max-h-[140px] overflow-y-auto pr-1">
+              <div className="flex-1 space-y-1 text-sm max-h-[140px] overflow-y-auto pr-1">
                 {scaledStats.slice().reverse().slice(0, timeRange === '7d' ? 7 : 12).map(d => (
                   <div key={d.date} className="flex items-center gap-2">
                     <span className="w-10 text-zinc-500 font-mono text-[10px] flex-shrink-0">{d.date}</span>
@@ -635,41 +703,41 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
 
         {/* 入库行数趋势 */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
+          <CardHeader className="pb-3 px-6 pt-6">
+            <CardTitle className="text-lg flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-fuchsia-500" />
               {rangeLabel}入座行数趋势
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-6 pb-6">
             <AreaChart data={scaledIngest} />
-            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-              <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/50">
+            <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+              <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-900/50">
                 <div className="text-[10px] text-zinc-400">{rangeLabel}累计</div>
-                <div className="font-mono font-semibold text-sm">{formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0))}</div>
+                <div className="font-mono font-semibold text-lg">{formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0))}</div>
               </div>
-              <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/50">
+              <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-900/50">
                 <div className="text-[10px] text-zinc-400">日均</div>
-                <div className="font-mono font-semibold text-sm">{formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0) / (scaledIngest.filter(d => d.rows > 0).length || 1))}</div>
+                <div className="font-mono font-semibold text-lg">{formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0) / (scaledIngest.filter(d => d.rows > 0).length || 1))}</div>
               </div>
-              <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/50">
+              <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-900/50">
                 <div className="text-[10px] text-zinc-400">峰值</div>
-                <div className="font-mono font-semibold text-sm text-fuchsia-600">{formatRows(Math.max(...scaledIngest.map(d => d.rows)))}</div>
+                <div className="font-mono font-semibold text-lg text-fuchsia-600 dark:text-fuchsia-400">{formatRows(Math.max(...scaledIngest.map(d => d.rows)))}</div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Top 大表 */}
+        {/* Top 大表 - Enhanced with alternating rows & hover */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Layers className="h-4 w-4 text-sky-500" />
+          <CardHeader className="pb-3 px-6 pt-6">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Layers className="h-4 w-4 text-emerald-500" />
               Top 6 大表
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
+          <CardContent className="px-6 pb-6">
+            <div className="space-y-1">
               {topTables.map((t, i) => {
                 const maxRows = topTables[0].rows
                 const pct = (t.rows / maxRows) * 100
@@ -677,17 +745,25 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
                   <button
                     key={t.table}
                     onClick={() => onNavigate('catalog')}
-                    className="w-full text-left group"
+                    className={`w-full text-left group rounded-md px-3 py-2 transition-colors ${
+                      i % 2 === 0
+                        ? 'bg-zinc-50/50 dark:bg-zinc-900/30 hover:bg-zinc-100 dark:hover:bg-zinc-800/50'
+                        : 'hover:bg-zinc-100 dark:hover:bg-zinc-800/50'
+                    }`}
                   >
-                    <div className="flex items-center gap-2 text-xs mb-1">
-                      <span className="text-zinc-400 font-mono w-4">#{i + 1}</span>
-                      <span className="font-mono text-zinc-700 dark:text-zinc-300 group-hover:text-sky-600 dark:group-hover:text-sky-400 truncate flex-1">{t.table}</span>
-                      <span className="font-mono text-zinc-500 text-[11px]">{formatRows(t.rows)}</span>
+                    <div className="flex items-center gap-2 text-sm mb-1">
+                      <span className="text-zinc-400 font-mono w-5 text-xs">#{i + 1}</span>
+                      <span className="font-mono text-zinc-700 dark:text-zinc-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 truncate flex-1 transition-colors">{t.table}</span>
+                      <span className="font-mono text-zinc-500 text-xs">{formatNumberComma(t.rows)}</span>
                     </div>
-                    <div className="ml-6 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-                      <div
-                        className={`h-full rounded ${i === 0 ? 'bg-sky-500' : i === 1 ? 'bg-sky-400' : 'bg-sky-300 dark:bg-sky-700'}`}
-                        style={{ width: `${pct}%` }}
+                    <div className="ml-5 h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.6, delay: i * 0.08, ease: 'easeOut' }}
+                        className={`h-full rounded-full ${
+                          i === 0 ? 'bg-emerald-500' : i === 1 ? 'bg-emerald-400' : 'bg-emerald-300 dark:bg-emerald-700'
+                        }`}
                       />
                     </div>
                   </button>
@@ -701,13 +777,13 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
       {/* 第三行：行数趋势 Top + 脚本规模分布 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
+          <CardHeader className="pb-3 px-6 pt-6">
+            <CardTitle className="text-lg flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-fuchsia-500" />
               行数趋势 · 大表 Top
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-6 pb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {ROW_TREND.map(rt => {
                 const max = Math.max(...rt.days.map(d => d.rows))
@@ -724,7 +800,13 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
                         const h = ((d.rows - min) / range) * 70 + 25
                         return (
                           <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group cursor-pointer">
-                            <div className="w-full bg-fuchsia-200 dark:bg-fuchsia-900/50 rounded-t group-hover:bg-fuchsia-400 dark:group-hover:bg-fuchsia-600 transition-colors" style={{ height: `${h}%` }} title={`${formatRows(d.rows)} 行`} />
+                            <motion.div
+                              initial={{ height: 0 }}
+                              animate={{ height: `${h}%` }}
+                              transition={{ duration: 0.5, ease: 'easeOut' }}
+                              className="w-full bg-fuchsia-200 dark:bg-fuchsia-900/50 rounded-t group-hover:bg-fuchsia-400 dark:group-hover:bg-fuchsia-600 transition-colors"
+                              title={`${formatNumberComma(d.rows)} 行`}
+                            />
                             <span className="text-[9px] text-zinc-400">{d.date}</span>
                           </div>
                         )
@@ -737,44 +819,52 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
           </CardContent>
         </Card>
 
-        {/* 脚本规模分布 */}
+        {/* 脚本规模分布 - Enhanced with percentage labels */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
+          <CardHeader className="pb-3 px-6 pt-6">
+            <CardTitle className="text-lg flex items-center gap-2">
               <Cpu className="h-4 w-4 text-amber-500" />
               脚本规模分布
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
+          <CardContent className="px-6 pb-6">
+            <div className="space-y-4">
               {SCRIPT_DISTRIBUTION.map(s => {
                 const maxLines = Math.max(...SCRIPT_DISTRIBUTION.map(x => x.totalLines))
                 const pct = (s.totalLines / maxLines) * 100
+                const totalAllLines = SCRIPT_DISTRIBUTION.reduce((sum, x) => sum + x.totalLines, 0)
+                const pctOfTotal = Math.round((s.totalLines / totalAllLines) * 100)
                 return (
                   <div key={s.dir}>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-mono">{s.dir}</span>
-                      <span className="text-zinc-500">{s.tables} 表 · {s.totalLines} 行</span>
+                    <div className="flex items-center justify-between text-sm mb-1.5">
+                      <span className="font-mono font-medium">{s.dir}</span>
+                      <span className="text-zinc-500 text-xs">{s.tables} 表 · {formatNumberComma(s.totalLines)} 行</span>
                     </div>
-                    <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-                      <div
-                        className={`h-full rounded ${
-                          s.dir === '1_入库' ? 'bg-sky-500' :
+                    <div className="h-6 bg-zinc-100 dark:bg-zinc-800 rounded-md overflow-hidden relative">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                        className={`h-full rounded-md flex items-center ${
+                          s.dir === '1_入库' ? 'bg-emerald-500' :
                           s.dir === '2_计算' ? 'bg-fuchsia-500' :
-                          s.dir === '3_策略' ? 'bg-amber-500' : 'bg-emerald-500'
+                          s.dir === '3_策略' ? 'bg-amber-500' : 'bg-sky-500'
                         }`}
-                        style={{ width: `${pct}%` }}
-                      />
+                      >
+                        <span className="text-white text-xs font-semibold px-2 whitespace-nowrap drop-shadow-sm">
+                          {pctOfTotal}%
+                        </span>
+                      </motion.div>
                     </div>
                   </div>
                 )
               })}
             </div>
-            <div className="mt-4 pt-3 border-t grid grid-cols-2 gap-3 text-xs">
+            <div className="mt-4 pt-3 border-t grid grid-cols-2 gap-3 text-sm">
               <div className="flex items-center gap-2">
                 <HardDrive className="h-3.5 w-3.5 text-zinc-400" />
                 <span className="text-zinc-500">总行数</span>
-                <span className="font-mono font-medium ml-auto">{SCRIPT_DISTRIBUTION.reduce((s, d) => s + d.totalLines, 0)}</span>
+                <span className="font-mono font-medium ml-auto">{formatNumberComma(SCRIPT_DISTRIBUTION.reduce((s, d) => s + d.totalLines, 0))}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Database className="h-3.5 w-3.5 text-zinc-400" />
@@ -790,7 +880,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
       <LiveStreamCard onNavigate={onNavigate} />
 
       {/* 快捷入口 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <QuickAction icon={<Zap className="h-4 w-4" />} label="立即执行" desc="手动触发某表" onClick={() => onNavigate('orchestration')} />
         <QuickAction icon={<Activity className="h-4 w-4" />} label="健康度" desc="红绿灯矩阵" onClick={() => onNavigate('health')} />
         <QuickAction icon={<CheckCircle2 className="h-4 w-4" />} label="规范校验" desc="12 条规则" onClick={() => onNavigate('lint')} />
@@ -817,12 +907,20 @@ function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
   }
 
   return (
-    <Card className="border-sky-200/50 dark:border-sky-900/40 overflow-hidden">
-      <CardHeader className="pb-3">
+    <Card className="border-emerald-200/60 dark:border-emerald-900/40 overflow-hidden">
+      <CardHeader className="pb-3 px-6 pt-6">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Radio className={`h-4 w-4 ${streamer.currentRun?.status === 'running' ? 'text-rose-500 animate-pulse' : 'text-sky-500'}`} />
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Radio className={`h-4 w-4 ${streamer.currentRun?.status === 'running' ? 'text-rose-500 animate-pulse' : 'text-emerald-500'}`} />
             实时执行流
+            {/* Blinking LIVE indicator */}
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Live</span>
+            </span>
             {streamer.connected && (
               <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300 ml-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse mr-1" /> 已连接 :{APP_CONFIG.logStreamerPort}
@@ -842,87 +940,98 @@ function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
             )}
           </CardTitle>
           <div className="flex items-center gap-1.5">
+            {/* Prominent CTA button */}
             {streamer.currentRun?.status === 'running' ? (
-              <Button size="sm" variant="outline" className="h-7 text-xs text-rose-600 hover:text-rose-700" onClick={() => streamer.cancel()}>
-                <Pause className="h-3 w-3 mr-1" /> 取消
+              <Button size="sm" variant="outline" className="h-8 text-xs text-rose-600 hover:text-rose-700 border-rose-200 dark:border-rose-800" onClick={() => streamer.cancel()}>
+                <Pause className="h-3.5 w-3.5 mr-1" /> 取消
               </Button>
             ) : (
               <Button
                 size="sm"
-                variant="outline"
-                className="h-7 text-xs"
+                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm"
                 onClick={() => streamer.triggerDaily()}
                 disabled={!!streamer.currentRun}
                 title="触发 daily 全量执行"
               >
-                <Play className="h-3 w-3 mr-1" /> 触发 daily
+                <Play className="h-3.5 w-3.5" /> 触发执行
               </Button>
             )}
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onNavigate('logs')}>
-              <Terminal className="h-3 w-3 mr-1" /> 完整日志
+            <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => onNavigate('logs')}>
+              <Terminal className="h-3.5 w-3.5 mr-1" /> 完整日志
             </Button>
           </div>
         </div>
         {/* 进度条 */}
         {streamer.currentRun?.status === 'running' && (
-          <div className="mt-2 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-sky-500 via-fuchsia-500 to-rose-500 transition-all duration-300"
-              style={{ width: `${streamer.currentRun.progress ?? 0}%` }}
+          <div className="mt-3 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${streamer.currentRun.progress ?? 0}%` }}
+              className="h-full bg-gradient-to-r from-emerald-500 via-sky-500 to-fuchsia-500 transition-all duration-300"
             />
           </div>
         )}
         {streamer.dailyProgress && (
-          <div className="mt-2 flex items-center gap-2 text-[11px]">
+          <div className="mt-2 flex items-center gap-2 text-xs">
             <Zap className="h-3 w-3 text-amber-500" />
             <span className="text-zinc-500">daily 全量</span>
-            <div className="flex-1 max-w-[200px] h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-              <div className="h-full bg-amber-500 transition-all" style={{ width: `${(streamer.dailyProgress.completed / streamer.dailyProgress.total) * 100}%` }} />
+            <div className="flex-1 max-w-[200px] h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+              <div className="h-full bg-amber-500 transition-all rounded-full" style={{ width: `${(streamer.dailyProgress.completed / streamer.dailyProgress.total) * 100}%` }} />
             </div>
             <span className="font-mono text-zinc-400">{streamer.dailyProgress.completed}/{streamer.dailyProgress.total}</span>
           </div>
         )}
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="pt-0 px-6 pb-6">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
-          {/* 日志流 */}
-          <div className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 overflow-hidden">
-            <div className="px-3 py-1.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-900/50 flex items-center gap-2">
-              <Terminal className="h-3 w-3 text-zinc-400" />
-              <span className="text-[11px] font-mono text-zinc-500">logs/run_live.log</span>
+          {/* 日志流 - Enhanced terminal style */}
+          <div className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-900 dark:bg-zinc-950 overflow-hidden shadow-inner">
+            <div className="px-4 py-2 border-b border-zinc-700 bg-zinc-800 dark:bg-zinc-900 flex items-center gap-2">
+              <div className="flex gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              </div>
+              <Terminal className="h-3 w-3 text-zinc-500 ml-1" />
+              <span className="text-[11px] font-mono text-zinc-400">logs/run_live.log</span>
               {streamer.logs.length > 0 && (
-                <Badge variant="outline" className="ml-auto text-[9px] text-rose-600 border-rose-300 py-0">
-                  <span className="h-1 w-1 rounded-full bg-rose-500 animate-pulse mr-1" /> LIVE · {streamer.logs.length}
+                <Badge variant="outline" className="ml-auto text-[9px] text-rose-400 border-rose-600/50 bg-rose-950/30 py-0">
+                  <span className="relative flex h-1.5 w-1.5 mr-1">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500" />
+                  </span>
+                  LIVE · {streamer.logs.length}
                 </Badge>
               )}
             </div>
-            <div className="h-[240px] overflow-y-auto font-mono text-[11px] p-2 space-y-0">
+            <div className="h-[240px] overflow-y-auto font-mono text-xs p-3 space-y-0.5 custom-scrollbar">
+
               {streamer.logs.length === 0 && (
-                <div className="py-12 text-center text-zinc-400">
+                <div className="py-12 text-center text-zinc-500">
                   <Terminal className="h-6 w-6 mx-auto opacity-40 mb-2" />
-                  <div className="text-xs">点击右侧剧本触发实时执行</div>
-                  <div className="text-[10px] mt-1">或点击「触发 daily」执行全量</div>
+                  <div className="text-sm text-zinc-400">点击右侧剧本触发实时执行</div>
+                  <div className="text-[11px] mt-1">或点击「触发执行」执行全量</div>
                 </div>
               )}
               {streamer.logs.slice(-80).map(l => (
                 <div
                   key={l.id}
                   className={`flex gap-2 px-1.5 py-0.5 rounded ${
-                    l.level === 'ERROR' ? 'bg-rose-50 dark:bg-rose-950/30' :
-                    l.level === 'WARNING' ? 'bg-amber-50 dark:bg-amber-950/20' :
-                    l.level === 'INFO' && l.message.startsWith('✔') ? 'bg-emerald-50/50 dark:bg-emerald-950/20' :
+                    l.level === 'ERROR' ? 'bg-rose-950/50' :
+                    l.level === 'WARNING' ? 'bg-amber-950/30' :
+                    l.level === 'INFO' && l.message.startsWith('✔') ? 'bg-emerald-950/30' :
                     ''
                   }`}
                 >
-                  <span className="text-zinc-400 flex-shrink-0">{l.ts.slice(11)}</span>
+                  <span className="text-zinc-500 flex-shrink-0">{l.ts.slice(11)}</span>
                   <span className={`flex-shrink-0 w-14 font-bold ${
-                    l.level === 'ERROR' ? 'text-rose-600' :
-                    l.level === 'WARNING' ? 'text-amber-600' :
-                    l.level === 'INFO' ? 'text-emerald-600' :
-                    'text-zinc-400'
+                    l.level === 'ERROR' ? 'text-rose-400' :
+                    l.level === 'WARNING' ? 'text-amber-400' :
+                    l.level === 'INFO' ? 'text-emerald-400' :
+                    'text-zinc-500'
                   }`}>{l.level}</span>
-                  <span className="text-sky-600 dark:text-sky-400 flex-shrink-0 w-32 truncate">{l.table}</span>
-                  <span className="text-zinc-700 dark:text-zinc-300 flex-1">{l.message}</span>
+                  <span className="text-sky-400 flex-shrink-0 w-32 truncate">{l.table}</span>
+                  <span className="text-zinc-300 flex-1">{l.message}</span>
                 </div>
               ))}
               <div ref={logEndRef} />
@@ -930,9 +1039,9 @@ function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
           </div>
 
           {/* 可触发剧本 */}
-          <div className="rounded-md border border-zinc-200 dark:border-zinc-800 p-2">
-            <div className="text-[11px] text-zinc-500 mb-1.5 flex items-center gap-1">
-              <Zap className="h-3 w-3" /> 可触发剧本 ({streamer.scripts.length})
+          <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 p-3 bg-zinc-50 dark:bg-zinc-900/50">
+            <div className="text-xs text-zinc-500 mb-2 flex items-center gap-1 font-medium">
+              <Zap className="h-3.5 w-3.5" /> 可触发剧本 ({streamer.scripts.length})
             </div>
             <div className="space-y-1 max-h-[260px] overflow-y-auto pr-1">
               {streamer.scripts.map(s => {
@@ -942,10 +1051,10 @@ function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
                     key={s.idx}
                     onClick={() => handleTrigger(s.table)}
                     disabled={!!streamer.currentRun}
-                    className={`w-full text-left px-2 py-1.5 rounded text-[11px] font-mono border transition-all flex items-center gap-1.5 ${
+                    className={`w-full text-left px-3 py-2 rounded-md text-xs font-mono border transition-all flex items-center gap-1.5 ${
                       isRunning
-                        ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300'
-                        : 'border-zinc-200 dark:border-zinc-700 hover:border-sky-300 dark:hover:border-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/30 disabled:opacity-50 disabled:cursor-not-allowed'
+                        ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                        : 'border-zinc-200 dark:border-zinc-600 hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 disabled:opacity-50 disabled:cursor-not-allowed'
                     }`}
                     title={`${s.cn} · ${s.steps} 步日志`}
                   >
@@ -963,10 +1072,10 @@ function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
   )
 }
 
-// --- 子组件：KPI 卡片 ---
-function KpiCard({ icon, label, value, sub, tone, spark, onClick, popover, navigable }: {
+// --- 子组件：KPI 卡片 - Enhanced with gradient bg, motion, trend arrows ---
+function KpiCard({ icon, label, value, sub, tone, spark, onClick, popover, navigable, trend }: {
   icon: React.ReactNode; label: string; value: string; sub: string; tone: 'sky' | 'emerald' | 'amber' | 'rose' | 'fuchsia'; spark?: React.ReactNode
-  onClick?: () => void; popover?: ReactNode; navigable?: boolean
+  onClick?: () => void; popover?: ReactNode; navigable?: boolean; trend?: { value: number; direction: 'up' | 'down' }
 }) {
   const toneMap = {
     sky: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40',
@@ -975,29 +1084,53 @@ function KpiCard({ icon, label, value, sub, tone, spark, onClick, popover, navig
     rose: 'text-rose-600 bg-rose-50 dark:bg-rose-950/40',
     fuchsia: 'text-fuchsia-600 bg-fuchsia-50 dark:bg-fuchsia-950/40',
   }
+  const gradientMap = {
+    sky: 'from-sky-50/80 to-white dark:from-sky-950/20 dark:to-zinc-950',
+    emerald: 'from-emerald-50/80 to-white dark:from-emerald-950/20 dark:to-zinc-950',
+    amber: 'from-amber-50/80 to-white dark:from-amber-950/20 dark:to-zinc-950',
+    rose: 'from-rose-50/80 to-white dark:from-rose-950/20 dark:to-zinc-950',
+    fuchsia: 'from-fuchsia-50/80 to-white dark:from-fuchsia-950/20 dark:to-zinc-950',
+  }
   const isClickable = !!onClick || !!popover
 
   const cardInner = (
-    <Card className={`overflow-hidden group hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 animate-stagger-in ${
-      isClickable ? 'cursor-pointer focus-visible:ring-2 focus-visible:ring-sky-200 dark:focus-visible:ring-sky-800 outline-none' : ''
-    }`}>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1 flex-1 min-w-0">
-            <div className="text-xs text-zinc-500">{label}</div>
-            <div className="text-2xl font-semibold tracking-tight animate-count-up">{value}</div>
-            <div className="text-[11px] text-zinc-400 truncate">{sub}</div>
+    <motion.div
+      whileHover={{ scale: 1.02, y: -2 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+    >
+      <Card className={`overflow-hidden group hover:shadow-lg transition-shadow duration-200 bg-gradient-to-br ${gradientMap[tone]} ${
+        isClickable ? 'cursor-pointer focus-visible:ring-2 focus-visible:ring-emerald-200 dark:focus-visible:ring-emerald-800 outline-none' : ''
+      }`}>
+        <CardContent className="p-6">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1.5 flex-1 min-w-0">
+              <div className="text-sm text-zinc-500">{label}</div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-semibold tracking-tight">{value}</span>
+                {trend && (
+                  <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${
+                    trend.direction === 'up'
+                      ? (tone === 'rose' ? 'text-rose-500' : 'text-emerald-500')
+                      : (tone === 'rose' ? 'text-emerald-500' : 'text-rose-500')
+                  }`}>
+                    {trend.direction === 'up' ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    {trend.value}{tone === 'rose' && trend.direction === 'down' ? '' : '%'}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-zinc-400 truncate">{sub}</div>
+            </div>
+            <div className="flex items-center gap-1">
+              {navigable && (
+                <ArrowUpRight className="h-3.5 w-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+              )}
+              <div className={`p-2.5 rounded-xl ${toneMap[tone]} group-hover:scale-110 transition-transform duration-200`}>{icon}</div>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            {navigable && (
-              <ArrowUpRight className="h-3.5 w-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-            )}
-            <div className={`p-2 rounded-lg ${toneMap[tone]} group-hover:scale-110 transition-transform`}>{icon}</div>
-          </div>
-        </div>
-        {spark && <div className="mt-3 -mb-1">{spark}</div>}
-      </CardContent>
-    </Card>
+          {spark && <div className="mt-4 -mb-1">{spark}</div>}
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 
   // If popover is provided, wrap in Popover
@@ -1037,7 +1170,7 @@ function SuccessRatePopover({ stats, onNavigate }: { stats: DailyRunStat[]; onNa
         <Badge variant="outline" className="text-[9px] ml-auto">近 7 天</Badge>
       </div>
       <div className="p-2">
-        <table className="w-full text-[11px]">
+        <table className="w-full text-xs">
           <thead>
             <tr className="text-zinc-400 border-b border-zinc-100 dark:border-zinc-800">
               <th className="py-1.5 px-2 text-left font-medium">日期</th>
@@ -1065,7 +1198,7 @@ function SuccessRatePopover({ stats, onNavigate }: { stats: DailyRunStat[]; onNa
       <div className="px-3 py-2 border-t border-zinc-100 dark:border-zinc-800">
         <button
           onClick={() => onNavigate('orchestration')}
-          className="text-[11px] text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-1 transition-colors"
+          className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 transition-colors"
         >
           点击查看更多 <ArrowRight className="h-3 w-3" /> 编排
         </button>
@@ -1090,16 +1223,18 @@ function IngestRowsPopover({ onNavigate }: { onNavigate: (v: string) => void }) 
           const pct = (t.rows / maxRows) * 100
           return (
             <div key={t.table}>
-              <div className="flex items-center justify-between text-[11px] mb-0.5">
+              <div className="flex items-center justify-between text-xs mb-0.5">
                 <span className="font-mono text-zinc-700 dark:text-zinc-300 truncate flex-1">{t.table}</span>
                 <span className="font-mono text-zinc-500 ml-2">{formatRows(t.rows)}</span>
               </div>
-              <div className="h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-                <div
-                  className={`h-full rounded ${
+              <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.5, delay: i * 0.05 }}
+                  className={`h-full rounded-full ${
                     i === 0 ? 'bg-fuchsia-500' : i === 1 ? 'bg-fuchsia-400' : 'bg-fuchsia-300 dark:bg-fuchsia-700'
                   }`}
-                  style={{ width: `${pct}%` }}
                 />
               </div>
             </div>
@@ -1109,7 +1244,7 @@ function IngestRowsPopover({ onNavigate }: { onNavigate: (v: string) => void }) 
       <div className="px-3 py-2 border-t border-zinc-100 dark:border-zinc-800">
         <button
           onClick={() => onNavigate('catalog')}
-          className="text-[11px] text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-1 transition-colors"
+          className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 transition-colors"
         >
           点击查看更多 <ArrowRight className="h-3 w-3" /> 目录
         </button>
@@ -1148,7 +1283,7 @@ function Sparkline({ data, color, suffix }: { data: number[]; color: 'sky' | 'em
       <path d={areaPath} className={fillMap[color]} />
       <path d={path} fill="none" className={`${colorMap[color]} stroke-1.5`} strokeLinecap="round" strokeLinejoin="round" />
       {data.map((v, i) => (
-        <circle key={i} cx={i * step} cy={h - ((v - min) / range) * (h - 4) - 2} r={i === data.length - 1 ? 2 : 0} className={colorMap[color].replace('stroke', 'fill')} />
+        <circle key={i} cx={i * step} cy={h - ((v - min) / range) * (h - 4) - 2} r={i === data.length - 1 ? 2.5 : 0} className={colorMap[color].replace('stroke', 'fill')} />
       ))}
       {suffix && data[data.length - 1] > 0 && (
         <text x={w - 2} y={10} textAnchor="end" className="fill-zinc-400 text-[8px] font-mono">{data[data.length - 1]}{suffix}</text>
@@ -1167,11 +1302,13 @@ function DonutChart({ value, size, label, subLabel }: { value: number; size: num
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" className="text-zinc-200 dark:text-zinc-800" strokeWidth={6} />
-        <circle
+        <motion.circle
           cx={size / 2} cy={size / 2} r={radius} fill="none"
           stroke={color} strokeWidth={6} strokeLinecap="round"
-          strokeDasharray={circumference} strokeDashoffset={offset}
-          style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -1223,14 +1360,16 @@ function AreaChart({ data }: { data: { date: string; rows: number }[] }) {
 // --- 子组件：快捷入口 ---
 function QuickAction({ icon, label, desc, onClick }: { icon: React.ReactNode; label: string; desc: string; onClick: () => void }) {
   return (
-    <Button variant="outline" className="h-auto py-3 justify-start text-left" onClick={onClick}>
-      <div className="flex items-center gap-3">
-        <div className="p-1.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">{icon}</div>
-        <div>
-          <div className="text-sm font-medium">{label}</div>
-          <div className="text-[11px] text-zinc-400">{desc}</div>
+    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+      <Button variant="outline" className="h-auto py-3 justify-start text-left w-full" onClick={onClick}>
+        <div className="flex items-center gap-3">
+          <div className="p-1.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">{icon}</div>
+          <div>
+            <div className="text-sm font-medium">{label}</div>
+            <div className="text-xs text-zinc-400">{desc}</div>
+          </div>
         </div>
-      </div>
-    </Button>
+      </Button>
+    </motion.div>
   )
 }

@@ -1005,8 +1005,8 @@ export function SqlPlaygroundView() {
               <span className="font-mono text-zinc-600 dark:text-zinc-300">{activeTab.name}</span>
             </CardTitle>
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSql('')} title="清空">
-                <Trash2 className="h-3 w-3" />
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setSql('')} title="清空">
+                <Trash2 className="h-3 w-3" />清空
               </Button>
               <div className="toolbar-divider" />
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowSaveDialog(true)}>
@@ -1022,7 +1022,7 @@ export function SqlPlaygroundView() {
           </CardHeader>
           <CardContent className="p-0">
             {/* 高亮显示层 */}
-            <div className="relative h-40 overflow-hidden">
+            <div className="relative h-40 overflow-hidden border border-zinc-200 dark:border-zinc-700 rounded-md m-2 bg-zinc-50/50 dark:bg-zinc-900/40">
               {/* 行号 */}
               <div className="absolute left-0 top-0 bottom-0 w-10 bg-zinc-50 dark:bg-zinc-900/60 border-r text-right pr-2 py-2 select-none">
                 {sqlLines.map((_, i) => (
@@ -1078,7 +1078,7 @@ export function SqlPlaygroundView() {
               {result && durationMs !== null && (
                 <>
                   <Badge variant="outline" className="text-emerald-600 border-emerald-300 py-0"><CheckCircle2 className="h-3 w-3 mr-0.5" />成功</Badge>
-                  <span className="text-zinc-500">{result.rowsAffected} 行</span>
+                  <Badge variant="secondary" className="text-[10px] py-0 font-mono">{result.rowsAffected} 行</Badge>
                   <span className="text-zinc-400">·</span>
                   <span className="text-zinc-500 font-mono">{durationMs}ms</span>
                   <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={exportCsv} title="导出 CSV">

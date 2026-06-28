@@ -7,9 +7,39 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Progress } from '@/components/ui/progress'
-import { CheckCircle2, XCircle, ListChecks, Wrench, TrendingUp, Grid3x3, Filter, Download, Play, Loader2 } from 'lucide-react'
+import { CheckCircle2, XCircle, ListChecks, Wrench, TrendingUp, Grid3x3, Filter, Download, Play, Loader2, ChevronDown, ChevronRight, Shield, FileCode2, Hash, AlignLeft } from 'lucide-react'
 import { lintLevelClass } from '@/lib/dataops/styles'
 import { toast } from 'sonner'
+
+// Rule categories derived from rule IDs
+const RULE_CATEGORIES: Record<string, { label: string; icon: typeof Shield; color: string }> = {
+  naming: { label: '命名规范', icon: Hash, color: 'text-rose-600' },
+  contract: { label: '契约规范', icon: FileCode2, color: 'text-amber-600' },
+  integrity: { label: '数据完整性', icon: Shield, color: 'text-sky-600' },
+  style: { label: '代码风格', icon: AlignLeft, color: 'text-fuchsia-600' },
+}
+
+function getRuleCategory(ruleId: string): keyof typeof RULE_CATEGORIES {
+  if (['R001', 'R004'].includes(ruleId)) return 'naming'
+  if (['R002', 'R003', 'R009'].includes(ruleId)) return 'contract'
+  if (['R005', 'R006', 'R007', 'R008', 'R010'].includes(ruleId)) return 'integrity'
+  return 'style'
+}
+
+// Severity badge with colored border
+function SeverityBadge({ level }: { level: LintLevel }) {
+  const config: Record<LintLevel, { label: string; border: string; bg: string; text: string }> = {
+    RED: { label: 'ERROR', border: 'border-rose-400 dark:border-rose-600', bg: 'bg-rose-50 dark:bg-rose-950/40', text: 'text-rose-700 dark:text-rose-300' },
+    YELLOW: { label: 'WARNING', border: 'border-amber-400 dark:border-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/40', text: 'text-amber-700 dark:text-amber-300' },
+    BLUE: { label: 'INFO', border: 'border-sky-400 dark:border-sky-600', bg: 'bg-sky-50 dark:bg-sky-950/40', text: 'text-sky-700 dark:text-sky-300' },
+  }
+  const c = config[level]
+  return (
+    <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${c.border} ${c.bg} ${c.text}`}>
+      {c.label}
+    </span>
+  )
+}
 
 export function LintView() {
   const [filter, setFilter] = useState<'all' | LintLevel>('all')
@@ -18,6 +48,16 @@ export function LintView() {
   const [lintRunning, setLintRunning] = useState(false)
   const [lintProgress, setLintProgress] = useState(0)
   const [lintResults, setLintResults] = useState<LINT_RULES | null>(null)
+  const [expandedRules, setExpandedRules] = useState<Set<string>>(() => new Set())
+
+  const toggleExpand = useCallback((ruleId: string) => {
+    setExpandedRules(prev => {
+      const next = new Set(prev)
+      if (next.has(ruleId)) next.delete(ruleId)
+      else next.add(ruleId)
+      return next
+    })
+  }, [])
 
   const stats = useMemo(() => {
     const rules = lintResults || LINT_RULES
@@ -39,12 +79,21 @@ export function LintView() {
 
   const rules = lintResults || LINT_RULES
 
+  // Group rules by category
+  const rulesByCategory = useMemo(() => {
+    const grouped = new Map<string, typeof rules>()
+    rules.forEach(r => {
+      const cat = getRuleCategory(r.id)
+      if (!grouped.has(cat)) grouped.set(cat, [])
+      grouped.get(cat)!.push(r)
+    })
+    return grouped
+  }, [rules])
+
   // 矩阵数据：规则 × 表 的违规数
   const { matrixTables, matrix } = useMemo(() => {
-    // 收集所有出现过的 table（排除空违规规则）
     const tableSet = new Set<string>()
     rules.forEach(r => r.violations.forEach(v => tableSet.add(v.table)))
-    // 按字典序排序，但把 (全局) (xxx.py) 排到最后
     const tables = Array.from(tableSet).sort((a, b) => {
       const aIsMeta = a.startsWith('(')
       const bIsMeta = b.startsWith('(')
@@ -52,7 +101,6 @@ export function LintView() {
       if (!aIsMeta && bIsMeta) return -1
       return a.localeCompare(b)
     })
-    // 构建矩阵：matrix[ruleId][table] = violation count
     const m: Record<string, Record<string, number>> = {}
     rules.forEach(r => {
       m[r.id] = {}
@@ -62,7 +110,6 @@ export function LintView() {
     return { matrixTables: tables, matrix: m }
   }, [rules])
 
-  // 矩阵单元格颜色
   const cellColor = (ruleLevel: LintLevel, count: number): string => {
     if (count === 0) return 'bg-zinc-100 dark:bg-zinc-800/60'
     if (ruleLevel === 'RED') {
@@ -108,12 +155,10 @@ export function LintView() {
     setLintProgress(0)
     setLintResults(null)
 
-    // 模拟逐条规则检查
     const totalSteps = LINT_RULES.length
     const newResults: typeof LINT_RULES = []
 
     for (let i = 0; i < totalSteps; i++) {
-      // 模拟检查延迟
       await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 100))
       newResults.push({ ...LINT_RULES[i] })
       setLintProgress(Math.round(((i + 1) / totalSteps) * 100))
@@ -191,21 +236,21 @@ export function LintView() {
             <div className="text-[10px] text-emerald-600 flex items-center gap-1"><TrendingUp className="h-3 w-3" />通过率 {stats.passRate}%</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-rose-200 dark:border-rose-900/50">
           <CardContent className="p-3">
             <div className="text-[11px] text-zinc-400 flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-500" />RED 阻断</div>
             <div className="text-2xl font-semibold text-rose-600">{stats.red}</div>
             <div className="text-[10px] text-zinc-400">{stats.redViolations} 处违规</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-amber-200 dark:border-amber-900/50">
           <CardContent className="p-3">
             <div className="text-[11px] text-zinc-400 flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" />YELLOW 警告</div>
             <div className="text-2xl font-semibold text-amber-600">{stats.yellow}</div>
             <div className="text-[10px] text-zinc-400">{stats.yellowViolations} 处违规</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-sky-200 dark:border-sky-900/50">
           <CardContent className="p-3">
             <div className="text-[11px] text-zinc-400 flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-sky-400" />BLUE 建议</div>
             <div className="text-2xl font-semibold text-sky-600">{stats.blue}</div>
@@ -363,46 +408,81 @@ export function LintView() {
         ))}
       </div>
 
-      {/* 规则列表 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {filtered.map(rule => (
-          <Card key={rule.id} className={rule.violations.length === 0 ? 'opacity-80' : ''}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${lintLevelClass(rule.level)}`}>{rule.level}</span>
-                <CardTitle className="text-sm font-mono">{rule.id}</CardTitle>
-                <span className="text-sm font-medium">{rule.name}</span>
-                {rule.violations.length === 0 ? (
-                  <Badge variant="outline" className="ml-auto text-[10px] text-emerald-600 border-emerald-300"><CheckCircle2 className="h-3 w-3 mr-0.5" />通过</Badge>
-                ) : (
-                  <Badge variant="outline" className="ml-auto text-[10px] text-rose-600 border-rose-300"><XCircle className="h-3 w-3 mr-0.5" />{rule.violations.length} 违规</Badge>
-                )}
-              </div>
-              <p className="text-xs text-zinc-500 mt-1">{rule.description}</p>
-            </CardHeader>
-            {rule.violations.length > 0 && (
-              <CardContent className="pt-0">
-                <ScrollArea className="max-h-44">
-                  <div className="space-y-1.5">
-                    {rule.violations.map((v, i) => (
-                      <div key={i} className="p-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40 text-xs">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">{v.table}</span>
-                        </div>
-                        <div className="text-zinc-600 dark:text-zinc-400 mb-1">{v.detail}</div>
-                        <div className="text-[11px] text-emerald-700 dark:text-emerald-400 flex items-start gap-1">
-                          <Wrench className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                          <span>{v.fix}</span>
-                        </div>
+      {/* 规则列表 - grouped by category */}
+      {[...rulesByCategory.entries()].map(([catKey, catRules]) => {
+        const catConfig = RULE_CATEGORIES[catKey]
+        const CatIcon = catConfig.icon
+        const catFiltered = catRules.filter(r => filtered.some(f => f.id === r.id))
+        if (catFiltered.length === 0) return null
+        return (
+          <div key={catKey}>
+            <div className="flex items-center gap-2 mb-2">
+              <CatIcon className={`h-4 w-4 ${catConfig.color}`} />
+              <span className="text-sm font-semibold">{catConfig.label}</span>
+              <Badge variant="secondary" className="text-[10px]">{catFiltered.length} 规则</Badge>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {catFiltered.map((rule, ruleIdx) => {
+                const isExpanded = expandedRules.has(rule.id)
+                const severityBorder = rule.level === 'RED' ? 'border-l-4 border-l-rose-400 dark:border-l-rose-600' : rule.level === 'YELLOW' ? 'border-l-4 border-l-amber-400 dark:border-l-amber-600' : 'border-l-4 border-l-sky-400 dark:border-l-sky-600'
+                return (
+                  <Card key={rule.id} className={`${rule.violations.length === 0 ? 'opacity-80' : ''} ${severityBorder}`}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center gap-2">
+                        <SeverityBadge level={rule.level} />
+                        <CardTitle className="text-sm font-mono">{rule.id}</CardTitle>
+                        <span className="text-sm font-medium">{rule.name}</span>
+                        {rule.violations.length === 0 ? (
+                          <Badge variant="outline" className="ml-auto text-[10px] text-emerald-600 border-emerald-300"><CheckCircle2 className="h-3 w-3 mr-0.5" />通过</Badge>
+                        ) : (
+                          <Badge variant="outline" className="ml-auto text-[10px] text-rose-600 border-rose-300"><XCircle className="h-3 w-3 mr-0.5" />{rule.violations.length} 违规</Badge>
+                        )}
+                        {rule.violations.length > 0 && (
+                          <button onClick={() => toggleExpand(rule.id)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-zinc-500" /> : <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />}
+                          </button>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            )}
-          </Card>
-        ))}
-      </div>
+                      <p className="text-xs text-zinc-500 mt-1">{rule.description}</p>
+                    </CardHeader>
+                    {rule.violations.length > 0 && isExpanded && (
+                      <CardContent className="pt-0">
+                        <ScrollArea className="max-h-44">
+                          <div className="space-y-1.5">
+                            {rule.violations.map((v, i) => (
+                              <div key={i} className={`p-2 rounded border border-zinc-200 dark:border-zinc-700 text-xs ${i % 2 === 0 ? 'bg-zinc-50 dark:bg-zinc-900/40' : 'bg-white dark:bg-zinc-800/40'}`}>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">{v.table}</span>
+                                </div>
+                                <div className="text-zinc-600 dark:text-zinc-400 mb-1">{v.detail}</div>
+                                <div className="text-[11px] text-emerald-700 dark:text-emerald-400 flex items-start gap-1">
+                                  <Wrench className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                  <span>{v.fix}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </CardContent>
+                    )}
+                    {rule.violations.length > 0 && !isExpanded && (
+                      <CardContent className="pt-0">
+                        <button
+                          onClick={() => toggleExpand(rule.id)}
+                          className="text-[11px] text-sky-600 hover:text-sky-700 dark:text-sky-400 flex items-center gap-1"
+                        >
+                          <ChevronRight className="h-3 w-3" />
+                          展开查看 {rule.violations.length} 处违规
+                        </button>
+                      </CardContent>
+                    )}
+                  </Card>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
 
       {/* 说明 */}
       <Card>

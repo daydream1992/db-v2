@@ -101,7 +101,10 @@ export default function Home() {
     })
   }
 
-  const handleNavigate = (v: string) => setView(v as View)
+  const handleNavigate = (v: string) => {
+    setView(v as View)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
   const handleRunDaily = () => {
     toast.info('已触发 daily 全量执行', { description: '18 张 daily 表按拓扑序执行，预计 ~25 分钟' })
     setView('orchestration')
@@ -204,7 +207,7 @@ export default function Home() {
               const active = view === item.key
               const btn = (
                 <button
-                  onClick={() => setView(item.key)}
+                  onClick={() => { setView(item.key); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                   className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all duration-200 relative overflow-hidden ${
                     active
                       ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-medium shadow-sm'
@@ -304,7 +307,7 @@ export default function Home() {
             {NAV.map(item => (
               <button
                 key={item.key}
-                onClick={() => setView(item.key)}
+                onClick={() => { setView(item.key); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs whitespace-nowrap ${
                   view === item.key ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-medium' : 'text-zinc-500'
                 }`}
