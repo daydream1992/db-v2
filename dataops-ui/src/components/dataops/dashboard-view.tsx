@@ -61,7 +61,6 @@ function genScaledIngest(range: TimeRange): { date: string; rows: number }[] {
 
 export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void }) {
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
-  // 运行中任务的已运行秒数：用 state 驱动，避免 render 期调用 Date.now() 造成 hydration 不匹配
   const [runningElapsed, setRunningElapsed] = useState(0)
 
   const totalTables = TABLES.length
@@ -75,7 +74,9 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
     : 0
   const totalRows = TABLES.reduce((s, t) => s + t.rows, 0)
   const runningRun = PIPELINE_RUNS.find(r => r.status === 'running')
+  const todayStat = DAILY_STATS[DAILY_STATS.length - 1]
 
+  // 实时运行计时器 — 避免 render 期 Date.now() 导致 hydration 不匹配
   useEffect(() => {
     if (!runningRun) return
     const startedAtMs = new Date(runningRun.startedAt).getTime()
@@ -84,7 +85,6 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [runningRun])
-  const todayStat = DAILY_STATS[DAILY_STATS.length - 1]
 
   // 时间范围相关数据
   const scaledStats = useMemo(() => genScaledStats(timeRange), [timeRange])
