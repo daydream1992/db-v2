@@ -788,3 +788,48 @@ Stage Summary:
 - 交易日历校验数据源明确：查询 trading_calendar.is_trading，非脚本日志
 - 已完成的修改：TRADING_CALENDAR_QUERY + DATE_WINDOW + isTradingDay 注释 + 校验说明文案
 - 验证结果：agent-browser 确认"不依赖脚本执行日志推断"文案可见
+
+---
+Task ID: 3
+Agent: main (Z.ai Code)
+Task: 健康度判定逻辑改为基于数据库表扫描结果，不依赖脚本执行日志
+
+Work Log:
+- 分析用户反馈"不能按脚本跑的日志来决定"和"要根据数据里面的表去判定"
+- 理解用户意图：健康度应基于扫描数据库所有表的实际数据（rows + maxDate），而非脚本执行结果
+- 设计新的判定逻辑：
+  - 日频表：maxDate >= 交易日 → 有数据(success)，否则缺数据(failed)
+  - 周频表：maxDate 在 7 天内 → 有数据
+  - 月频表：maxDate 在同一月或上一月 → 有数据
+  - 空表(rows=0) → 缺数据(failed)
+  - once表无日期列 → 不适用(none)
+  - 非交易日 → 跳过(skipped)
+- 在 mock-data.ts 中实现：
+  - tableHasDataForDate() 函数：判断某表在某交易日是否有数据覆盖
+  - deriveHealthFromScan() 函数：基于扫描结果推导健康色(green/yellow/red/white)
+  - getScanSQL() 函数：生成扫描 SQL 说明
+  - 重写 HEALTH_MATRIX 使用 tableHasDataForDate()
+- 更新 health-view.tsx：
+  - 标签从"成功/失败/待执行"改为"有数据/缺数据/不适用"
+  - "7日均成功率"改为"7日数据覆盖率"
+  - 说明卡片改为"数据库表扫描校验"，展示扫描 SQL
+  - Badge 改为"数据库扫描校验"
+  - 矩阵行新增 maxDate 指示器（→06-24）
+  - 归因从脚本日志改为"数据扫描"维度（空表/数据滞后/SCAN结果）
+  - 所有 t.health 改为 deriveHealthFromScan(t)
+- 更新全局 6 个文件，统一使用 deriveHealthFromScan：
+  - page.tsx, command-palette.tsx, dictionary-view.tsx, catalog-view.tsx, dashboard-view.tsx, lineage-view.tsx
+- 验证：
+  - bun run lint 通过
+  - agent-browser 验证：健康度视图正确显示
+    - t_bk5_19: ✓✓––✓✓✗ (maxDate=06-24, 06-25缺数据)
+    - sector_stocks: ✗✗––✗✗✗ (空表)
+    - 统计：21健康/1异常(sector_stocks)/1待查(t_bk5_19)/3不适用
+  - t_bk5_19 由 red 降为 yellow（纯数据扫描视角：仅滞后1天）
+
+Stage Summary:
+- 核心变更：健康度判定从"脚本执行日志"改为"数据库表扫描结果"
+- 判定依据：SELECT COUNT(*) AS rows, MAX(date_col) AS max_date
+- 新增 3 个函数：tableHasDataForDate, deriveHealthFromScan, getScanSQL
+- 6 个文件统一使用 deriveHealthFromScan 替代硬编码 health
+- t_bk5_19 健康色从 red 变为 yellow（数据扫描视角仅滞后1天，非严重异常）

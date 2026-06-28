@@ -1,0 +1,525 @@
+     1→'use client'
+     2→import { useState, useMemo } from 'react'
+     3→import { TABLES, ColumnDef } from '@/lib/dataops/mock-data'
+     4→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     5→import { Badge } from '@/components/ui/badge'
+     6→import { Input } from '@/components/ui/input'
+     7→import { Button } from '@/components/ui/button'
+     8→import { ScrollArea } from '@/components/ui/scroll-area'
+     9→import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    10→import { Database, Search, BookOpen, Download, Copy, Hash, Type, AlertTriangle, Check, FileText, GitCompare, ArrowRight, Plus, Minus, Edit3, TableProperties } from 'lucide-react'
+    11→import { toast } from 'sonner'
+    12→
+    13→type GroupBy = 'table' | 'dir' | 'type'
+    14→type TopTab = 'fields' | 'diff'
+    15→
+    16→// ---- Schema Diff mock 数据 ----
+    17→// 模拟 v0.9 (2026-05-20) → v1.0 (2026-06-25) 的 schema 演进
+    18→type DiffKind = 'added_table' | 'removed_table' | 'added_col' | 'removed_col' | 'renamed_col' | 'type_changed'
+    19→interface SchemaDiff {
+    20→  kind: DiffKind
+    21→  table: string
+    22→  field?: string
+    23→  oldField?: string
+    24→  newField?: string
+    25→  oldType?: string
+    26→  newType?: string
+    27→  detail: string
+    28→}
+    29→
+    30→const SCHEMA_VERSIONS = [
+    31→  { version: 'v1.0', date: '2026-06-25', tables: TABLES.length, cols: TABLES.reduce((s, t) => s + t.columns.length, 0), author: 'dataops-bot', note: '完成 R004 列名英化 + 新增 capital_info 回补' },
+    32→  { version: 'v0.9', date: '2026-05-20', tables: 24, cols: 142, author: 'manual', note: '初始迁移版本，含中文列名' },
+    33→]
+    34→
+    35→const SCHEMA_DIFFS: SchemaDiff[] = [
+    36→  { kind: 'added_table', table: 'capital_info', detail: '新增股本数据表（全量回补 298万行）' },
+    37→  { kind: 'added_table', table: 'stock_block_relation', detail: '新增板块成份股关系表' },
+    38→  { kind: 'added_col', table: 'stock_daily_kline', field: '换手率', detail: '新增换手率字段（DOUBLE, 可空）' },
+    39→  { kind: 'added_col', table: 'stock_daily_kline', field: '前复权因子', detail: '新增前复权因子字段（DOUBLE, 可空）' },
+    40→  { kind: 'renamed_col', table: 't_bk5_19', oldField: '涨跌数', newField: 'up_down_count', detail: '中文列名 → 英文 (R004 规范化)' },
+    41→  { kind: 'renamed_col', table: 't_bk5_19', oldField: '总市值', newField: 'total_mv', detail: '中文列名 → 英文 (R004 规范化)' },
+    42→  { kind: 'renamed_col', table: 'market_sc1_42', oldField: '涨跌数', newField: 'up_down_count', detail: '中文列名 → 英文 (R004 规范化)' },
+    43→  { kind: 'renamed_col', table: 'market_sc1_42', oldField: '总市值', newField: 'total_mv', detail: '中文列名 → 英文 (R004 规范化)' },
+    44→  { kind: 'renamed_col', table: 'stock_block_relation', oldField: '板块代码', newField: 'block_code', detail: '中文列名 → 英文' },
+    45→  { kind: 'renamed_col', table: 'stock_block_relation', oldField: '板块名称', newField: 'block_name', detail: '中文列名 → 英文' },
+    46→  { kind: 'renamed_col', table: 'stock_block_relation', oldField: '板块类型', newField: 'block_type', detail: '中文列名 → 英文' },
+    47→  { kind: 'renamed_col', table: 'stock_block_relation', oldField: '成分股数', newField: 'constituent_count', detail: '中文列名 → 英文' },
+    48→  { kind: 'renamed_col', table: 'stock_daily_kline', oldField: '涨跌幅', newField: 'change_pct', detail: '中文列名 → 英文' },
+    49→  { kind: 'removed_col', table: 'sector_stocks', field: '板块代码', detail: '删除冗余字段（与 block_code 重复）' },
+    50→  { kind: 'type_changed', table: 'stock_kline_1m', field: 'volume', oldType: 'INT', newType: 'BIGINT', detail: '类型扩大：1分钟K线 volume 超 INT 范围' },
+    51→]
+    52→
+    53→const diffKindMeta: Record<DiffKind, { label: string; icon: typeof Plus; color: string; bg: string }> = {
+    54→  added_table: { label: '新增表', icon: TableProperties, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900' },
+    55→  removed_table: { label: '删除表', icon: Minus, color: 'text-rose-600', bg: 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900' },
+    56→  added_col: { label: '新增字段', icon: Plus, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900' },
+    57→  removed_col: { label: '删除字段', icon: Minus, color: 'text-rose-600', bg: 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900' },
+    58→  renamed_col: { label: '重命名', icon: ArrowRight, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900' },
+    59→  type_changed: { label: '类型变更', icon: Edit3, color: 'text-sky-600', bg: 'bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-900' },
+    60→}
+    61→
+    62→export function DictionaryView() {
+    63→  const [search, setSearch] = useState('')
+    64→  const [selectedTable, setSelectedTable] = useState<string>('stock_daily_kline')
+    65→  const [groupBy, setGroupBy] = useState<GroupBy>('table')
+    66→  const [colSearch, setColSearch] = useState('')
+    67→  const [topTab, setTopTab] = useState<TopTab>('fields')
+    68→  const [diffFilter, setDiffFilter] = useState<DiffKind | 'all'>('all')
+    69→  const [diffTableFilter, setDiffTableFilter] = useState<string>('all')
+    70→
+    71→  const filteredTables = useMemo(() => {
+    72→    return TABLES.filter(t =>
+    73→      !search || t.table.includes(search.toLowerCase()) || t.cn.includes(search)
+    74→    ).sort((a, b) => a.dir.localeCompare(b.dir) || a.sort.localeCompare(b.sort))
+    75→  }, [search])
+    76→
+    77→  // 分组结构
+    78→  const grouped = useMemo(() => {
+    79→    const m = new Map<string, typeof TABLES>()
+    80→    filteredTables.forEach(t => {
+    81→      const key = groupBy === 'table' ? t.table : groupBy === 'dir' ? t.dir : t.type
+    82→      if (!m.has(key)) m.set(key, [])
+    83→      m.get(key)!.push(t)
+    84→    })
+    85→    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    86→  }, [filteredTables, groupBy])
+    87→
+    88→  const selected = TABLES.find(t => t.table === selectedTable)
+    89→
+    90→  // 字段过滤
+    91→  const filteredColumns = useMemo(() => {
+    92→    if (!selected) return []
+    93→    if (!colSearch) return selected.columns
+    94→    return selected.columns.filter(c =>
+    95→      c.name.toLowerCase().includes(colSearch.toLowerCase()) ||
+    96→      c.cn.includes(colSearch) ||
+    97→      c.type.toLowerCase().includes(colSearch.toLowerCase())
+    98→    )
+    99→  }, [selected, colSearch])
+   100→
+   101→  // 统计
+   102→  const totalCols = TABLES.reduce((s, t) => s + t.columns.length, 0)
+   103→  const chineseCols = TABLES.reduce((s, t) => s + t.columns.filter(c => /[^\x00-\x7F]/.test(c.name)).length, 0)
+   104→  const nullableCols = TABLES.reduce((s, t) => s + t.columns.filter(c => c.nullable).length, 0)
+   105→  const typeDist = useMemo(() => {
+   106→    const m = new Map<string, number>()
+   107→    TABLES.forEach(t => t.columns.forEach(c => m.set(c.type, (m.get(c.type) || 0) + 1)))
+   108→    return [...m.entries()].sort((a, b) => b[1] - a[1])
+   109→  }, [])
+   110→
+   111→  const copyTable = (tableName: string) => {
+   112→    navigator.clipboard?.writeText(tableName)
+   113→    toast.success(`已复制表名：${tableName}`)
+   114→  }
+   115→
+   116→  // Schema Diff 统计
+   117→  const diffStats = useMemo(() => {
+   118→    const byKind = SCHEMA_DIFFS.reduce((m, d) => { m[d.kind] = (m[d.kind] || 0) + 1; return m }, {} as Record<DiffKind, number>)
+   119→    const affectedTables = new Set(SCHEMA_DIFFS.map(d => d.table))
+   120→    return { byKind, affectedTables: affectedTables.size, total: SCHEMA_DIFFS.length }
+   121→  }, [])
+   122→
+   123→  const filteredDiffs = useMemo(() => {
+   124→    return SCHEMA_DIFFS.filter(d => {
+   125→      if (diffFilter !== 'all' && d.kind !== diffFilter) return false
+   126→      if (diffTableFilter !== 'all' && d.table !== diffTableFilter) return false
+   127→      return true
+   128→    })
+   129→  }, [diffFilter, diffTableFilter])
+   130→
+   131→  const diffTables = useMemo(() => Array.from(new Set(SCHEMA_DIFFS.map(d => d.table))).sort(), [])
+   132→
+   133→  const exportDict = () => {
+   134→    const lines = ['# 数据字典导出', '']
+   135→    TABLES.forEach(t => {
+   136→      lines.push(`## ${t.table} (${t.cn})`)
+   137→      lines.push(`- 目录: ${t.dir} · 调度: ${t.schedule} · mode: ${t.mode}`)
+   138→      lines.push(`- 行数: ${t.rows} · 最新日期: ${t.maxDate || '—'}`)
+   139→      lines.push('')
+   140→      lines.push('| 列名 | 类型 | 中文 | 可空 |')
+   141→      lines.push('|---|---|---|---|')
+   142→      t.columns.forEach(c => lines.push(`| ${c.name} | ${c.type} | ${c.cn} | ${c.nullable ? '✓' : '—'} |`))
+   143→      lines.push('')
+   144→    })
+   145→    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
+   146→    const url = URL.createObjectURL(blob)
+   147→    const a = document.createElement('a')
+   148→    a.href = url
+   149→    a.download = 'data_dictionary.md'
+   150→    a.click()
+   151→    URL.revokeObjectURL(url)
+   152→    toast.success('数据字典已导出 (data_dictionary.md)')
+   153→  }
+   154→
+   155→  return (
+   156→    <div className="space-y-4">
+   157→      {/* 顶部 Tab 切换 */}
+   158→      <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1 w-fit">
+   159→        <button
+   160→          onClick={() => setTopTab('fields')}
+   161→          className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5 ${topTab === 'fields' ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}
+   162→        >
+   163→          <BookOpen className="h-3.5 w-3.5" /> 字段视图
+   164→        </button>
+   165→        <button
+   166→          onClick={() => setTopTab('diff')}
+   167→          className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5 ${topTab === 'diff' ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}
+   168→        >
+   169→          <GitCompare className="h-3.5 w-3.5" /> Schema Diff
+   170→          <Badge variant="secondary" className="text-[10px] py-0 px-1.5 ml-0.5">{SCHEMA_DIFFS.length}</Badge>
+   171→        </button>
+   172→      </div>
+   173→
+   174→      {topTab === 'fields' ? (
+   175→        <>
+   176→          {/* 顶部统计 */}
+   177→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   178→        <Card>
+   179→          <CardContent className="p-3 flex items-center gap-3">
+   180→            <div className="p-2 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600"><Database className="h-4 w-4" /></div>
+   181→            <div>
+   182→              <div className="text-2xl font-semibold leading-none">{TABLES.length}</div>
+   183→              <div className="text-[11px] text-zinc-500 mt-1">表总数</div>
+   184→            </div>
+   185→          </CardContent>
+   186→        </Card>
+   187→        <Card>
+   188→          <CardContent className="p-3 flex items-center gap-3">
+   189→            <div className="p-2 rounded-lg bg-fuchsia-50 dark:bg-fuchsia-950/40 text-fuchsia-600"><Hash className="h-4 w-4" /></div>
+   190→            <div>
+   191→              <div className="text-2xl font-semibold leading-none">{totalCols}</div>
+   192→              <div className="text-[11px] text-zinc-500 mt-1">字段总数</div>
+   193→            </div>
+   194→          </CardContent>
+   195→        </Card>
+   196→        <Card>
+   197→          <CardContent className="p-3 flex items-center gap-3">
+   198→            <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600"><AlertTriangle className="h-4 w-4" /></div>
+   199→            <div>
+   200→              <div className="text-2xl font-semibold leading-none">{chineseCols}</div>
+   201→              <div className="text-[11px] text-zinc-500 mt-1">中文列名 (待修)</div>
+   202→            </div>
+   203→          </CardContent>
+   204→        </Card>
+   205→        <Card>
+   206→          <CardContent className="p-3 flex items-center gap-3">
+   207→            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600"><Check className="h-4 w-4" /></div>
+   208→            <div>
+   209→              <div className="text-2xl font-semibold leading-none">{nullableCols}</div>
+   210→              <div className="text-[11px] text-zinc-500 mt-1">可空字段</div>
+   211→            </div>
+   212→          </CardContent>
+   213→        </Card>
+   214→      </div>
+   215→
+   216→      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 h-[calc(100vh-300px)]">
+   217→        {/* 左侧表树 */}
+   218→        <Card className="flex flex-col">
+   219→          <CardHeader className="pb-2 space-y-2">
+   220→            <CardTitle className="text-sm flex items-center justify-between">
+   221→              <span className="flex items-center gap-2"><BookOpen className="h-4 w-4 text-fuchsia-500" />表清单</span>
+   222→              <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={exportDict} title="导出 Markdown">
+   223→                <Download className="h-3 w-3" />
+   224→              </Button>
+   225→            </CardTitle>
+   226→            <div className="relative">
+   227→              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+   228→              <Input placeholder="搜索表名..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-sm" />
+   229→            </div>
+   230→            <Tabs value={groupBy} onValueChange={v => setGroupBy(v as GroupBy)}>
+   231→              <TabsList className="grid grid-cols-3 w-full h-7 text-[10px]">
+   232→                <TabsTrigger value="table" className="text-[10px] py-0">按表</TabsTrigger>
+   233→                <TabsTrigger value="dir" className="text-[10px] py-0">按目录</TabsTrigger>
+   234→                <TabsTrigger value="type" className="text-[10px] py-0">按类型</TabsTrigger>
+   235→              </TabsList>
+   236→            </Tabs>
+   237→          </CardHeader>
+   238→          <CardContent className="p-2 flex-1 min-h-0">
+   239→            <ScrollArea className="h-full">
+   240→              <div className="space-y-2">
+   241→                {groupBy === 'table' ? (
+   242→                  // 按表分组：直接平铺
+   243→                  filteredTables.map(t => (
+   244→                    <TableListItem key={t.table} t={t} selected={selectedTable === t.table} onSelect={() => setSelectedTable(t.table)} />
+   245→                  ))
+   246→                ) : (
+   247→                  // 按目录/类型分组
+   248→                  grouped.map(([group, tables]) => (
+   249→                    <div key={group}>
+   250→                      <div className="text-[10px] font-medium text-zinc-400 px-2 py-1 sticky top-0 bg-card">
+   251→                        {group} <span className="text-zinc-300">({tables.length})</span>
+   252→                      </div>
+   253→                      {tables.map(t => (
+   254→                        <TableListItem key={t.table} t={t} selected={selectedTable === t.table} onSelect={() => setSelectedTable(t.table)} />
+   255→                      ))}
+   256→                    </div>
+   257→                  ))
+   258→                )}
+   259→                {filteredTables.length === 0 && <div className="text-center text-xs text-zinc-400 py-8">无匹配</div>}
+   260→              </div>
+   261→            </ScrollArea>
+   262→          </CardContent>
+   263→        </Card>
+   264→
+   265→        {/* 右侧字段表 */}
+   266→        <Card className="flex flex-col">
+   267→          <CardHeader className="pb-3 space-y-2">
+   268→            <div className="flex items-center justify-between gap-2">
+   269→              <CardTitle className="text-base flex items-center gap-2">
+   270→                <Database className="h-4 w-4 text-sky-500" />
+   271→                <button onClick={() => copyTable(selected?.table || '')} className="font-mono hover:text-sky-600 dark:hover:text-sky-400 flex items-center gap-1" title="点击复制表名">
+   272→                  {selected?.table}
+   273→                  <Copy className="h-3 w-3 opacity-50" />
+   274→                </button>
+   275→                <Badge variant="outline" className="ml-1">{selected?.columns.length} 列</Badge>
+   276→              </CardTitle>
+   277→              <div className="flex items-center gap-2">
+   278→                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => exportDict}>
+   279→                  <FileText className="h-3 w-3 mr-1" />导出
+   280→                </Button>
+   281→              </div>
+   282→            </div>
+   283→            <p className="text-sm text-zinc-500 -mt-1">{selected?.cn} · 来源 {selected?.source}</p>
+   284→            <div className="relative">
+   285→              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+   286→              <Input placeholder="搜索字段名 / 中文 / 类型..." value={colSearch} onChange={e => setColSearch(e.target.value)} className="pl-8 h-8 text-sm" />
+   287→            </div>
+   288→          </CardHeader>
+   289→          <CardContent className="p-0 flex-1 min-h-0">
+   290→            <ScrollArea className="h-full">
+   291→              <div className="min-w-[700px]">
+   292→                <div className="grid grid-cols-[1fr_120px_1fr_60px_1fr] gap-2 px-4 py-2 text-[11px] font-medium text-zinc-500 border-b sticky top-0 bg-card z-10">
+   293→                  <div>列名</div><div>类型</div><div>中文名</div><div className="text-center">可空</div><div>备注</div>
+   294→                </div>
+   295→                {filteredColumns.map(c => {
+   296→                  const hasChinese = /[^\x00-\x7F]/.test(c.name)
+   297→                  return (
+   298→                    <div key={c.name} className="grid grid-cols-[1fr_120px_1fr_60px_1fr] gap-2 px-4 py-2 text-xs border-b last:border-0 items-center hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
+   299→                      <div className="font-mono flex items-center gap-1.5">
+   300→                        <span className={hasChinese ? 'text-rose-600 dark:text-rose-400' : ''}>{c.name}</span>
+   301→                        {hasChinese && <span className="text-[9px] px-1 py-0 rounded bg-rose-100 text-rose-600 dark:bg-rose-950 dark:text-rose-400">中文</span>}
+   302→                        {!c.nullable && <span className="text-[9px] px-1 rounded bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400">NN</span>}
+   303→                      </div>
+   304→                      <div>
+   305→                        <Badge variant="outline" className="font-mono text-[10px] py-0 px-1.5 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800">
+   306→                          {c.type}
+   307→                        </Badge>
+   308→                      </div>
+   309→                      <div className="text-zinc-600 dark:text-zinc-400">{c.cn}</div>
+   310→                      <div className="text-center">
+   311→                        {c.nullable ? <Check className="h-3.5 w-3.5 text-emerald-500 inline" /> : <span className="text-zinc-300">—</span>}
+   312→                      </div>
+   313→                      <div className="text-[11px] text-zinc-400">
+   314→                        {hasChinese ? '建议改英文，中文含义放 FIELD_MAP' : c.nullable ? '允许 NULL' : '主键/非空'}
+   315→                      </div>
+   316→                    </div>
+   317→                  )
+   318→                })}
+   319→                {filteredColumns.length === 0 && <div className="py-12 text-center text-zinc-400 text-sm">无匹配字段</div>}
+   320→              </div>
+   321→            </ScrollArea>
+   322→          </CardContent>
+   323→        </Card>
+   324→      </div>
+   325→
+   326→      {/* 底部：类型分布 */}
+   327→      <Card>
+   328→        <CardHeader className="pb-3">
+   329→          <CardTitle className="text-base flex items-center gap-2">
+   330→            <Type className="h-4 w-4 text-emerald-500" />
+   331→            字段类型分布
+   332→          </CardTitle>
+   333→        </CardHeader>
+   334→        <CardContent>
+   335→          <div className="flex flex-wrap gap-2">
+   336→            {typeDist.map(([type, count]) => (
+   337→              <div key={type} className="px-3 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 text-xs flex items-center gap-2 hover:border-sky-300 transition-colors">
+   338→                <Badge variant="outline" className="font-mono text-[10px] py-0 px-1.5 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800">{type}</Badge>
+   339→                <span className="font-mono text-zinc-600 dark:text-zinc-400">{count}</span>
+   340→                <span className="text-zinc-400 text-[10px]">{Math.round(count / totalCols * 100)}%</span>
+   341→              </div>
+   342→            ))}
+   343→          </div>
+   344→        </CardContent>
+   345→      </Card>
+   346→        </>
+   347→      ) : (
+   348→        <>
+   349→          {/* Schema Diff 视图 */}
+   350→          {/* 版本对比卡 */}
+   351→          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 items-stretch">
+   352→            {SCHEMA_VERSIONS.map((v, i) => (
+   353→              <Card key={v.version} className={i === 0 ? 'border-emerald-200 dark:border-emerald-900' : 'border-zinc-200 dark:border-zinc-800'}>
+   354→                <CardContent className="p-4">
+   355→                  <div className="flex items-center justify-between mb-2">
+   356→                    <div className="flex items-center gap-2">
+   357→                      <Badge variant={i === 0 ? 'default' : 'outline'} className={i === 0 ? 'bg-emerald-600' : ''}>{v.version}</Badge>
+   358→                      <span className="font-mono text-xs text-zinc-500">{v.date}</span>
+   359→                    </div>
+   360→                    <span className="text-[10px] text-zinc-400">{v.author}</span>
+   361→                  </div>
+   362→                  <div className="grid grid-cols-2 gap-2 mb-2">
+   363→                    <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/50">
+   364→                      <div className="text-[10px] text-zinc-400">表数</div>
+   365→                      <div className="font-mono font-semibold text-lg">{v.tables}</div>
+   366→                    </div>
+   367→                    <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/50">
+   368→                      <div className="text-[10px] text-zinc-400">字段数</div>
+   369→                      <div className="font-mono font-semibold text-lg">{v.cols}</div>
+   370→                    </div>
+   371→                  </div>
+   372→                  <div className="text-xs text-zinc-500">{v.note}</div>
+   373→                </CardContent>
+   374→              </Card>
+   375→            ))}
+   376→            <div className="flex items-center justify-center">
+   377→              <div className="p-3 rounded-full bg-fuchsia-50 dark:bg-fuchsia-950/40 border border-fuchsia-200 dark:border-fuchsia-900">
+   378→                <ArrowRight className="h-5 w-5 text-fuchsia-600" />
+   379→              </div>
+   380→            </div>
+   381→            {SCHEMA_VERSIONS.length === 2 && (
+   382→              <Card className="border-fuchsia-200 dark:border-fuchsia-900 bg-fuchsia-50/30 dark:bg-fuchsia-950/10">
+   383→                <CardContent className="p-4">
+   384→                  <div className="text-[11px] font-medium text-fuchsia-700 dark:text-fuchsia-300 mb-2 flex items-center gap-1.5">
+   385→                    <GitCompare className="h-3.5 w-3.5" /> 变更摘要
+   386→                  </div>
+   387→                  <div className="grid grid-cols-2 gap-1.5 text-xs">
+   388→                    <div className="flex items-center gap-1.5"><TableProperties className="h-3 w-3 text-emerald-600" /><span className="text-zinc-600 dark:text-zinc-300">新增表</span><span className="font-mono font-semibold ml-auto">{diffStats.byKind.added_table || 0}</span></div>
+   389→                    <div className="flex items-center gap-1.5"><Plus className="h-3 w-3 text-emerald-600" /><span className="text-zinc-600 dark:text-zinc-300">新增字段</span><span className="font-mono font-semibold ml-auto">{diffStats.byKind.added_col || 0}</span></div>
+   390→                    <div className="flex items-center gap-1.5"><ArrowRight className="h-3 w-3 text-amber-600" /><span className="text-zinc-600 dark:text-zinc-300">重命名</span><span className="font-mono font-semibold ml-auto">{diffStats.byKind.renamed_col || 0}</span></div>
+   391→                    <div className="flex items-center gap-1.5"><Edit3 className="h-3 w-3 text-sky-600" /><span className="text-zinc-600 dark:text-zinc-300">类型变更</span><span className="font-mono font-semibold ml-auto">{diffStats.byKind.type_changed || 0}</span></div>
+   392→                    <div className="flex items-center gap-1.5"><Minus className="h-3 w-3 text-rose-600" /><span className="text-zinc-600 dark:text-zinc-300">删除字段</span><span className="font-mono font-semibold ml-auto">{diffStats.byKind.removed_col || 0}</span></div>
+   393→                    <div className="flex items-center gap-1.5"><Database className="h-3 w-3 text-zinc-400" /><span className="text-zinc-600 dark:text-zinc-300">影响表</span><span className="font-mono font-semibold ml-auto">{diffStats.affectedTables}</span></div>
+   394→                  </div>
+   395→                  <div className="mt-2 pt-2 border-t border-fuchsia-200 dark:border-fuchsia-900 text-[11px] text-fuchsia-700 dark:text-fuchsia-300">
+   396→                    共 {diffStats.total} 处变更
+   397→                  </div>
+   398→                </CardContent>
+   399→              </Card>
+   400→            )}
+   401→          </div>
+   402→
+   403→          {/* 筛选栏 */}
+   404→          <Card>
+   405→            <CardContent className="p-3">
+   406→              <div className="flex flex-wrap items-center gap-2">
+   407→                <span className="text-xs text-zinc-500 flex items-center gap-1"><GitCompare className="h-3.5 w-3.5" /> 类型:</span>
+   408→                <div className="flex items-center gap-1 flex-wrap">
+   409→                  <button
+   410→                    onClick={() => setDiffFilter('all')}
+   411→                    className={`px-2 py-1 rounded text-[11px] border transition-colors ${diffFilter === 'all' ? 'bg-fuchsia-100 dark:bg-fuchsia-950/40 border-fuchsia-400 text-fuchsia-700 dark:text-fuchsia-300' : 'border-zinc-200 dark:border-zinc-700 hover:border-fuchsia-300'}`}
+   412→                  >
+   413→                    全部 ({SCHEMA_DIFFS.length})
+   414→                  </button>
+   415→                  {(Object.keys(diffKindMeta) as DiffKind[]).map(k => {
+   416→                    const meta = diffKindMeta[k]
+   417→                    const Icon = meta.icon
+   418→                    const count = diffStats.byKind[k] || 0
+   419→                    if (count === 0) return null
+   420→                    return (
+   421→                      <button
+   422→                        key={k}
+   423→                        onClick={() => setDiffFilter(k)}
+   424→                        className={`px-2 py-1 rounded text-[11px] border transition-colors flex items-center gap-1 ${diffFilter === k ? `${meta.bg} border-current ${meta.color}` : 'border-zinc-200 dark:border-zinc-700 hover:border-fuchsia-300'}`}
+   425→                      >
+   426→                        <Icon className="h-3 w-3" />
+   427→                        {meta.label}
+   428→                        <span className="font-mono font-semibold ml-0.5">{count}</span>
+   429→                      </button>
+   430→                    )
+   431→                  })}
+   432→                </div>
+   433→                <div className="ml-auto flex items-center gap-2">
+   434→                  <span className="text-xs text-zinc-500">表:</span>
+   435→                  <select
+   436→                    value={diffTableFilter}
+   437→                    onChange={e => setDiffTableFilter(e.target.value)}
+   438→                    className="text-xs h-7 rounded border border-zinc-200 dark:border-zinc-700 bg-background px-2"
+   439→                  >
+   440→                    <option value="all">全部表 ({diffTables.length})</option>
+   441→                    {diffTables.map(t => <option key={t} value={t}>{t}</option>)}
+   442→                  </select>
+   443→                </div>
+   444→              </div>
+   445→            </CardContent>
+   446→          </Card>
+   447→
+   448→          {/* Diff 列表 */}
+   449→          <Card>
+   450→            <CardHeader className="pb-3">
+   451→              <CardTitle className="text-base flex items-center gap-2">
+   452→                <GitCompare className="h-4 w-4 text-fuchsia-500" />
+   453→                变更明细
+   454→                <Badge variant="outline" className="text-[10px] ml-1">{filteredDiffs.length} / {SCHEMA_DIFFS.length}</Badge>
+   455→              </CardTitle>
+   456→            </CardHeader>
+   457→            <CardContent className="p-0">
+   458→              <div className="min-w-[700px]">
+   459→                <div className="grid grid-cols-[140px_200px_1fr_1fr] gap-2 px-4 py-2 text-[11px] font-medium text-zinc-500 border-b sticky top-0 bg-card z-10">
+   460→                  <div>变更类型</div><div>表</div><div>字段变更</div><div>说明</div>
+   461→                </div>
+   462→                <ScrollArea className="h-[calc(100vh-480px)]">
+   463→                  {filteredDiffs.map((d, i) => {
+   464→                    const meta = diffKindMeta[d.kind]
+   465→                    const Icon = meta.icon
+   466→                    return (
+   467→                      <div key={i} className={`grid grid-cols-[140px_200px_1fr_1fr] gap-2 px-4 py-2.5 text-xs border-b last:border-0 items-center ${meta.bg}`}>
+   468→                        <div className="flex items-center gap-1.5">
+   469→                          <Icon className={`h-3.5 w-3.5 ${meta.color}`} />
+   470→                          <span className={`font-medium ${meta.color}`}>{meta.label}</span>
+   471→                        </div>
+   472→                        <div className="font-mono text-zinc-700 dark:text-zinc-300">{d.table}</div>
+   473→                        <div className="font-mono">
+   474→                          {d.kind === 'added_table' && <span className="text-emerald-600">+ 新表</span>}
+   475→                          {d.kind === 'removed_table' && <span className="text-rose-600 line-through">- 旧表</span>}
+   476→                          {d.kind === 'added_col' && <span className="text-emerald-600">+ {d.field}</span>}
+   477→                          {d.kind === 'removed_col' && <span className="text-rose-600 line-through">- {d.field}</span>}
+   478→                          {d.kind === 'renamed_col' && (
+   479→                            <span className="flex items-center gap-1.5">
+   480→                              <span className="text-rose-600 line-through">{d.oldField}</span>
+   481→                              <ArrowRight className="h-3 w-3 text-zinc-400" />
+   482→                              <span className="text-emerald-600">{d.newField}</span>
+   483→                            </span>
+   484→                          )}
+   485→                          {d.kind === 'type_changed' && (
+   486→                            <span className="flex items-center gap-1.5">
+   487→                              <Badge variant="outline" className="font-mono text-[10px] py-0 px-1 text-rose-600 border-rose-300 line-through">{d.oldType}</Badge>
+   488→                              <ArrowRight className="h-3 w-3 text-zinc-400" />
+   489→                              <Badge variant="outline" className="font-mono text-[10px] py-0 px-1 text-emerald-600 border-emerald-300">{d.newType}</Badge>
+   490→                              <span className="text-zinc-400 text-[10px]">({d.field})</span>
+   491→                            </span>
+   492→                          )}
+   493→                        </div>
+   494→                        <div className="text-zinc-600 dark:text-zinc-400">{d.detail}</div>
+   495→                      </div>
+   496→                    )
+   497→                  })}
+   498→                  {filteredDiffs.length === 0 && (
+   499→                    <div className="py-12 text-center text-zinc-400 text-sm">无匹配变更</div>
+   500→                  )}
+   501→                </ScrollArea>
+   502→              </div>
+   503→            </CardContent>
+   504→          </Card>
+   505→        </>
+   506→      )}
+   507→    </div>
+   508→  )
+   509→}
+   510→
+   511→function TableListItem({ t, selected, onSelect }: { t: typeof TABLES[number]; selected: boolean; onSelect: () => void }) {
+   512→  return (
+   513→    <button
+   514→      onClick={onSelect}
+   515→      className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors ${selected ? 'bg-fuchsia-100 dark:bg-fuchsia-950/40 text-fuchsia-700 dark:text-fuchsia-300' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+   516→    >
+   517→      <div className="font-mono truncate flex items-center gap-1">
+   518→        {t.table}
+   519→        {t.health === 'red' && <span className="h-1.5 w-1.5 rounded-full bg-rose-500 flex-shrink-0" />}
+   520→      </div>
+   521→      <div className="text-[10px] text-zinc-400 truncate">{t.cn} · {t.columns.length}列</div>
+   522→    </button>
+   523→  )
+   524→}
+   525→

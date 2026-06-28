@@ -713,16 +713,93 @@ export function isTradingDay(mmdd: string): boolean {
 /** 7 日窗口中的日期列表 */
 export const DATE_WINDOW = ['06-19', '06-20', '06-21', '06-22', '06-23', '06-24', '06-25']
 
-// 健康度矩阵 — 每个单元格的状态由 trading_calendar.is_trading 决定是否需要检查
-// 非交易日(is_trading=false)→skipped，交易日再按表健康状态判定
+// ═══════════════════════════════════════════════════════════
+// 健康度矩阵 — 基于数据库表扫描结果判定
+// 逻辑：扫描每张表的 rows + maxDate，对照交易日历，
+//       有数据覆盖→success，数据缺失→failed，非交易日→skipped，不适用→none
+// 扫描 SQL: SELECT COUNT(*) AS rows, MAX({date_col}) AS max_date FROM {table}
+// ═══════════════════════════════════════════════════════════
+
+/** 判断某表在某交易日是否有数据覆盖 — 基于数据库扫描结果 */
+function tableHasDataForDate(t: TableMeta, mmdd: string): 'success' | 'failed' | 'none' {
+  // 无日期列 且 schedule=once → 不适用每日数据覆盖检测
+  if (!t.dateCol && t.schedule === 'once') return 'none'
+
+  // 空表 → 缺数据
+  if (t.rows === 0) return 'failed'
+
+  // 无最大日期 → 缺数据（有行但无法判断日期覆盖范围）
+  if (!t.maxDate) return 'failed'
+
+  const fullDate = `2026-${mmdd}`
+  const maxDate = t.maxDate
+
+  if (t.schedule === 'daily') {
+    // 日频表：maxDate >= 交易日 → 有数据，否则缺数据
+    return maxDate >= fullDate ? 'success' : 'failed'
+  }
+
+  if (t.schedule === 'weekly') {
+    // 周频表：maxDate 应在 7 天内（当前周未结束，上周数据仍有效）
+    const diffMs = new Date(fullDate).getTime() - new Date(maxDate).getTime()
+    const diffDays = diffMs / 86400000
+    return diffDays <= 7 ? 'success' : 'failed'
+  }
+
+  if (t.schedule === 'monthly') {
+    // 月频表：maxDate 应在同一月或上一月（当月未结束，上月数据仍有效）
+    const maxM = new Date(maxDate).getFullYear() * 12 + new Date(maxDate).getMonth()
+    const checkM = new Date(fullDate).getFullYear() * 12 + new Date(fullDate).getMonth()
+    return maxM >= checkM - 1 ? 'success' : 'failed'
+  }
+
+  // once 但有日期列：有数据即可
+  return t.rows > 0 ? 'success' : 'failed'
+}
+
+/** 基于数据库扫描结果推导健康色 — 不依赖脚本执行日志 */
+export function deriveHealthFromScan(t: TableMeta): HealthColor {
+  // once 且无日期列 → 不适用
+  if (t.schedule === 'once' && !t.dateCol) return 'white'
+  // 空表 → 红
+  if (t.rows === 0) return 'red'
+  // 无最大日期 → 红
+  if (!t.maxDate) return 'red'
+
+  const lastTradingFull = `2026-${LAST_TRADING_DATE}`
+  const maxDate = t.maxDate
+
+  if (t.schedule === 'daily') {
+    if (maxDate >= lastTradingFull) return 'green'
+    const diffDays = Math.round((new Date(lastTradingFull).getTime() - new Date(maxDate).getTime()) / 86400000)
+    if (diffDays <= 2) return 'yellow'
+    return 'red'
+  }
+  if (t.schedule === 'weekly') {
+    const diffDays = Math.round((new Date(lastTradingFull).getTime() - new Date(maxDate).getTime()) / 86400000)
+    return diffDays <= 7 ? 'green' : 'yellow'
+  }
+  if (t.schedule === 'monthly') {
+    const maxM = new Date(maxDate).getFullYear() * 12 + new Date(maxDate).getMonth()
+    const checkM = new Date(lastTradingFull).getFullYear() * 12 + new Date(lastTradingFull).getMonth()
+    return maxM >= checkM - 1 ? 'green' : 'yellow'
+  }
+  return 'white'
+}
+
+/** 生成扫描 SQL 说明（展示数据来源） */
+export function getScanSQL(t: TableMeta): string {
+  if (!t.dateCol) return `SELECT COUNT(*) AS rows FROM ${t.table}`
+  return `SELECT COUNT(*) AS rows, MAX(${t.dateCol}) AS max_date FROM ${t.table}`
+}
+
 export const HEALTH_MATRIX: { table: string; days: { date: string; status: 'success' | 'failed' | 'skipped' | 'none' }[] }[] = TABLES.map(t => ({
   table: t.table,
   days: DATE_WINDOW.map(d => {
+    // 非交易日 → 跳过（查 trading_calendar.is_trading）
     if (!isTradingDay(d)) return { date: d, status: 'skipped' as const }
-    if (t.health === 'red' && t.rows === 0) return { date: d, status: 'skipped' as const }
-    if (t.table === 't_bk5_19' && d === '06-25') return { date: d, status: 'failed' as const }
-    if (t.health === 'white') return { date: d, status: 'none' as const }
-    return { date: d, status: 'success' as const }
+    // 交易日 → 根据数据库扫描结果判定：有数据/缺数据
+    return { date: d, status: tableHasDataForDate(t, d) }
   }),
 }))
 

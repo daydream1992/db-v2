@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { TABLES, ColumnDef } from '@/lib/dataops/mock-data'
+import { TABLES, ColumnDef, deriveHealthFromScan } from '@/lib/dataops/mock-data'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -516,7 +516,7 @@ function TableListItem({ t, selected, onSelect }: { t: typeof TABLES[number]; se
     >
       <div className="font-mono truncate flex items-center gap-1">
         {t.table}
-        {t.health === 'red' && <span className="h-1.5 w-1.5 rounded-full bg-rose-500 flex-shrink-0" />}
+        {deriveHealthFromScan(t) === 'red' && <span className="h-1.5 w-1.5 rounded-full bg-rose-500 flex-shrink-0" />}
       </div>
       <div className="text-[10px] text-zinc-400 truncate">{t.cn} · {t.columns.length}列</div>
     </button>

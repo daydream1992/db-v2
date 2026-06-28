@@ -4,16 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AlertTriangle, CheckCircle2, RefreshCw, Wrench, Activity, TrendingUp, BarChart3, Filter } from 'lucide-react'
-import { TABLES, HEALTH_MATRIX, TRADING_CALENDAR_QUERY, LAST_TRADING_DATE, isTradingDay, DATE_WINDOW } from '@/lib/dataops/mock-data'
+import { TABLES, HEALTH_MATRIX, TRADING_CALENDAR_QUERY, LAST_TRADING_DATE, isTradingDay, DATE_WINDOW, deriveHealthFromScan, getScanSQL } from '@/lib/dataops/mock-data'
 import { freshnessClass, healthColorClass } from '@/lib/dataops/styles'
 
 export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [dirFilter, setDirFilter] = useState<string>('all')
-  const redTables = TABLES.filter(t => t.health === 'red')
-  const yellowTables = TABLES.filter(t => t.health === 'yellow')
-  const greenTables = TABLES.filter(t => t.health === 'green')
-  const whiteTables = TABLES.filter(t => t.health === 'white')
+  const redTables = TABLES.filter(t => deriveHealthFromScan(t) === 'red')
+  const yellowTables = TABLES.filter(t => deriveHealthFromScan(t) === 'yellow')
+  const greenTables = TABLES.filter(t => deriveHealthFromScan(t) === 'green')
+  const whiteTables = TABLES.filter(t => deriveHealthFromScan(t) === 'white')
 
   const toggle = (table: string) => {
     setSelected(prev => {
@@ -51,10 +51,10 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
       return {
         dir,
         total: tables.length,
-        green: tables.filter(t => t.health === 'green').length,
-        yellow: tables.filter(t => t.health === 'yellow').length,
-        red: tables.filter(t => t.health === 'red').length,
-        white: tables.filter(t => t.health === 'white').length,
+        green: tables.filter(t => deriveHealthFromScan(t) === 'green').length,
+        yellow: tables.filter(t => deriveHealthFromScan(t) === 'yellow').length,
+        red: tables.filter(t => deriveHealthFromScan(t) === 'red').length,
+        white: tables.filter(t => deriveHealthFromScan(t) === 'white').length,
       }
     })
   }, [])
@@ -78,16 +78,17 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
         <StatCard icon={<Activity className="h-4 w-4" />} label="不适用(once)" value={whiteTables.length} color="zinc" />
       </div>
 
-      {/* 交易日历校验说明 */}
+      {/* 数据库扫描校验说明 */}
       <Card className="border-sky-200 dark:border-sky-900 bg-sky-50/50 dark:bg-sky-950/20">
         <CardContent className="p-3 flex items-center gap-3 text-xs">
           <Activity className="h-4 w-4 text-sky-500 shrink-0" />
           <div>
-            <span className="font-medium text-sky-700 dark:text-sky-300">交易日历校验</span>
+            <span className="font-medium text-sky-700 dark:text-sky-300">数据库表扫描校验</span>
             <span className="text-zinc-600 dark:text-zinc-400 ml-1">
-              日期检测查询 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-[11px] font-mono">trading_calendar</code> 表的
-              <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-[11px] font-mono ml-0.5">is_trading</code> 字段，
-              非交易日自动跳过。不依赖脚本执行日志推断。当前窗口 <strong>{TRADING_CALENDAR_QUERY.filter(r => r.isTrading).length}</strong> 交易日、
+              对每张表执行 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-[11px] font-mono">SELECT COUNT(*) AS rows, MAX(date_col) AS max_date</code>，
+              对照 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-[11px] font-mono">trading_calendar.is_trading</code> 判定数据覆盖：
+              交易日 <strong>max_date ≥ 当日</strong>→有数据，<strong>max_date ＜ 当日</strong>→缺数据，<strong>非交易日</strong>→跳过。
+              不依赖脚本执行日志。当前窗口 <strong>{TRADING_CALENDAR_QUERY.filter(r => r.isTrading).length}</strong> 交易日、
               <strong>{TRADING_CALENDAR_QUERY.filter(r => !r.isTrading).length}</strong> 休市日。
             </span>
           </div>
@@ -116,10 +117,10 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                     <div className={`w-full flex flex-col-reverse rounded overflow-hidden ${nonTrading ? 'border border-dashed border-zinc-200 dark:border-zinc-700' : ''}`} style={{ height: nonTrading ? '16px' : `${(d.total / maxTotal) * 140}px` }}>
                       {!nonTrading && (
                         <>
-                          <div className="bg-emerald-500 group-hover:bg-emerald-600 transition-colors" style={{ height: `${d.success * unit}px` }} title={`成功 ${d.success}`} />
-                          <div className="bg-rose-500 group-hover:bg-rose-600 transition-colors" style={{ height: `${d.failed * unit}px` }} title={`失败 ${d.failed}`} />
+                          <div className="bg-emerald-500 group-hover:bg-emerald-600 transition-colors" style={{ height: `${d.success * unit}px` }} title={`有数据 ${d.success}`} />
+                          <div className="bg-rose-500 group-hover:bg-rose-600 transition-colors" style={{ height: `${d.failed * unit}px` }} title={`缺数据 ${d.failed}`} />
                           <div className="bg-zinc-300 dark:bg-zinc-600 group-hover:bg-zinc-400 transition-colors" style={{ height: `${d.skipped * unit}px` }} title={`跳过 ${d.skipped}`} />
-                          <div className="bg-zinc-100 dark:bg-zinc-800 group-hover:bg-zinc-200 transition-colors" style={{ height: `${d.pending * unit}px` }} title={`待执行 ${d.pending}`} />
+                          <div className="bg-zinc-100 dark:bg-zinc-800 group-hover:bg-zinc-200 transition-colors" style={{ height: `${d.pending * unit}px` }} title={`不适用 ${d.pending}`} />
                         </>
                       )}
                     </div>
@@ -129,12 +130,12 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
               })}
             </div>
             <div className="flex items-center gap-4 text-[10px] text-zinc-500">
-              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> 成功</span>
-              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> 失败</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> 有数据</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> 缺数据</span>
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-zinc-300" /> 跳过</span>
-              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-200" /> 待执行</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-200" /> 不适用</span>
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm border border-dashed border-zinc-300" /> 非交易日</span>
-              <span className="ml-auto text-zinc-400">7 日均成功率 {Math.round(dailyTrend.reduce((s, d) => s + d.rate, 0) / dailyTrend.length)}%</span>
+              <span className="ml-auto text-zinc-400">7 日数据覆盖率 {Math.round(dailyTrend.reduce((s, d) => s + d.rate, 0) / dailyTrend.length)}%</span>
             </div>
           </CardContent>
         </Card>
@@ -218,7 +219,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                 ))}
               </div>
             </div>
-            <Badge variant="outline" className="text-[10px]">最后交易日 {LAST_TRADING_DATE}（交易日历校验）</Badge>
+            <Badge variant="outline" className="text-[10px]">最后交易日 {LAST_TRADING_DATE}（数据库扫描校验）</Badge>
             {selected.size > 0 && (
               <Button size="sm" variant="destructive" onClick={() => {
                 selected.forEach(t => onRunTable?.(t))
@@ -245,7 +246,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
               </div>
               {filteredMatrix.map(row => {
                 const t = TABLES.find(x => x.table === row.table)!
-                const isRed = t.health === 'red'
+                const isRed = deriveHealthFromScan(t) === 'red'
                 return (
                   <div key={row.table} className={`grid grid-cols-[1fr_180px_repeat(7,60px)_90px] gap-1 px-3 py-1.5 text-xs items-center border-b last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-900/40 ${selected.has(row.table) ? 'bg-rose-50 dark:bg-rose-950/20' : ''}`}>
                     <div className="min-w-0">
@@ -258,11 +259,12 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                     <div>
                       <div className="text-[11px] text-zinc-500">{t.rows > 0 ? `${(t.rows / 10000).toFixed(1)}万行` : '0行'}</div>
                       <div className={`text-[11px] font-medium ${freshnessClass(t.freshness)}`}>{t.freshness}</div>
+                      <div className="text-[9px] text-zinc-400 font-mono truncate" title={getScanSQL(t)}>{t.maxDate ? `→${t.maxDate!.slice(5)}` : '无日期'}</div>
                     </div>
                     {row.days.map(d => (
                       <div key={d.date} className="flex justify-center">
                         <span className={`h-5 w-5 rounded flex items-center justify-center text-[9px] ${dayStatusClass(d.status)}`}>
-                          {d.status === 'success' ? '✓' : d.status === 'failed' ? '✗' : d.status === 'skipped' ? '–' : ''}
+                          {d.status === 'success' ? '✓' : d.status === 'failed' ? '✗' : d.status === 'skipped' ? '–' : d.status === 'none' ? '·' : ''}
                         </span>
                       </div>
                     ))}
@@ -272,7 +274,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                           <RefreshCw className="h-3 w-3 mr-0.5" />补数
                         </Button>
                       ) : (
-                        <span className={`text-[10px] ${healthColorClass(t.health).split(' ')[0].replace('bg-', 'text-')}`}>●</span>
+                        <span className={`text-[10px] ${healthColorClass(deriveHealthFromScan(t)).split(' ')[0].replace('bg-', 'text-')}`}>●</span>
                       )}
                     </div>
                   </div>
@@ -288,8 +290,8 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2 text-rose-600">
-              <AlertTriangle className="h-4 w-4" />异常表自动归因 ({redTables.length})
-              <Badge variant="outline" className="text-[10px] text-rose-600 border-rose-300 ml-1">ROOT CAUSE</Badge>
+              <AlertTriangle className="h-4 w-4" />数据异常自动归因 ({redTables.length})
+              <Badge variant="outline" className="text-[10px] text-rose-600 border-rose-300 ml-1">SCAN ROOT CAUSE</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -356,7 +358,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
 
                   {/* 最后出错时间 */}
                   <div className="mt-2 flex items-center gap-3 text-[10px] text-zinc-500">
-                    <span className="flex items-center gap-1"><Activity className="h-3 w-3" />最后出错: {attribution.lastError}</span>
+                    <span className="flex items-center gap-1"><Activity className="h-3 w-3" />扫描结果: {attribution.lastError}</span>
                     <span>·</span>
                     <span>重试次数: {attribution.retries}/3</span>
                     <span>·</span>
@@ -394,35 +396,37 @@ interface Attribution {
 }
 
 function getAttribution(table: string): Attribution {
+  const t = TABLES.find(x => x.table === table)
+  const scanInfo = t ? `SCAN: rows=${t.rows.toLocaleString()}, max_date=${t.maxDate ?? 'NULL'}` : ''
   const map: Record<string, Attribution> = {
     sector_stocks: {
       severity: 'warning',
-      category: '实现缺失',
-      cause: '脚本未实现：ensure_table 里表名字面量写着「表名」，未真正建表也未灌数。',
-      fix: '删除该脚本，或正确实现 ensure_table + fetch_data + save_data。',
-      steps: ['定位脚本', '修复字面量', '本地验证', '重新入库'],
-      lastError: '2026-06-25 18:42:12',
+      category: '空表（数据扫描）',
+      cause: `数据库扫描结果：rows=0, max_date=NULL。表存在但无数据，疑似入库脚本未实现。`,
+      fix: '实现入库脚本或删除该空表，重新灌数后再次扫描确认。',
+      steps: ['定位脚本', '实现入库逻辑', '灌数验证', '重新扫描'],
+      lastError: scanInfo,
       retries: 0,
       estimatedFix: '15min',
     },
     t_bk5_19: {
       severity: 'critical',
-      category: '配置矛盾',
-      cause: '@meta mode=increment 与代码 MODE="full" 矛盾，DELETE 逻辑错乱导致数据滞后 1 天。',
-      fix: '统一 @meta 与代码 MODE 为 full（全量重灌语义），并补跑昨日数据。',
-      steps: ['改 YAML @meta', '改代码常量', 'lint 校验', 'force 补数'],
-      lastError: '2026-06-25 18:42:10',
+      category: '数据滞后（扫描检测）',
+      cause: `数据库扫描结果：max_date=2026-06-24 < 最后交易日 2026-06-25，数据滞后1天。疑似入库模式矛盾导致 DELETE 逻辑错乱。`,
+      fix: '排查入库模式矛盾（@meta mode vs 代码 MODE），修复后补跑缺失日期数据，再次扫描确认。',
+      steps: ['扫描确认滞后', '排查模式矛盾', '修复并补数', '重新扫描'],
+      lastError: scanInfo,
       retries: 3,
       estimatedFix: '30min',
     },
   }
   return map[table] || {
     severity: 'warning',
-    category: '未知',
-    cause: '未配置归因规则，请检查脚本日志确认根因。',
-    fix: '查看 logs/run_YYYYMMDD.log 定位异常堆栈。',
-    steps: ['查日志', '定位异常', '修复', '重跑'],
-    lastError: '—',
+    category: '数据异常（扫描检测）',
+    cause: t ? `数据库扫描结果：rows=${t.rows.toLocaleString()}, max_date=${t.maxDate ?? 'NULL'}。数据覆盖不满足要求。` : '未找到该表的扫描结果。',
+    fix: '重新扫描数据库确认数据状态，排查入库流程。',
+    steps: ['重新扫描', '定位异常', '修复', '验证'],
+    lastError: scanInfo || '—',
     retries: 0,
     estimatedFix: '—',
   }

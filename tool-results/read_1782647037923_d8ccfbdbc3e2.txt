@@ -1,0 +1,567 @@
+     1→'use client'
+     2→import { useState, useMemo, useRef } from 'react'
+     3→import { TABLES, TableMeta } from '@/lib/dataops/mock-data'
+     4→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     5→import { Button } from '@/components/ui/button'
+     6→import { Badge } from '@/components/ui/badge'
+     7→import { Input } from '@/components/ui/input'
+     8→import { GitBranch, ArrowDown, ArrowUp, Box, Search, Maximize2, ZoomIn, ZoomOut, Layers, Activity, Database, Network, Map as MapIcon, X } from 'lucide-react'
+     9→import { formatRows, healthColorClass, typeBadgeClass } from '@/lib/dataops/styles'
+    10→
+    11→interface GraphNode {
+    12→  id: string
+    13→  label: string
+    14→  x: number
+    15→  y: number
+    16→  type: 'external' | 'table'
+    17→  health: string
+    18→  meta?: TableMeta
+    19→}
+    20→
+    21→interface GraphEdge {
+    22→  from: string
+    23→  to: string
+    24→  type: 'internal' | 'external'
+    25→}
+    26→
+    27→// 预分层布局（4 层：外部源 / L1入库 / L2计算 / L3聚合）
+    28→const LAYERS = [
+    29→  { name: '外部数据源', y: 80, tables: ['TQ API', 'TDX .day', 'TDX .lc5', 'TDX .lc1', 'TDX gpsz', 'TDX signals'] },
+    30→  { name: 'L1 基础入库', y: 240, tables: ['trading_calendar', 'stock_daily_kline', 'stock_kline_5m', 'stock_kline_1m', 'capital_info', 'stock_financial_data', 'stock_block_relation', 'market_sc1_42', 'stock_gp1_46_indicators', 'stock_signals_20001_20011', 'stock_industry_3level'] },
+    31→  { name: 'L2 派生计算', y: 460, tables: ['stock_kline_15m', 'stock_kline_30m', 'stock_kline_60m', 'stock_kline_weekly', 'stock_kline_monthly', 'dim_security_type', 'dim_industry_code', 'pianpao_daily'] },
+    32→  { name: 'L3 聚合视图', y: 620, tables: ['pianpao_daily_summary', 'dim_gp_indicator'] },
+    33→]
+    34→
+    35→export function LineageView() {
+    36→  const [focus, setFocus] = useState<string>('stock_daily_kline')
+    37→  const [depth, setDepth] = useState(2)
+    38→  const [search, setSearch] = useState('')
+    39→  const [zoom, setZoom] = useState(1)
+    40→  const [hovered, setHovered] = useState<string | null>(null)
+    41→  const [selectedPath, setSelectedPath] = useState<Set<string>>(new Set())
+    42→  const [nodeOverrides, setNodeOverrides] = useState<Record<string, { x: number; y: number }>>({})
+    43→  const [dragging, setDragging] = useState<string | null>(null)
+    44→  const [showMinimap, setShowMinimap] = useState(true)
+    45→  const svgRef = useRef<SVGSVGElement>(null)
+    46→  const dragStartRef = useRef<{ nodeId: string; startMouse: { x: number; y: number }; startNode: { x: number; y: number } } | null>(null)
+    47→
+    48→  // 计算上下游 N 层
+    49→  const graph = useMemo(() => {
+    50→    const upstream = new Set<string>()
+    51→    const downstream = new Set<string>()
+    52→
+    53→    const collectUp = (table: string, d: number) => {
+    54→      if (d <= 0) return
+    55→      const t = TABLES.find(x => x.table === table)
+    56→      if (!t) return
+    57→      for (const dep of t.dependsOn) {
+    58→        upstream.add(dep)
+    59→        collectUp(dep, d - 1)
+    60→      }
+    61→    }
+    62→    const collectDown = (table: string, d: number) => {
+    63→      if (d <= 0) return
+    64→      for (const t of TABLES) {
+    65→        if (t.dependsOn.includes(table)) {
+    66→          downstream.add(t.table)
+    67→          collectDown(t.table, d - 1)
+    68→        }
+    69→      }
+    70→    }
+    71→    collectUp(focus, depth)
+    72→    collectDown(focus, depth)
+    73→    return { upstream, downstream }
+    74→  }, [focus, depth])
+    75→
+    76→  // 计算选中节点的路径（从 focus 出发的上下游链路）
+    77→  const highlightSet = useMemo(() => {
+    78→    const s = new Set<string>([focus])
+    79→    graph.upstream.forEach(t => s.add(t))
+    80→    graph.downstream.forEach(t => s.add(t))
+    81→    return s
+    82→  }, [focus, graph])
+    83→
+    84→  // 构建节点 + 边
+    85→  const { nodes, edges } = useMemo(() => {
+    86→    const ns: GraphNode[] = []
+    87→    const es: GraphEdge[] = []
+    88→
+    89→    // 外部源节点
+    90→    LAYERS[0].tables.forEach((id, i) => {
+    91→      ns.push({ id, label: id, x: 80 + i * 130, y: LAYERS[0].y, type: 'external', health: 'external' })
+    92→    })
+    93→
+    94→    // 表节点
+    95→    LAYERS.slice(1).forEach(layer => {
+    96→      layer.tables.forEach((id, i) => {
+    97→        const meta = TABLES.find(t => t.table === id)
+    98→        if (meta) {
+    99→          ns.push({ id, label: id, x: 80 + i * 130, y: layer.y, type: 'table', health: meta.health, meta })
+   100→        }
+   101→      })
+   102→    })
+   103→
+   104→    // 边：外部源 → L1 表
+   105→    TABLES.forEach(t => {
+   106→      t.sourceDeps.forEach(src => {
+   107→        // 简化匹配：根据 sourceDeps 里的字符串匹配外部节点
+   108→        const matched = LAYERS[0].tables.find(ext => src.includes(ext.split(' ')[1]) || ext.includes(src))
+   109→        if (matched) {
+   110→          es.push({ from: matched, to: t.table, type: 'external' })
+   111→        }
+   112→      })
+   113→    })
+   114→
+   115→    // 边：表 → 表
+   116→    TABLES.forEach(t => {
+   117→      t.dependsOn.forEach(dep => {
+   118→        es.push({ from: dep, to: t.table, type: 'internal' })
+   119→      })
+   120→    })
+   121→
+   122→    return { nodes: ns, edges: es }
+   123→  }, [])
+   124→
+   125→  const nodeById = useMemo(() => {
+   126→    const m = new Map<string, GraphNode>()
+   127→    nodes.forEach(n => m.set(n.id, n))
+   128→    return m
+   129→  }, [nodes])
+   130→
+   131→  const focused = TABLES.find(t => t.table === focus)
+   132→
+   133→  const isHighlighted = (id: string) => highlightSet.has(id) || hovered === id
+   134→  const isDimmed = (id: string) => (highlightSet.size > 1 || hovered) && !isHighlighted(id)
+   135→
+   136→  const onNodeClick = (id: string) => {
+   137→    if (nodeById.get(id)?.type === 'table') {
+   138→      setFocus(id)
+   139→      setSelectedPath(new Set())
+   140→    }
+   141→  }
+   142→
+   143→  // SVG 视图尺寸
+   144→  const viewW = 1700
+   145→  const viewH = 720
+   146→
+   147→  // 获取节点的实际位置（含 override）
+   148→  const getNodePos = (node: GraphNode) => nodeOverrides[node.id] || { x: node.x, y: node.y }
+   149→
+   150→  // 拖拽处理
+   151→  const onNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
+   152→    e.stopPropagation()
+   153→    const node = nodeById.get(nodeId)
+   154→    if (!node) return
+   155→    const svg = svgRef.current
+   156→    if (!svg) return
+   157→    const pt = svg.createSVGPoint()
+   158→    pt.x = e.clientX
+   159→    pt.y = e.clientY
+   160→    const ctm = svg.getScreenCTM()
+   161→    if (!ctm) return
+   162→    const svgP = pt.matrixTransform(ctm.inverse())
+   163→    const pos = getNodePos(node)
+   164→    dragStartRef.current = {
+   165→      nodeId,
+   166→      startMouse: { x: svgP.x, y: svgP.y },
+   167→      startNode: { x: pos.x, y: pos.y },
+   168→    }
+   169→    setDragging(nodeId)
+   170→  }
+   171→
+   172→  const onSvgMouseMove = (e: React.MouseEvent) => {
+   173→    if (!dragStartRef.current) return
+   174→    const svg = svgRef.current
+   175→    if (!svg) return
+   176→    const pt = svg.createSVGPoint()
+   177→    pt.x = e.clientX
+   178→    pt.y = e.clientY
+   179→    const ctm = svg.getScreenCTM()
+   180→    if (!ctm) return
+   181→    const svgP = pt.matrixTransform(ctm.inverse())
+   182→    const ds = dragStartRef.current
+   183→    const dx = svgP.x - ds.startMouse.x
+   184→    const dy = svgP.y - ds.startMouse.y
+   185→    setNodeOverrides(prev => ({
+   186→      ...prev,
+   187→      [ds.nodeId]: {
+   188→        x: Math.max(0, Math.min(viewW - 100, ds.startNode.x + dx)),
+   189→        y: Math.max(40, Math.min(viewH - 40, ds.startNode.y + dy)),
+   190→      },
+   191→    }))
+   192→  }
+   193→
+   194→  const onSvgMouseUp = () => {
+   195→    dragStartRef.current = null
+   196→    setDragging(null)
+   197→  }
+   198→
+   199→  const resetView = () => {
+   200→    setZoom(1)
+   201→    setFocus('stock_daily_kline')
+   202→    setSelectedPath(new Set())
+   203→    setNodeOverrides({})
+   204→  }
+   205→
+   206→  return (
+   207→    <div className="space-y-4">
+   208→      {/* 控制栏 */}
+   209→      <Card>
+   210→        <CardContent className="p-3">
+   211→          <div className="flex flex-wrap items-center gap-3">
+   212→            <div className="relative flex-1 min-w-[220px]">
+   213→              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+   214→              <Input
+   215→                placeholder="输入表名作为焦点..."
+   216→                value={search}
+   217→                onChange={e => setSearch(e.target.value)}
+   218→                className="pl-9"
+   219→                onKeyDown={e => { if (e.key === 'Enter' && TABLES.find(t => t.table === search)) setFocus(search) }}
+   220→              />
+   221→            </div>
+   222→            <div className="flex items-center gap-2">
+   223→              <span className="text-xs text-zinc-400 flex items-center gap-1"><Layers className="h-3 w-3" />展开层数</span>
+   224→              <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
+   225→                {[1, 2, 3].map(d => (
+   226→                  <button key={d} onClick={() => setDepth(d)} className={`px-2.5 py-0.5 text-xs rounded ${depth === d ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}>{d}</button>
+   227→                ))}
+   228→              </div>
+   229→            </div>
+   230→            <div className="flex items-center gap-1 border-l pl-3">
+   231→              <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setZoom(z => Math.max(0.5, z - 0.2))}>
+   232→                <ZoomOut className="h-3.5 w-3.5" />
+   233→              </Button>
+   234→              <span className="text-xs text-zinc-500 font-mono w-10 text-center">{Math.round(zoom * 100)}%</span>
+   235→              <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setZoom(z => Math.min(2, z + 0.2))}>
+   236→                <ZoomIn className="h-3.5 w-3.5" />
+   237→              </Button>
+   238→              <Button size="sm" variant="ghost" className="h-8 px-2" onClick={resetView} title="重置">
+   239→                <Maximize2 className="h-3.5 w-3.5" />
+   240→              </Button>
+   241→            </div>
+   242→            <Badge variant="secondary" className="text-xs">
+   243→              <Network className="h-3 w-3 mr-1" />
+   244→              焦点：{focus}
+   245→            </Badge>
+   246→          </div>
+   247→        </CardContent>
+   248→      </Card>
+   249→
+   250→      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+   251→        {/* SVG 图谱 */}
+   252→        <Card>
+   253→          <CardHeader className="pb-3">
+   254→            <CardTitle className="text-base flex items-center gap-2">
+   255→              <GitBranch className="h-4 w-4 text-fuchsia-500" />
+   256→              血缘关系图谱
+   257→              <Badge variant="outline" className="ml-2 text-[10px]">{nodes.length} 节点 · {edges.length} 边</Badge>
+   258→            </CardTitle>
+   259→          </CardHeader>
+   260→          <CardContent className="p-0">
+   261→            <div className="relative overflow-auto bg-zinc-50/50 dark:bg-zinc-950/30" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+   262→              <svg
+   263→                ref={svgRef}
+   264→                viewBox={`0 0 ${viewW} ${viewH}`}
+   265→                width={viewW * zoom}
+   266→                height={viewH * zoom}
+   267→                className="mx-auto"
+   268→                style={{ minWidth: viewW * 0.5 }}
+   269→                onMouseMove={onSvgMouseMove}
+   270→                onMouseUp={onSvgMouseUp}
+   271→                onMouseLeave={onSvgMouseUp}
+   272→              >
+   273→                <defs>
+   274→                  {/* 箭头标记 */}
+   275→                  <marker id="arrow-internal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+   276→                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
+   277→                  </marker>
+   278→                  <marker id="arrow-external" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+   279→                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" />
+   280→                  </marker>
+   281→                  <marker id="arrow-highlight" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+   282→                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#d946ef" />
+   283→                  </marker>
+   284→                </defs>
+   285→
+   286→                {/* 层分隔线 + 标签 */}
+   287→                {LAYERS.map((layer, i) => (
+   288→                  <g key={layer.name}>
+   289→                    <line x1={0} y1={layer.y - 60} x2={viewW} y2={layer.y - 60} stroke="currentColor" className="text-zinc-200 dark:text-zinc-800" strokeDasharray="4 4" strokeWidth={1} />
+   290→                    <text x={8} y={layer.y - 65} className="fill-zinc-400 text-[11px] font-mono">{layer.name}</text>
+   291→                  </g>
+   292→                ))}
+   293→
+   294→                {/* 边 */}
+   295→                {edges.map((edge, i) => {
+   296→                  const from = nodeById.get(edge.from)
+   297→                  const to = nodeById.get(edge.to)
+   298→                  if (!from || !to) return null
+   299→                  const fromPos = getNodePos(from)
+   300→                  const toPos = getNodePos(to)
+   301→                  const isHL = (isHighlighted(edge.from) && isHighlighted(edge.to)) || hovered === edge.from || hovered === edge.to
+   302→                  const isDim = (highlightSet.size > 1 || hovered) && !isHL
+   303→                  // 贝塞尔曲线：从 from 底部到 to 顶部
+   304→                  const x1 = fromPos.x + 50
+   305→                  const y1 = fromPos.y + 18
+   306→                  const x2 = toPos.x + 50
+   307→                  const y2 = toPos.y - 18
+   308→                  const midY = (y1 + y2) / 2
+   309→                  const path = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`
+   310→                  return (
+   311→                    <path
+   312→                      key={i}
+   313→                      d={path}
+   314→                      fill="none"
+   315→                      stroke={isHL ? '#d946ef' : edge.type === 'external' ? '#7dd3fc' : '#cbd5e1'}
+   316→                      strokeWidth={isHL ? 2 : 1}
+   317→                      strokeDasharray={edge.type === 'external' ? '4 3' : 'none'}
+   318→                      opacity={isDim ? 0.15 : 1}
+   319→                      markerEnd={`url(#${isHL ? 'arrow-highlight' : edge.type === 'external' ? 'arrow-external' : 'arrow-internal'})`}
+   320→                      style={{ transition: 'opacity 0.2s, stroke 0.2s' }}
+   321→                    />
+   322→                  )
+   323→                })}
+   324→
+   325→                {/* 节点 */}
+   326→                {nodes.map(node => {
+   327→                  const isHL = isHighlighted(node.id)
+   328→                  const isDim = isDimmed(node.id)
+   329→                  const isFocus = focus === node.id
+   330→                  const isExt = node.type === 'external'
+   331→                  const isDrag = dragging === node.id
+   332→                  const hasOverride = !!nodeOverrides[node.id]
+   333→                  const pos = getNodePos(node)
+   334→                  const fill = isExt ? '#f0f9ff' : node.health === 'green' ? '#f0fdf4' : node.health === 'red' ? '#fef2f2' : node.health === 'yellow' ? '#fffbeb' : '#f4f4f5'
+   335→                  const stroke = isExt ? '#7dd3fc' : node.health === 'green' ? '#86efac' : node.health === 'red' ? '#fca5a5' : node.health === 'yellow' ? '#fcd34d' : '#d4d4d8'
+   336→                  const labelColor = isExt ? '#0369a1' : node.health === 'green' ? '#166534' : node.health === 'red' ? '#991b1b' : node.health === 'yellow' ? '#854d0e' : '#52525b'
+   337→                  return (
+   338→                    <g
+   339→                      key={node.id}
+   340→                      transform={`translate(${pos.x}, ${pos.y})`}
+   341→                      onClick={() => onNodeClick(node.id)}
+   342→                      onMouseDown={e => onNodeMouseDown(e, node.id)}
+   343→                      onMouseEnter={() => setHovered(node.id)}
+   344→                      onMouseLeave={() => setHovered(null)}
+   345→                      className={isDrag ? 'cursor-grabbing' : 'cursor-grab'}
+   346→                      style={{ transition: isDrag ? 'none' : 'opacity 0.2s', opacity: isDim ? 0.3 : 1 }}
+   347→                    >
+   348→                      {/* 焦点光环 */}
+   349→                      {isFocus && (
+   350→                        <rect x={-4} y={-4} width={108} height={44} rx={8} fill="none" stroke="#d946ef" strokeWidth={2} strokeDasharray="3 3" className="animate-pulse" />
+   351→                      )}
+   352→                      {/* 拖拽指示器 */}
+   353→                      {hasOverride && (
+   354→                        <circle cx={-8} cy={-8} r={3} fill="#f59e0b" title="已移动" />
+   355→                      )}
+   356→                      <rect
+   357→                        x={0}
+   358→                        y={0}
+   359→                        width={100}
+   360→                        height={36}
+   361→                        rx={6}
+   362→                        fill={fill}
+   363→                        stroke={isHL ? '#d946ef' : stroke}
+   364→                        strokeWidth={isHL ? 2 : 1}
+   365→                        strokeDasharray={isExt ? '4 3' : 'none'}
+   366→                        style={{ transition: 'stroke 0.2s, stroke-width 0.2s', filter: isDrag ? 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))' : 'none' }}
+   367→                      />
+   368→                      <text x={50} y={16} textAnchor="middle" className="font-mono" style={{ fontSize: 10, fill: labelColor, fontWeight: isHL ? 600 : 500 }}>
+   369→                        {node.label.length > 16 ? node.label.slice(0, 15) + '…' : node.label}
+   370→                      </text>
+   371→                      <text x={50} y={28} textAnchor="middle" style={{ fontSize: 8, fill: '#9ca3af' }}>
+   372→                        {isExt ? '外部' : node.meta ? `${node.meta.dir}` : ''}
+   373→                      </text>
+   374→                      {/* 健康度小圆点 */}
+   375→                      {!isExt && (
+   376→                        <circle
+   377→                          cx={92}
+   378→                          cy={8}
+   379→                          r={3}
+   380→                          fill={node.health === 'green' ? '#10b981' : node.health === 'red' ? '#f43f5e' : node.health === 'yellow' ? '#f59e0b' : '#d4d4d8'}
+   381→                        />
+   382→                      )}
+   383→                    </g>
+   384→                  )
+   385→                })}
+   386→              </svg>
+   387→
+   388→              {/* Minimap 浮层 */}
+   389→              {showMinimap && (
+   390→                <div className="absolute top-2 right-2 w-44 h-20 bg-white/95 dark:bg-zinc-900/95 border border-zinc-200 dark:border-zinc-800 rounded-md shadow-lg overflow-hidden backdrop-blur-sm">
+   391→                  <div className="px-1.5 py-0.5 text-[9px] text-zinc-500 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800">
+   392→                    <span className="flex items-center gap-0.5"><MapIcon className="h-2.5 w-2.5" /> Minimap</span>
+   393→                    <button onClick={() => setShowMinimap(false)} className="hover:text-zinc-700 dark:hover:text-zinc-300" title="隐藏">
+   394→                      <X className="h-2.5 w-2.5" />
+   395→                    </button>
+   396→                  </div>
+   397→                  <svg viewBox={`0 0 ${viewW} ${viewH}`} className="w-full" style={{ height: 'calc(100% - 16px)' }} preserveAspectRatio="xMidYMid meet">
+   398→                    {/* 边 */}
+   399→                    {edges.map((edge, i) => {
+   400→                      const from = nodeById.get(edge.from)
+   401→                      const to = nodeById.get(edge.to)
+   402→                      if (!from || !to) return null
+   403→                      const fp = getNodePos(from)
+   404→                      const tp = getNodePos(to)
+   405→                      return <line key={i} x1={fp.x + 50} y1={fp.y} x2={tp.x + 50} y2={tp.y} stroke={edge.type === 'external' ? '#7dd3fc' : '#cbd5e1'} strokeWidth={2} opacity={0.5} />
+   406→                    })}
+   407→                    {/* 节点 */}
+   408→                    {nodes.map(n => {
+   409→                      const p = getNodePos(n)
+   410→                      const isF = focus === n.id
+   411→                      const isExt = n.type === 'external'
+   412→                      const color = isExt ? '#7dd3fc' : n.health === 'green' ? '#10b981' : n.health === 'red' ? '#f43f5e' : n.health === 'yellow' ? '#f59e0b' : '#d4d4d8'
+   413→                      return (
+   414→                        <rect
+   415→                          key={n.id}
+   416→                          x={p.x}
+   417→                          y={p.y}
+   418→                          width={100}
+   419→                          height={36}
+   420→                          rx={4}
+   421→                          fill={color}
+   422→                          opacity={isF ? 1 : 0.6}
+   423→                          stroke={isF ? '#d946ef' : 'none'}
+   424→                          strokeWidth={isF ? 4 : 0}
+   425→                        />
+   426→                      )
+   427→                    })}
+   428→                  </svg>
+   429→                </div>
+   430→              )}
+   431→              {!showMinimap && (
+   432→                <button
+   433→                  onClick={() => setShowMinimap(true)}
+   434→                  className="absolute top-2 right-2 p-1.5 rounded-md bg-white/95 dark:bg-zinc-900/95 border border-zinc-200 dark:border-zinc-800 shadow-lg hover:bg-zinc-50 dark:hover:bg-zinc-800"
+   435→                  title="显示 Minimap"
+   436→                >
+   437→                  <MapIcon className="h-3.5 w-3.5 text-zinc-500" />
+   438→                </button>
+   439→              )}
+   440→
+   441→              {/* 拖拽提示 */}
+   442→              <div className="absolute bottom-2 left-2 px-2 py-1 rounded bg-white/90 dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-500 shadow-sm backdrop-blur-sm">
+   443→                拖拽节点重新布局 · {Object.keys(nodeOverrides).length > 0 && <span className="text-amber-600">{Object.keys(nodeOverrides).length} 个已移动 · </span>}点击切换焦点
+   444→              </div>
+   445→            </div>
+   446→
+   447→            {/* 图例 */}
+   448→            <div className="px-4 py-3 border-t flex items-center gap-4 text-[11px] text-zinc-500 flex-wrap">
+   449→              <span className="flex items-center gap-1">
+   450→                <span className="h-2.5 w-2.5 rounded border border-emerald-400 bg-emerald-50" /> 健康
+   451→              </span>
+   452→              <span className="flex items-center gap-1">
+   453→                <span className="h-2.5 w-2.5 rounded border border-rose-400 bg-rose-50" /> 异常
+   454→              </span>
+   455→              <span className="flex items-center gap-1">
+   456→                <span className="h-2.5 w-2.5 rounded border border-amber-400 bg-amber-50" /> 待查
+   457→              </span>
+   458→              <span className="flex items-center gap-1">
+   459→                <span className="h-2.5 w-2.5 rounded border border-zinc-300 bg-zinc-50" /> once
+   460→              </span>
+   461→              <span className="flex items-center gap-1">
+   462→                <span className="h-2.5 w-2.5 rounded border border-dashed border-sky-300 bg-sky-50" /> 外部源
+   463→              </span>
+   464→              <span className="flex items-center gap-1 ml-auto">
+   465→                <span className="h-0.5 w-6 bg-fuchsia-500" /> 高亮路径
+   466→              </span>
+   467→              <span className="text-zinc-400">· 点击节点切换焦点</span>
+   468→            </div>
+   469→          </CardContent>
+   470→        </Card>
+   471→
+   472→        {/* 右侧：焦点详情 */}
+   473→        <div className="space-y-4">
+   474→          <Card>
+   475→            <CardHeader className="pb-3">
+   476→              <CardTitle className="text-base flex items-center gap-2">
+   477→                <Box className="h-4 w-4 text-fuchsia-500" />
+   478→                焦点表
+   479→              </CardTitle>
+   480→            </CardHeader>
+   481→            <CardContent>
+   482→              {focused && (
+   483→                <div className="p-3 rounded-md border-2 border-fuchsia-400 bg-fuchsia-50 dark:bg-fuchsia-950/30">
+   484→                  <div className="flex items-center gap-2 mb-2">
+   485→                    <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${typeBadgeClass(focused.type)}`}>{focused.type}</span>
+   486→                    <div className="font-mono text-sm font-semibold truncate">{focused.table}</div>
+   487→                  </div>
+   488→                  <div className="text-xs text-zinc-500 mb-2">{focused.cn}</div>
+   489→                  <div className="space-y-1 text-[11px]">
+   490→                    <div className="flex justify-between"><span className="text-zinc-400">目录</span><span className="font-mono">{focused.dir}</span></div>
+   491→                    <div className="flex justify-between"><span className="text-zinc-400">schedule</span><span>{focused.schedule}</span></div>
+   492→                    <div className="flex justify-between"><span className="text-zinc-400">mode</span><span>{focused.mode}</span></div>
+   493→                    <div className="flex justify-between"><span className="text-zinc-400">行数</span><span className="font-mono">{formatRows(focused.rows)}</span></div>
+   494→                    <div className="flex justify-between"><span className="text-zinc-400">新鲜度</span><span className={focused.freshness === '最新' ? 'text-emerald-600' : focused.freshness === '滞后' ? 'text-rose-600' : 'text-zinc-500'}>{focused.freshness}</span></div>
+   495→                    <div className="flex justify-between"><span className="text-zinc-400">上游数</span><span className="font-mono">{focused.dependsOn.length}</span></div>
+   496→                    <div className="flex justify-between"><span className="text-zinc-400">下游数</span><span className="font-mono">{focused.downstream.length}</span></div>
+   497→                  </div>
+   498→                  <div className="mt-2 pt-2 border-t border-fuchsia-200 dark:border-fuchsia-800">
+   499→                    <div className="text-[10px] text-zinc-400 mb-1 flex items-center gap-1"><Database className="h-3 w-3" />外部数据源</div>
+   500→                    <div className="flex flex-wrap gap-1">
+   501→                      {focused.sourceDeps.length === 0 ? <span className="text-[10px] text-zinc-400">无</span> :
+   502→                        focused.sourceDeps.map(d => <Badge key={d} variant="outline" className="text-[10px] py-0 px-1 font-mono">{d}</Badge>)}
+   503→                    </div>
+   504→                  </div>
+   505→                </div>
+   506→              )}
+   507→            </CardContent>
+   508→          </Card>
+   509→
+   510→          {/* 上下游列表 */}
+   511→          <Card>
+   512→            <CardHeader className="pb-3">
+   513→              <CardTitle className="text-sm flex items-center gap-2">
+   514→                <Activity className="h-4 w-4 text-sky-500" />
+   515→                影响范围 ({depth} 层)
+   516→              </CardTitle>
+   517→            </CardHeader>
+   518→            <CardContent className="space-y-3">
+   519→              <div>
+   520→                <div className="text-[11px] font-medium text-zinc-500 mb-1.5 flex items-center gap-1">
+   521→                  <ArrowUp className="h-3 w-3" /> 上游 ({graph.upstream.size})
+   522→                </div>
+   523→                <div className="space-y-1 max-h-32 overflow-y-auto">
+   524→                  {graph.upstream.size === 0 && <div className="text-[11px] text-zinc-400 py-2 text-center">无库内上游</div>}
+   525→                  {[...graph.upstream].map(t => {
+   526→                    const meta = TABLES.find(x => x.table === t)
+   527→                    return (
+   528→                      <button key={t} onClick={() => setFocus(t)} className="w-full text-left p-1.5 rounded border border-zinc-200 dark:border-zinc-700 hover:border-sky-300 dark:hover:border-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/30 transition-colors">
+   529→                        <div className="font-mono text-[11px] font-medium truncate">{t}</div>
+   530→                        {meta && <div className="text-[10px] text-zinc-400 truncate">{meta.cn}</div>}
+   531→                      </button>
+   532→                    )
+   533→                  })}
+   534→                </div>
+   535→              </div>
+   536→              <div>
+   537→                <div className="text-[11px] font-medium text-zinc-500 mb-1.5 flex items-center gap-1">
+   538→                  <ArrowDown className="h-3 w-3" /> 下游 ({graph.downstream.size})
+   539→                </div>
+   540→                <div className="space-y-1 max-h-32 overflow-y-auto">
+   541→                  {graph.downstream.size === 0 && <div className="text-[11px] text-zinc-400 py-2 text-center">无下游</div>}
+   542→                  {[...graph.downstream].map(t => {
+   543→                    const meta = TABLES.find(x => x.table === t)
+   544→                    return (
+   545→                      <button key={t} onClick={() => setFocus(t)} className="w-full text-left p-1.5 rounded border border-zinc-200 dark:border-zinc-700 hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors">
+   546→                        <div className="font-mono text-[11px] font-medium truncate">{t}</div>
+   547→                        {meta && <div className="text-[10px] text-zinc-400 truncate">{meta.cn}</div>}
+   548→                      </button>
+   549→                    )
+   550→                  })}
+   551→                </div>
+   552→              </div>
+   553→            </CardContent>
+   554→          </Card>
+   555→
+   556→          <Card>
+   557→            <CardContent className="p-3 text-xs text-zinc-500">
+   558→              <strong className="text-zinc-700 dark:text-zinc-300">用途：</strong>
+   559→              上游坏了 → 查哪些下游受影响；改某表 schema → 查哪些脚本要同步改；调度排序 → 按拓扑序自动排。
+   560→            </CardContent>
+   561→          </Card>
+   562→        </div>
+   563→      </div>
+   564→    </div>
+   565→  )
+   566→}
+   567→

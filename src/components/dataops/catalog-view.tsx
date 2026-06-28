@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { TABLES, TableMeta, PIPELINE_RUNS, genSampleData, getColumnLintIssues, LINT_RULES } from '@/lib/dataops/mock-data'
+import { TABLES, TableMeta, PIPELINE_RUNS, genSampleData, getColumnLintIssues, LINT_RULES, deriveHealthFromScan } from '@/lib/dataops/mock-data'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,7 @@ export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string
       if (search && !t.table.includes(search.toLowerCase()) && !t.cn.includes(search)) return false
       if (dirFilter !== 'all' && t.dir !== dirFilter) return false
       if (typeFilter !== 'all' && t.type !== typeFilter) return false
-      if (healthFilter !== 'all' && t.health !== healthFilter) return false
+      if (healthFilter !== 'all' && deriveHealthFromScan(t) !== healthFilter) return false
       return true
     })
     result.sort((a, b) => {
@@ -119,7 +119,7 @@ export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string
                   <div className="text-right font-mono text-zinc-600 dark:text-zinc-400">{formatRows(t.rows)}</div>
                   <div className={`font-mono text-[11px] ${freshnessClass(t.freshness)}`}>{t.maxDate || '—'}</div>
                   <div className="flex items-center justify-center gap-1">
-                    <span className={`h-2.5 w-2.5 rounded-full ${healthColorClass(t.health).split(' ')[0]}`} title={t.freshness} />
+                    <span className={`h-2.5 w-2.5 rounded-full ${healthColorClass(deriveHealthFromScan(t)).split(' ')[0]}`} title={t.freshness} />
                   </div>
                 </button>
               ))}
@@ -217,7 +217,7 @@ function TableDetail({ table, onNavigate, onRunTable }: { table: TableMeta; onNa
               </div>
               <div>
                 <div className="text-[11px] text-zinc-500">健康度</div>
-                <div className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${healthColorClass(table.health)}`}>{table.health === 'green' ? '正常' : table.health === 'red' ? '异常' : '—'}</div>
+                <div className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${healthColorClass(deriveHealthFromScan(table))}`}>{deriveHealthFromScan(table) === 'green' ? '正常' : deriveHealthFromScan(table) === 'red' ? '异常' : '—'}</div>
               </div>
             </div>
           </CardContent>

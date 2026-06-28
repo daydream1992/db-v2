@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo, useRef } from 'react'
-import { TABLES, TableMeta } from '@/lib/dataops/mock-data'
+import { TABLES, TableMeta, deriveHealthFromScan } from '@/lib/dataops/mock-data'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -96,7 +96,7 @@ export function LineageView() {
       layer.tables.forEach((id, i) => {
         const meta = TABLES.find(t => t.table === id)
         if (meta) {
-          ns.push({ id, label: id, x: 80 + i * 130, y: layer.y, type: 'table', health: meta.health, meta })
+          ns.push({ id, label: id, x: 80 + i * 130, y: layer.y, type: 'table', health: deriveHealthFromScan(meta), meta })
         }
       })
     })
@@ -331,9 +331,10 @@ export function LineageView() {
                   const isDrag = dragging === node.id
                   const hasOverride = !!nodeOverrides[node.id]
                   const pos = getNodePos(node)
-                  const fill = isExt ? '#f0f9ff' : node.health === 'green' ? '#f0fdf4' : node.health === 'red' ? '#fef2f2' : node.health === 'yellow' ? '#fffbeb' : '#f4f4f5'
-                  const stroke = isExt ? '#7dd3fc' : node.health === 'green' ? '#86efac' : node.health === 'red' ? '#fca5a5' : node.health === 'yellow' ? '#fcd34d' : '#d4d4d8'
-                  const labelColor = isExt ? '#0369a1' : node.health === 'green' ? '#166534' : node.health === 'red' ? '#991b1b' : node.health === 'yellow' ? '#854d0e' : '#52525b'
+                  const nodeHealth = node.meta ? deriveHealthFromScan(node.meta) : node.health
+                  const fill = isExt ? '#f0f9ff' : nodeHealth === 'green' ? '#f0fdf4' : nodeHealth === 'red' ? '#fef2f2' : nodeHealth === 'yellow' ? '#fffbeb' : '#f4f4f5'
+                  const stroke = isExt ? '#7dd3fc' : nodeHealth === 'green' ? '#86efac' : nodeHealth === 'red' ? '#fca5a5' : nodeHealth === 'yellow' ? '#fcd34d' : '#d4d4d8'
+                  const labelColor = isExt ? '#0369a1' : nodeHealth === 'green' ? '#166534' : nodeHealth === 'red' ? '#991b1b' : nodeHealth === 'yellow' ? '#854d0e' : '#52525b'
                   return (
                     <g
                       key={node.id}
@@ -377,7 +378,7 @@ export function LineageView() {
                           cx={92}
                           cy={8}
                           r={3}
-                          fill={node.health === 'green' ? '#10b981' : node.health === 'red' ? '#f43f5e' : node.health === 'yellow' ? '#f59e0b' : '#d4d4d8'}
+                          fill={nodeHealth === 'green' ? '#10b981' : nodeHealth === 'red' ? '#f43f5e' : nodeHealth === 'yellow' ? '#f59e0b' : '#d4d4d8'}
                         />
                       )}
                     </g>
@@ -409,7 +410,7 @@ export function LineageView() {
                       const p = getNodePos(n)
                       const isF = focus === n.id
                       const isExt = n.type === 'external'
-                      const color = isExt ? '#7dd3fc' : n.health === 'green' ? '#10b981' : n.health === 'red' ? '#f43f5e' : n.health === 'yellow' ? '#f59e0b' : '#d4d4d8'
+                      const color = isExt ? '#7dd3fc' : n.meta ? (deriveHealthFromScan(n.meta) === 'green' ? '#10b981' : deriveHealthFromScan(n.meta) === 'red' ? '#f43f5e' : deriveHealthFromScan(n.meta) === 'yellow' ? '#f59e0b' : '#d4d4d8') : n.health === 'green' ? '#10b981' : n.health === 'red' ? '#f43f5e' : n.health === 'yellow' ? '#f59e0b' : '#d4d4d8'
                       return (
                         <rect
                           key={n.id}

@@ -15,7 +15,7 @@ import { NotificationCenter } from '@/components/dataops/notification-center'
 import { KeyboardHelp } from '@/components/dataops/keyboard-help'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Badge } from '@/components/ui/badge'
-import { TABLES, ALERTS, PIPELINE_RUNS } from '@/lib/dataops/mock-data'
+import { TABLES, ALERTS, PIPELINE_RUNS, deriveHealthFromScan } from '@/lib/dataops/mock-data'
 import { toast } from 'sonner'
 import {
   LayoutDashboard, Library, HeartPulse, Workflow, GitBranch,
@@ -27,7 +27,7 @@ type View = 'dashboard' | 'catalog' | 'health' | 'orchestration' | 'lineage' | '
 const NAV: { key: View; label: string; icon: React.ReactNode; badge?: number }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
   { key: 'catalog', label: '脚本目录', icon: <Library className="h-4 w-4" />, badge: TABLES.length },
-  { key: 'health', label: '健康度', icon: <HeartPulse className="h-4 w-4" />, badge: TABLES.filter(t => t.health === 'red').length },
+  { key: 'health', label: '健康度', icon: <HeartPulse className="h-4 w-4" />, badge: TABLES.filter(t => deriveHealthFromScan(t) === 'red').length },
   { key: 'orchestration', label: '编排', icon: <Workflow className="h-4 w-4" />, badge: PIPELINE_RUNS.filter(r => r.status === 'running').length },
   { key: 'lineage', label: '血缘', icon: <GitBranch className="h-4 w-4" /> },
   { key: 'lint', label: '规范校验', icon: <CheckCheck className="h-4 w-4" />, badge: ALERTS.filter(a => a.type === 'lint').length },

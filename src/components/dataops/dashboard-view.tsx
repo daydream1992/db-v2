@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { AlertTriangle, Activity, Database, CheckCircle2, Clock, TrendingUp, Zap, ArrowRight, Layers, Gauge, Cpu, HardDrive, Radio, Loader2, XCircle, Play, Pause, Terminal, Calendar, ArrowUpRight } from 'lucide-react'
-import { ALERTS, PIPELINE_RUNS, ROW_TREND, TABLES, DAILY_STATS, INGEST_TREND, SCRIPT_DISTRIBUTION } from '@/lib/dataops/mock-data'
+import { ALERTS, PIPELINE_RUNS, ROW_TREND, TABLES, DAILY_STATS, INGEST_TREND, SCRIPT_DISTRIBUTION, deriveHealthFromScan } from '@/lib/dataops/mock-data'
 import { formatRows, runStatusClass, runStatusDot } from '@/lib/dataops/styles'
 import { useLogStreamer } from '@/hooks/use-log-streamer'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
@@ -61,9 +61,9 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
 
   const totalTables = TABLES.length
-  const greenTables = TABLES.filter(t => t.health === 'green').length
-  const redTables = TABLES.filter(t => t.health === 'red').length
-  const yellowTables = TABLES.filter(t => t.health === 'yellow').length
+  const greenTables = TABLES.filter(t => deriveHealthFromScan(t) === 'green').length
+  const redTables = TABLES.filter(t => deriveHealthFromScan(t) === 'red').length
+  const yellowTables = TABLES.filter(t => deriveHealthFromScan(t) === 'yellow').length
   const todayRuns = PIPELINE_RUNS.filter(r => r.startedAt.startsWith('2026-06-25'))
   const successRate = todayRuns.length > 0
     ? Math.round((todayRuns.filter(r => r.status === 'success').length / todayRuns.length) * 100)

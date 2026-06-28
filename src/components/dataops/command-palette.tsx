@@ -10,7 +10,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from '@/components/ui/command'
-import { TABLES, ALERTS, LINT_RULES, PIPELINE_RUNS } from '@/lib/dataops/mock-data'
+import { TABLES, ALERTS, LINT_RULES, PIPELINE_RUNS, deriveHealthFromScan } from '@/lib/dataops/mock-data'
 import {
   LayoutDashboard, Library, HeartPulse, Workflow, GitBranch,
   CheckCheck, ScrollText, BookOpen, Settings, Database, Terminal,
@@ -110,14 +110,14 @@ export function CommandPalette({ open, onOpenChange, onNavigate, onRunTable, onR
 
   const actionItems: CommandPaletteAction[] = [
     { key: 'act-daily', label: '执行 daily 全量', desc: '18 张 daily 表按拓扑序执行', icon: <Play className="h-4 w-4 text-emerald-600" />, group: 'actions', run: () => { onRunDaily?.(); onOpenChange(false) }, keywords: 'run execute 执行' },
-    { key: 'act-fix-red', label: '一键补数红表', desc: `重新执行 ${TABLES.filter(t => t.health === 'red').length} 张异常表`, icon: <Zap className="h-4 w-4 text-rose-600" />, group: 'actions', run: () => { TABLES.filter(t => t.health === 'red').forEach(t => onRunTable?.(t.table)); onOpenChange(false) }, keywords: 'fix red 异常 补数' },
+    { key: 'act-fix-red', label: '一键补数红表', desc: `重新执行 ${TABLES.filter(t => deriveHealthFromScan(t) === 'red').length} 张异常表`, icon: <Zap className="h-4 w-4 text-rose-600" />, group: 'actions', run: () => { TABLES.filter(t => deriveHealthFromScan(t) === 'red').forEach(t => onRunTable?.(t.table)); onOpenChange(false) }, keywords: 'fix red 异常 补数' },
   ]
 
   const tableItems: CommandPaletteAction[] = TABLES.map(t => ({
     key: `tbl-${t.table}`,
     label: t.table,
     desc: `${t.cn} · ${t.dir} · ${t.rows > 0 ? `${(t.rows / 10000).toFixed(1)}万行` : '空表'}`,
-    icon: <Database className={`h-4 w-4 ${t.health === 'red' ? 'text-rose-500' : t.health === 'yellow' ? 'text-amber-500' : 'text-sky-500'}`} />,
+    icon: <Database className={`h-4 w-4 ${deriveHealthFromScan(t) === 'red' ? 'text-rose-500' : deriveHealthFromScan(t) === 'yellow' ? 'text-amber-500' : 'text-sky-500'}`} />,
     group: 'tables',
     run: () => { onRunTable?.(t.table); onOpenChange(false) },
     keywords: `${t.cn} ${t.script} ${t.source}`,
