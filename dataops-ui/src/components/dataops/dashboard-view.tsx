@@ -61,6 +61,8 @@ function genScaledIngest(range: TimeRange): { date: string; rows: number }[] {
 
 export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void }) {
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
+  // 运行中任务的已运行秒数：用 state 驱动，避免 render 期调用 Date.now() 造成 hydration 不匹配
+  const [runningElapsed, setRunningElapsed] = useState(0)
 
   const totalTables = TABLES.length
   const greenTables = TABLES.filter(t => t.health === 'green').length
@@ -73,6 +75,15 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
     : 0
   const totalRows = TABLES.reduce((s, t) => s + t.rows, 0)
   const runningRun = PIPELINE_RUNS.find(r => r.status === 'running')
+
+  useEffect(() => {
+    if (!runningRun) return
+    const startedAtMs = new Date(runningRun.startedAt).getTime()
+    const tick = () => setRunningElapsed(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)))
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [runningRun])
   const todayStat = DAILY_STATS[DAILY_STATS.length - 1]
 
   // 时间范围相关数据
@@ -517,7 +528,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
                 <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
                 <span className="font-medium text-sky-700 dark:text-sky-300">运行中：</span>
                 <span className="text-sky-700 dark:text-sky-300 font-mono">{runningRun.table}</span>
-                <span className="text-zinc-500 ml-auto text-xs">force={String(runningRun.force)} · 已运行 {Math.floor((Date.now() - new Date(runningRun.startedAt).getTime()) / 1000)}s</span>
+                <span className="text-zinc-500 ml-auto text-xs">force={String(runningRun.force)} · 已运行 {runningElapsed}s</span>
               </div>
             )}
             <div className="space-y-1.5">
