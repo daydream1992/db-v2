@@ -9,7 +9,10 @@ import { Progress } from '@/components/ui/progress'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu'
 import { RunDetailSheet } from './run-detail-sheet'
-import { Play, Clock, CheckCircle2, XCircle, SkipForward, Loader2, Calendar, GitBranch, ChevronRight, ArrowDown, Activity, ZoomIn, ZoomOut, Move, GripVertical, ChevronUp, ChevronDown, Maximize2, Zap, MoreHorizontal, Timer, ArrowRight, AlertTriangle } from 'lucide-react'
+import { SchedulerPanel } from './scheduler-panel'
+import { Play, Clock, CheckCircle2, XCircle, SkipForward, Loader2, Calendar, GitBranch, ChevronRight, ArrowDown, Activity, ZoomIn, ZoomOut, Move, GripVertical, ChevronUp, ChevronDown, Maximize2, Zap, MoreHorizontal, Timer, ArrowRight, AlertTriangle, Wifi, WifiOff, Terminal, Trash2 } from 'lucide-react'
+import { useLogStreamer } from '@/hooks/use-log-streamer'
+import type { LogLine, LogLevel } from '@/hooks/use-log-streamer'
 import { formatDuration, formatRows, runStatusClass, triggerClass } from '@/lib/dataops/styles'
 import { toast } from 'sonner'
 
@@ -118,9 +121,10 @@ interface BarDragState {
 }
 
 export function OrchestrationView({ onRunTable }: { onRunTable?: (t: string) => void }) {
-  const [tab, setTab] = useState<'history' | 'dag' | 'schedules'>('history')
+  const [tab, setTab] = useState<'scheduler' | 'history' | 'dag' | 'schedules' | 'live'>('scheduler')
   const [selectedRun, setSelectedRun] = useState<PipelineRun | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const logStreamer = useLogStreamer(true)
 
   const openDetail = (run: PipelineRun) => {
     setSelectedRun(run)
@@ -140,20 +144,52 @@ export function OrchestrationView({ onRunTable }: { onRunTable?: (t: string) => 
         </div>
       )}
       <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1 w-fit">
-        {([['history', '执行历史'], ['dag', 'DAG 依赖图'], ['schedules', '调度计划']] as const).map(([k, l]) => (
+        {([['scheduler', '调度面板'], ['history', '执行历史'], ['dag', 'DAG 依赖图'], ['schedules', '调度计划'], ['live', '实时日志流']] as const).map(([k, l]) => (
           <button
             key={k}
             onClick={() => setTab(k)}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${tab === k ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5 ${tab === k ? 'bg-white dark:bg-zinc-700 shadow-sm font-medium' : 'text-zinc-500'}`}
           >
             {l}
+            {k === 'live' && (
+              <span className={`h-2 w-2 rounded-full ${logStreamer.connected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+            )}
           </button>
         ))}
       </div>
 
-      {tab === 'history' && <HistoryView onRunTable={onRunTable} onOpenDetail={openDetail} />}
+      {tab === 'scheduler' && <SchedulerPanel />}
+      {tab === 'history' && <HistoryView onRunTable={onRunTable} onOpenDetail={openDetail} logStreamer={logStreamer} />}
       {tab === 'dag' && <DagView />}
-      {tab === 'schedules' && <SchedulesView />}
+      {tab === 'schedules' && <SchedulesView wsConnected={logStreamer.connected} />}
+      {tab === 'live' && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <span className={`h-2 w-2 rounded-full ${logStreamer.connected ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+              实时日志流
+              <Badge variant="outline" className="text-[10px]">{logStreamer.connected ? '已连接' : '模拟模式'}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[400px]">
+              <div className="space-y-0.5 font-mono text-xs">
+                {logStreamer.logs.length === 0 ? (
+                  <div className="text-zinc-400 py-8 text-center">暂无日志，点击"执行 Daily"开始</div>
+                ) : (
+                  logStreamer.logs.map((log, i) => (
+                    <div key={i} className={`py-0.5 ${log.level === 'ERROR' ? 'text-rose-600' : log.level === 'WARN' ? 'text-amber-600' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                      <span className="text-zinc-400 mr-2">{log.ts}</span>
+                      <span className="mr-1">[{log.level}]</span>
+                      {log.message}
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
 
       <RunDetailSheet
         run={selectedRun}
@@ -1008,7 +1044,7 @@ function GanttTimeline({ onOpenDetail }: { onOpenDetail: (r: PipelineRun) => voi
   )
 }
 
-function HistoryView({ onRunTable, onOpenDetail }: { onRunTable?: (t: string) => void; onOpenDetail: (r: PipelineRun) => void }) {
+function HistoryView({ onRunTable, onOpenDetail, logStreamer }: { onRunTable?: (t: string) => void; onOpenDetail: (r: PipelineRun) => void; logStreamer: ReturnType<typeof useLogStreamer> }) {
   const [dailyLoading, setDailyLoading] = useState(false)
 
   // Last execution time
@@ -1047,6 +1083,8 @@ function HistoryView({ onRunTable, onOpenDetail }: { onRunTable?: (t: string) =>
     } else {
       toast.success('已触发 daily 全量执行')
     }
+    // 启动 WS 实时日志流
+    logStreamer.startExecution('daily')
     setTimeout(() => setDailyLoading(false), 3000)
   }
 
@@ -1348,14 +1386,32 @@ function DagView() {
   )
 }
 
-function SchedulesView() {
+function SchedulesView({ wsConnected }: { wsConnected: boolean }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-fuchsia-500" />
-          调度计划 (schedules.yaml)
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-fuchsia-500" />
+            调度计划 (schedules.yaml)
+          </CardTitle>
+          {/* 连接状态指示器 */}
+          <div className="flex items-center gap-1.5 text-xs">
+            {wsConnected ? (
+              <>
+                <Wifi className="h-3.5 w-3.5 text-emerald-500" />
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">WS 已连接</span>
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-3.5 w-3.5 text-rose-400" />
+                <span className="text-rose-500 dark:text-rose-400 font-medium">WS 断线</span>
+                <span className="h-2 w-2 rounded-full bg-rose-500" />
+              </>
+            )}
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="rounded-md border overflow-hidden">
@@ -1384,5 +1440,230 @@ function SchedulesView() {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+// ─── 日志级别颜色映射 ───
+function logLevelColor(level: LogLevel): string {
+  switch (level) {
+    case 'INFO': return 'text-sky-600 dark:text-sky-400'
+    case 'WARNING': return 'text-amber-600 dark:text-amber-400'
+    case 'ERROR': return 'text-rose-600 dark:text-rose-400'
+    case 'SUCCESS': return 'text-emerald-600 dark:text-emerald-400'
+    case 'DEBUG': return 'text-zinc-400 dark:text-zinc-500'
+    default: return 'text-zinc-500'
+  }
+}
+
+function logLevelBg(level: LogLevel): string {
+  switch (level) {
+    case 'ERROR': return 'bg-rose-50 dark:bg-rose-950/20'
+    case 'WARNING': return 'bg-amber-50 dark:bg-amber-950/20'
+    default: return ''
+  }
+}
+
+// ─── 实时日志流面板 ───
+function LogStreamPanel({
+  connected,
+  logs,
+  progress,
+  startExecution,
+  cancelExecution,
+  clearLogs,
+}: ReturnType<typeof useLogStreamer>) {
+  const logEndRef = useRef<HTMLDivElement>(null)
+  const [autoScroll, setAutoScroll] = useState(true)
+
+  // Auto-scroll to bottom when new logs arrive
+  useEffect(() => {
+    if (autoScroll && logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [logs.length, autoScroll])
+
+  const isRunning = progress.status === 'running'
+  const isCompleted = progress.status === 'completed'
+  const isCancelled = progress.status === 'cancelled'
+
+  return (
+    <div className="space-y-4">
+      {/* 连接状态 + 控制栏 */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* 连接状态 */}
+            <div className="flex items-center gap-2">
+              {connected ? (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <Wifi className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">WebSocket 已连接</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800">
+                  <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                  <WifiOff className="h-3.5 w-3.5 text-rose-500" />
+                  <span className="text-xs font-medium text-rose-600 dark:text-rose-400">WS 断线 · 客户端模拟</span>
+                </div>
+              )}
+            </div>
+
+            <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-700" />
+
+            {/* 执行按钮 */}
+            {!isRunning ? (
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => startExecution('daily')}
+              >
+                <Zap className="h-3.5 w-3.5" />
+                执行 daily 全量
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-8 text-xs gap-1.5"
+                onClick={cancelExecution}
+              >
+                <XCircle className="h-3.5 w-3.5" />
+                取消执行
+              </Button>
+            )}
+
+            {logs.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                onClick={clearLogs}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                清空日志
+              </Button>
+            )}
+
+            <div className="flex-1" />
+
+            {/* 日志统计 */}
+            <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+              <Badge variant="secondary" className="text-[10px]">
+                {logs.length} 行日志
+              </Badge>
+              {isRunning && (
+                <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  运行中
+                </Badge>
+              )}
+              {isCompleted && (
+                <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  已完成
+                </Badge>
+              )}
+              {isCancelled && (
+                <Badge variant="outline" className="text-[10px] text-rose-600 border-rose-300">
+                  <XCircle className="h-3 w-3 mr-1" />
+                  已取消
+                </Badge>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 实时进度条 */}
+      {(isRunning || isCompleted || isCancelled) && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                  {isRunning ? `正在执行: ${progress.currentTable}` :
+                   isCompleted ? '执行完成' :
+                   isCancelled ? '执行已取消' : ''}
+                </span>
+                <span className="font-mono text-zinc-500">
+                  {progress.tablesCompleted}/{progress.tablesTotal} 表 · {progress.percent}%
+                </span>
+              </div>
+              <Progress
+                value={progress.percent}
+                className={`h-2.5 ${isCompleted ? '[&>div]:bg-emerald-500' : isCancelled ? '[&>div]:bg-rose-400' : '[&>div]:bg-amber-500'}`}
+              />
+              {progress.startedAt && (
+                <div className="flex items-center gap-3 text-[10px] text-zinc-400">
+                  <span>开始: {progress.startedAt}</span>
+                  {progress.finishedAt && <span>结束: {progress.finishedAt}</span>}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 日志流显示 */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-zinc-500" />
+              日志流
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-[11px] text-zinc-500 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoScroll}
+                  onChange={(e) => setAutoScroll(e.target.checked)}
+                  className="rounded border-zinc-300"
+                />
+                自动滚动
+              </label>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="relative">
+            <ScrollArea className="h-[calc(100vh-420px)]">
+              <div className="font-mono text-xs p-3 space-y-0">
+                {logs.length === 0 && (
+                  <div className="text-center py-12 text-zinc-400">
+                    <Terminal className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">暂无日志</p>
+                    <p className="text-[11px] mt-1">点击「执行 daily 全量」开始实时日志流</p>
+                  </div>
+                )}
+                {logs.map((line, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-start gap-2 py-0.5 px-1 rounded ${logLevelBg(line.level)} hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors`}
+                  >
+                    <span className="text-zinc-400 dark:text-zinc-600 flex-shrink-0 w-[78px] text-right select-none">
+                      {line.timestamp.slice(11)}
+                    </span>
+                    <span className={`flex-shrink-0 w-[60px] text-right font-semibold ${logLevelColor(line.level)}`}>
+                      [{line.level}]
+                    </span>
+                    {line.table && (
+                      <span className="flex-shrink-0 text-sky-600 dark:text-sky-400 w-[130px] truncate" title={line.table}>
+                        {line.table}
+                      </span>
+                    )}
+                    <span className={`${logLevelColor(line.level)} flex-1`}>
+                      {line.message}
+                    </span>
+                  </div>
+                ))}
+                <div ref={logEndRef} />
+              </div>
+            </ScrollArea>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

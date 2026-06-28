@@ -17,11 +17,14 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Database, Settings, Bell, HardDrive, Clock, Webhook, Save, RotateCcw, Shield, Sliders, AlertTriangle, CheckCircle2, Cloud, FileDown, KeyRound, Activity, Zap, Calendar, Mail, MessageSquare, FileUp, FileCode2, ClipboardCopy, Globe, Github, RefreshCw, Upload, Loader2, XCircle, AlertCircle, Plus, Trash2, Pencil, Copy, Download, FileUp as ImportIcon } from 'lucide-react'
+import { Database, Settings, Bell, HardDrive, Clock, Webhook, Save, RotateCcw, Shield, Sliders, AlertTriangle, CheckCircle2, Cloud, FileDown, KeyRound, Activity, Zap, Calendar, Mail, MessageSquare, FileUp, FileCode2, ClipboardCopy, Globe, Github, RefreshCw, Upload, Loader2, XCircle, AlertCircle, Plus, Trash2, Pencil, Copy, Download, FileUp as ImportIcon, Search, Filter, Table2, Link2, ChevronDown } from 'lucide-react'
 import { LINT_RULES, TABLES } from '@/lib/dataops/mock-data'
+import { REAL_TABLE_CONFIGS } from '@/lib/dataops/real-data'
 import { APP_CONFIG } from '@/lib/dataops/config'
 import { toast } from 'sonner'
 import { useGitHubSync, type SyncStatus } from '@/hooks/use-github-sync'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 
 // 默认配置
 interface SettingsState {
@@ -198,6 +201,179 @@ export function SettingsView() {
   const [savedState, setSavedState] = useState<SettingsState>(() => activeProfile.state)
   const [activeTab, setActiveTab] = useState('general')
   const dirty = isDirty(state, savedState)
+
+  // ── Config Management State ─────────────────────────────────
+  type ConfigRow = {
+    tableName: string
+    cn: string
+    schedule: string
+    mode: string
+    sort: number
+    dir: string
+    source: string
+    depends_on: string[]
+    status: string
+  }
+
+  // Build initial config from REAL_TABLE_CONFIGS
+  const buildInitialConfig = (): ConfigRow[] =>
+    Object.values(REAL_TABLE_CONFIGS).map(cfg => ({
+      tableName: cfg.table,
+      cn: cfg.cn,
+      schedule: cfg.schedule,
+      mode: cfg.mode,
+      sort: cfg.sort,
+      dir: cfg.dir,
+      source: cfg.source,
+      depends_on: [...cfg.dependsOn],
+      status: cfg.isView ? 'view' : 'active',
+    }))
+
+  const [configData, setConfigData] = useState<ConfigRow[]>(() => buildInitialConfig())
+  const [configSavedData, setConfigSavedData] = useState<ConfigRow[]>(() => buildInitialConfig())
+  const [configSearch, setConfigSearch] = useState('')
+  const [configScheduleFilter, setConfigScheduleFilter] = useState<string>('all')
+  const [configDirFilter, setConfigDirFilter] = useState<string>('all')
+  const [depDialogOpen, setDepDialogOpen] = useState(false)
+  const [depDialogTable, setDepDialogTable] = useState<string | null>(null)
+  const [depDialogSelected, setDepDialogSelected] = useState<string[]>([])
+  const [configSaving, setConfigSaving] = useState(false)
+
+  // Config diff tracking
+  const configDirtyCount = useMemo(() => {
+    let count = 0
+    for (let i = 0; i < configData.length; i++) {
+      const cur = configData[i]
+      const saved = configSavedData[i]
+      if (
+        cur.schedule !== saved.schedule ||
+        cur.mode !== saved.mode ||
+        JSON.stringify(cur.depends_on) !== JSON.stringify(saved.depends_on)
+      ) {
+        count++
+      }
+    }
+    return count
+  }, [configData, configSavedData])
+
+  const configIsDirty = configDirtyCount > 0
+
+  // Config statistics
+  const configStats = useMemo(() => {
+    const total = configData.length
+    const bySchedule: Record<string, number> = {}
+    const byMode: Record<string, number> = {}
+    let withDeps = 0
+    for (const row of configData) {
+      bySchedule[row.schedule] = (bySchedule[row.schedule] || 0) + 1
+      byMode[row.mode] = (byMode[row.mode] || 0) + 1
+      if (row.depends_on.length > 0) withDeps++
+    }
+    return { total, bySchedule, byMode, withDeps, unsaved: configDirtyCount }
+  }, [configData, configDirtyCount])
+
+  // Filtered config rows
+  const filteredConfig = useMemo(() => {
+    return configData.filter(row => {
+      if (configSearch) {
+        const q = configSearch.toLowerCase()
+        if (!row.tableName.toLowerCase().includes(q) && !row.cn.toLowerCase().includes(q)) return false
+      }
+      if (configScheduleFilter !== 'all' && row.schedule !== configScheduleFilter) return false
+      if (configDirFilter !== 'all' && row.dir !== configDirFilter) return false
+      return true
+    })
+  }, [configData, configSearch, configScheduleFilter, configDirFilter])
+
+  // Check if a specific row has unsaved changes
+  const isRowDirty = (tableName: string): boolean => {
+    const cur = configData.find(r => r.tableName === tableName)
+    const saved = configSavedData.find(r => r.tableName === tableName)
+    if (!cur || !saved) return false
+    return cur.schedule !== saved.schedule || cur.mode !== saved.mode || JSON.stringify(cur.depends_on) !== JSON.stringify(saved.depends_on)
+  }
+
+  // Update a single config field
+  const updateConfigField = (tableName: string, field: 'schedule' | 'mode', value: string) => {
+    setConfigData(prev => prev.map(row => row.tableName === tableName ? { ...row, [field]: value } : row))
+  }
+
+  // Open dependency editor
+  const openDepDialog = (tableName: string) => {
+    const row = configData.find(r => r.tableName === tableName)
+    if (!row) return
+    setDepDialogTable(tableName)
+    setDepDialogSelected([...row.depends_on])
+    setDepDialogOpen(true)
+  }
+
+  // Save dependency changes
+  const saveDepDialog = () => {
+    if (!depDialogTable) return
+    setConfigData(prev => prev.map(row => row.tableName === depDialogTable ? { ...row, depends_on: [...depDialogSelected] } : row))
+    setDepDialogOpen(false)
+    setDepDialogTable(null)
+  }
+
+  // Save all config changes
+  const handleConfigSave = async () => {
+    setConfigSaving(true)
+    try {
+      // Find dirty rows and send PUT for each
+      const dirtyRows = configData.filter(row => isRowDirty(row.tableName))
+      for (const row of dirtyRows) {
+        const saved = configSavedData.find(r => r.tableName === row.tableName)
+        const updates: { schedule?: string; mode?: string; depends_on?: string[] } = {}
+        if (saved && row.schedule !== saved.schedule) updates.schedule = row.schedule
+        if (saved && row.mode !== saved.mode) updates.mode = row.mode
+        if (saved && JSON.stringify(row.depends_on) !== JSON.stringify(saved.depends_on)) updates.depends_on = row.depends_on
+        await fetch('/api/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tableName: row.tableName, updates }),
+        })
+      }
+      setConfigSavedData(configData.map(r => ({ ...r, depends_on: [...r.depends_on] })))
+      toast.success('配置已保存', { description: `${dirtyRows.length} 项变更已同步` })
+    } catch {
+      toast.error('保存失败', { description: '请稍后重试' })
+    } finally {
+      setConfigSaving(false)
+    }
+  }
+
+  // Reset config changes
+  const handleConfigReset = () => {
+    setConfigData(configSavedData.map(r => ({ ...r, depends_on: [...r.depends_on] })))
+    toast.info('已重置为上次保存的配置')
+  }
+
+  // Export config as JSON
+  const handleConfigExport = async () => {
+    try {
+      const res = await fetch('/api/config', { method: 'POST' })
+      const data = await res.json()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `tables_config_${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('配置已导出为 JSON')
+    } catch {
+      toast.error('导出失败')
+    }
+  }
+
+  // Schedule badge color mapping
+  const scheduleColorMap: Record<string, string> = {
+    daily: 'bg-sky-100 text-sky-700 border-sky-300 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-700',
+    weekly: 'bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-700',
+    monthly: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700',
+    once: 'bg-zinc-100 text-zinc-600 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-600',
+    intraday: 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-700',
+  }
 
   // Sync state when active profile changes
   useEffect(() => {
@@ -788,13 +964,14 @@ export function SettingsView() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-7 w-full h-9">
+        <TabsList className="grid grid-cols-8 w-full h-9">
           <TabsTrigger value="general" className="text-xs gap-1"><Database className="h-3 w-3" />通用</TabsTrigger>
           <TabsTrigger value="lint" className="text-xs gap-1"><Shield className="h-3 w-3" />Lint<span className="text-[10px] text-zinc-400">{lintStats.enabled}/{lintStats.total}</span></TabsTrigger>
           <TabsTrigger value="schedule" className="text-xs gap-1"><Clock className="h-3 w-3" />调度</TabsTrigger>
           <TabsTrigger value="notify" className="text-xs gap-1"><Bell className="h-3 w-3" />通知</TabsTrigger>
           <TabsTrigger value="source" className="text-xs gap-1"><HardDrive className="h-3 w-3" />数据源</TabsTrigger>
           <TabsTrigger value="integrate" className="text-xs gap-1"><Webhook className="h-3 w-3" />集成</TabsTrigger>
+          <TabsTrigger value="config" className="text-xs gap-1"><Table2 className="h-3 w-3" />配置<span className="text-[10px] text-zinc-400">{configStats.unsaved > 0 ? `${configStats.unsaved}` : ''}</span></TabsTrigger>
           <TabsTrigger value="advanced" className="text-xs gap-1"><Sliders className="h-3 w-3" />高级</TabsTrigger>
         </TabsList>
 
@@ -1242,6 +1419,231 @@ export function SettingsView() {
           </Card>
         </TabsContent>
 
+        {/* 配置管理 Tab */}
+        <TabsContent value="config" className="mt-4 space-y-4">
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            <Card className="p-3">
+              <div className="text-2xl font-bold font-mono text-zinc-700 dark:text-zinc-200">{configStats.total}</div>
+              <div className="text-xs text-zinc-500 mt-0.5">总表数</div>
+            </Card>
+            <Card className="p-3">
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {['daily', 'weekly', 'monthly', 'once'].map(s => (
+                  <span key={s} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${scheduleColorMap[s] || ''}`}>
+                    {s === 'daily' ? '日' : s === 'weekly' ? '周' : s === 'monthly' ? '月' : '一'}{configStats.bySchedule[s] || 0}
+                  </span>
+                ))}
+              </div>
+              <div className="text-xs text-zinc-500 mt-1.5">按调度</div>
+            </Card>
+            <Card className="p-3">
+              <div className="flex gap-2 mt-1">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-700">
+                  增量 {configStats.byMode['increment'] || 0}
+                </span>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-orange-50 text-orange-700 border-orange-300 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-700">
+                  全量 {configStats.byMode['full'] || 0}
+                </span>
+              </div>
+              <div className="text-xs text-zinc-500 mt-1.5">按模式</div>
+            </Card>
+            <Card className="p-3">
+              <div className="text-2xl font-bold font-mono text-violet-600 dark:text-violet-400">{configStats.withDeps}</div>
+              <div className="text-xs text-zinc-500 mt-0.5">有依赖</div>
+            </Card>
+            <Card className={`p-3 ${configStats.unsaved > 0 ? 'border-amber-300 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-950/10' : ''}`}>
+              <div className={`text-2xl font-bold font-mono ${configStats.unsaved > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400'}`}>
+                {configStats.unsaved}
+              </div>
+              <div className="text-xs text-zinc-500 mt-0.5">待保存</div>
+            </Card>
+          </div>
+
+          {/* Config Diff View / Action Bar */}
+          <Card className={configIsDirty ? 'border-amber-300 dark:border-amber-700 bg-amber-50/20 dark:bg-amber-950/10' : ''}>
+            <CardContent className="p-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-md bg-zinc-100 dark:bg-zinc-800">
+                    <Table2 className="h-4 w-4 text-zinc-500" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      tables.json 配置
+                      {configIsDirty ? (
+                        <Badge variant="outline" className="text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 text-[10px] animate-pulse">
+                          <AlertTriangle className="h-3 w-3 mr-0.5" />{configDirtyCount} 项待保存
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-[10px]">
+                          <CheckCircle2 className="h-3 w-3 mr-0.5" />已同步
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-zinc-400">config/tables.json · {configStats.total} 表</div>
+                  </div>
+                </div>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={handleConfigExport}>
+                    <Download className="h-3 w-3 mr-1" />导出 JSON
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleConfigReset} disabled={!configIsDirty}>
+                    <RotateCcw className="h-3 w-3 mr-1" />重置
+                  </Button>
+                  <Button size="sm" className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={handleConfigSave} disabled={!configIsDirty || configSaving}>
+                    {configSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                    保存更改{configDirtyCount > 0 ? ` (${configDirtyCount})` : ''}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Search & Filter Bar */}
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+                  <Input
+                    placeholder="搜索表名 / 中文名..."
+                    value={configSearch}
+                    onChange={e => setConfigSearch(e.target.value)}
+                    className="pl-8 h-8 text-xs"
+                  />
+                </div>
+                <Select value={configScheduleFilter} onValueChange={setConfigScheduleFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[120px]">
+                    <Filter className="h-3 w-3 mr-1 text-zinc-400" />
+                    <SelectValue placeholder="调度筛选" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs">全部调度</SelectItem>
+                    <SelectItem value="daily" className="text-xs">daily</SelectItem>
+                    <SelectItem value="weekly" className="text-xs">weekly</SelectItem>
+                    <SelectItem value="monthly" className="text-xs">monthly</SelectItem>
+                    <SelectItem value="once" className="text-xs">once</SelectItem>
+                    <SelectItem value="intraday" className="text-xs">intraday</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={configDirFilter} onValueChange={setConfigDirFilter}>
+                  <SelectTrigger className="h-8 text-xs w-[120px]">
+                    <SelectValue placeholder="目录筛选" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs">全部目录</SelectItem>
+                    <SelectItem value="1_入库" className="text-xs">1_入库</SelectItem>
+                    <SelectItem value="2_计算" className="text-xs">2_计算</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Badge variant="outline" className="text-[10px] ml-1">
+                  显示 {filteredConfig.length}/{configStats.total}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Config Table */}
+          <Card>
+            <CardContent className="p-0">
+              <div className="max-h-[520px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-[11px] w-[160px]">表名</TableHead>
+                      <TableHead className="text-[11px] w-[120px]">中文名</TableHead>
+                      <TableHead className="text-[11px] w-[70px]">目录</TableHead>
+                      <TableHead className="text-[11px] w-[110px]">调度</TableHead>
+                      <TableHead className="text-[11px] w-[110px]">模式</TableHead>
+                      <TableHead className="text-[11px] w-[50px]">排序</TableHead>
+                      <TableHead className="text-[11px] w-[90px]">数据源</TableHead>
+                      <TableHead className="text-[11px]">依赖</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredConfig.map(row => {
+                      const rowDirty = isRowDirty(row.tableName)
+                      return (
+                        <TableRow key={row.tableName} className={`group ${rowDirty ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''}`}>
+                          <TableCell className="text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-medium">{row.tableName}</span>
+                              {row.status === 'view' && (
+                                <Badge variant="outline" className="text-[9px] py-0 px-1 text-violet-600 border-violet-300">VIEW</Badge>
+                              )}
+                              {rowDirty && (
+                                <Badge variant="outline" className="text-[9px] py-0 px-1 text-amber-600 border-amber-300 animate-pulse">已改</Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs text-zinc-600 dark:text-zinc-400">{row.cn}</TableCell>
+                          <TableCell className="text-xs">
+                            <Badge variant="outline" className={`text-[10px] py-0 px-1.5 ${row.dir === '1_入库' ? 'text-sky-600 border-sky-300' : 'text-fuchsia-600 border-fuchsia-300'}`}>
+                              {row.dir}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <Select
+                              value={row.schedule}
+                              onValueChange={v => updateConfigField(row.tableName, 'schedule', v)}
+                            >
+                              <SelectTrigger className={`h-7 text-[11px] border-0 p-0 pl-1 gap-0.5 hover:bg-muted ${scheduleColorMap[row.schedule] || ''}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="daily" className="text-xs">daily (每日)</SelectItem>
+                                <SelectItem value="weekly" className="text-xs">weekly (每周)</SelectItem>
+                                <SelectItem value="monthly" className="text-xs">monthly (每月)</SelectItem>
+                                <SelectItem value="once" className="text-xs">once (一次)</SelectItem>
+                                <SelectItem value="intraday" className="text-xs">intraday (日内)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <Select
+                              value={row.mode}
+                              onValueChange={v => updateConfigField(row.tableName, 'mode', v)}
+                            >
+                              <SelectTrigger className="h-7 text-[11px] border-0 p-0 pl-1 gap-0.5 hover:bg-muted">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="increment" className="text-xs">increment (增量)</SelectItem>
+                                <SelectItem value="full" className="text-xs">full (全量)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="text-xs font-mono text-zinc-500">{row.sort}</TableCell>
+                          <TableCell className="text-xs text-zinc-500">{row.source}</TableCell>
+                          <TableCell className="text-xs">
+                            <button
+                              className="flex flex-wrap gap-1 items-center group/dep cursor-pointer hover:opacity-80"
+                              onClick={() => openDepDialog(row.tableName)}
+                              title="点击编辑依赖"
+                            >
+                              {row.depends_on.length === 0 ? (
+                                <span className="text-zinc-400 text-[10px] italic">无</span>
+                              ) : (
+                                row.depends_on.map(dep => (
+                                  <Badge key={dep} variant="outline" className="text-[9px] py-0 px-1 text-violet-600 border-violet-300 dark:text-violet-400 dark:border-violet-700">
+                                    {dep}
+                                  </Badge>
+                                ))
+                              )}
+                              <Pencil className="h-2.5 w-2.5 text-zinc-300 opacity-0 group-hover/dep:opacity-100 transition-opacity" />
+                            </button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* 高级 Tab */}
         <TabsContent value="advanced" className="mt-4 space-y-4">
           <Card>
@@ -1629,6 +2031,65 @@ export function SettingsView() {
           </div>
         </div>
       )}
+
+      {/* ── Dependency Editor Dialog ──────────────────────────────── */}
+      <Dialog open={depDialogOpen} onOpenChange={setDepDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-violet-500" />
+              编辑依赖 — {depDialogTable}
+            </DialogTitle>
+            <DialogDescription>
+              选择该表的上游依赖表（depends_on），勾选后保存
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-xs text-zinc-500">
+              当前依赖: <span className="font-mono">{depDialogSelected.length}</span> 个表
+            </div>
+            <div className="max-h-[320px] overflow-y-auto rounded-md border p-2 space-y-1">
+              {Object.values(REAL_TABLE_CONFIGS)
+                .filter(cfg => cfg.table !== depDialogTable) // Can't depend on self
+                .sort((a, b) => a.table.localeCompare(b.table))
+                .map(cfg => {
+                  const checked = depDialogSelected.includes(cfg.table)
+                  return (
+                    <label
+                      key={cfg.table}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors text-xs ${
+                        checked ? 'bg-violet-50 dark:bg-violet-950/30' : 'hover:bg-zinc-50 dark:hover:bg-zinc-900/40'
+                      }`}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(val) => {
+                          if (val) {
+                            setDepDialogSelected(prev => [...prev, cfg.table])
+                          } else {
+                            setDepDialogSelected(prev => prev.filter(t => t !== cfg.table))
+                          }
+                        }}
+                      />
+                      <span className="font-mono font-medium">{cfg.table}</span>
+                      <span className="text-zinc-400 ml-1">{cfg.cn}</span>
+                      <Badge variant="outline" className={`text-[9px] py-0 px-1 ml-auto ${scheduleColorMap[cfg.schedule] || ''}`}>
+                        {cfg.schedule}
+                      </Badge>
+                    </label>
+                  )
+                })}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button size="sm" variant="outline" onClick={() => setDepDialogOpen(false)}>取消</Button>
+            <Button size="sm" className="bg-violet-600 hover:bg-violet-700" onClick={saveDepDialog}>
+              <Link2 className="h-3 w-3 mr-1" />
+              保存依赖 ({depDialogSelected.length})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* YAML Import Dialog */}
       {showImportDialog && (

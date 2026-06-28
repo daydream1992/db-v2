@@ -916,23 +916,31 @@ function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
   const streamer = useLogStreamer()
   const logEndRef = useRef<HTMLDivElement>(null)
 
+  // 18 daily 表列表（用于可触发剧本面板）
+  const dailyScripts = useMemo(() => TABLES.filter(t => t.schedule === 'daily').map((t, i) => ({
+    idx: i, table: t.table, cn: t.cn,
+  })), [])
+
   useEffect(() => {
     if (logEndRef.current) {
       logEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
   }, [streamer.logs.length])
 
-  const handleTrigger = (table: string) => {
-    streamer.trigger(undefined, table)
-    toast.success(`已触发：${table}`, { description: '观察实时日志流' })
+  const handleTrigger = (_table: string) => {
+    streamer.startExecution('daily')
+    toast.success('已触发 daily 全量执行', { description: '观察实时日志流' })
   }
+
+  const isRunning = streamer.progress.status === 'running'
+  const isCompleted = streamer.progress.status === 'completed'
 
   return (
     <Card className="border-emerald-200/60 dark:border-emerald-900/40 overflow-hidden">
       <CardHeader className="pb-3 px-6 pt-6">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-lg flex items-center gap-2">
-            <Radio className={`h-4 w-4 ${streamer.currentRun?.status === 'running' ? 'text-rose-500 animate-pulse' : 'text-emerald-500'}`} />
+            <Radio className={`h-4 w-4 ${isRunning ? 'text-rose-500 animate-pulse' : 'text-emerald-500'}`} />
             实时执行流
             {/* Blinking LIVE indicator */}
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800">
@@ -944,34 +952,35 @@ function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
             </span>
             {streamer.connected && (
               <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300 ml-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse mr-1" /> 已连接 :{APP_CONFIG.logStreamerPort}
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse mr-1" /> WS 已连接
               </Badge>
             )}
-            {streamer.currentRun && (
+            {(isRunning || isCompleted) && (
               <Badge variant="outline" className={`text-[10px] ml-1 ${
-                streamer.currentRun.status === 'running' ? 'text-sky-600 border-sky-300' :
-                streamer.currentRun.status === 'success' ? 'text-emerald-600 border-emerald-300' :
+                isRunning ? 'text-amber-600 border-amber-300' :
+                isCompleted ? 'text-emerald-600 border-emerald-300' :
                 'text-rose-600 border-rose-300'
               }`}>
-                {streamer.currentRun.status === 'running' && <Loader2 className="h-3 w-3 mr-0.5 animate-spin" />}
-                {streamer.currentRun.status === 'success' && <CheckCircle2 className="h-3 w-3 mr-0.5" />}
-                {streamer.currentRun.status === 'failed' && <XCircle className="h-3 w-3 mr-0.5" />}
-                {streamer.currentRun.table} · {streamer.currentRun.progress ?? 0}%
+                {isRunning && <Loader2 className="h-3 w-3 mr-0.5 animate-spin" />}
+                {isCompleted && <CheckCircle2 className="h-3 w-3 mr-0.5" />}
+                {isRunning ? `${streamer.progress.currentTable}` : ''}
+                {isCompleted ? '完成' : ''}
+                {isRunning ? ` · ${streamer.progress.percent}%` : ''}
               </Badge>
             )}
           </CardTitle>
           <div className="flex items-center gap-1.5">
             {/* Prominent CTA button */}
-            {streamer.currentRun?.status === 'running' ? (
-              <Button size="sm" variant="outline" className="h-8 text-xs text-rose-600 hover:text-rose-700 border-rose-200 dark:border-rose-800" onClick={() => streamer.cancel()}>
+            {isRunning ? (
+              <Button size="sm" variant="outline" className="h-8 text-xs text-rose-600 hover:text-rose-700 border-rose-200 dark:border-rose-800" onClick={() => streamer.cancelExecution()}>
                 <Pause className="h-3.5 w-3.5 mr-1" /> 取消
               </Button>
             ) : (
               <Button
                 size="sm"
                 className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm"
-                onClick={() => streamer.triggerDaily()}
-                disabled={!!streamer.currentRun}
+                onClick={() => streamer.startExecution('daily')}
+                disabled={isRunning}
                 title="触发 daily 全量执行"
               >
                 <Play className="h-3.5 w-3.5" /> 触发执行
@@ -983,23 +992,23 @@ function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
           </div>
         </div>
         {/* 进度条 */}
-        {streamer.currentRun?.status === 'running' && (
+        {isRunning && (
           <div className="mt-3 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${streamer.currentRun.progress ?? 0}%` }}
+              animate={{ width: `${streamer.progress.percent}%` }}
               className="h-full bg-gradient-to-r from-emerald-500 via-sky-500 to-fuchsia-500 transition-all duration-300"
             />
           </div>
         )}
-        {streamer.dailyProgress && (
+        {(isRunning || isCompleted) && streamer.progress.tablesTotal > 0 && (
           <div className="mt-2 flex items-center gap-2 text-xs">
             <Zap className="h-3 w-3 text-amber-500" />
             <span className="text-zinc-500">daily 全量</span>
             <div className="flex-1 max-w-[200px] h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-amber-500 transition-all rounded-full" style={{ width: `${(streamer.dailyProgress.completed / streamer.dailyProgress.total) * 100}%` }} />
+              <div className="h-full bg-amber-500 transition-all rounded-full" style={{ width: `${streamer.progress.percent}%` }} />
             </div>
-            <span className="font-mono text-zinc-400">{streamer.dailyProgress.completed}/{streamer.dailyProgress.total}</span>
+            <span className="font-mono text-zinc-400">{streamer.progress.tablesCompleted}/{streamer.progress.tablesTotal}</span>
           </div>
         )}
       </CardHeader>
@@ -1034,24 +1043,26 @@ function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
                   <div className="text-[11px] mt-1">或点击「触发执行」执行全量</div>
                 </div>
               )}
-              {streamer.logs.slice(-80).map(l => (
+              {streamer.logs.slice(-80).map((l, i) => (
                 <div
-                  key={l.id}
+                  key={i}
                   className={`flex gap-2 px-1.5 py-0.5 rounded ${
                     l.level === 'ERROR' ? 'bg-rose-950/50' :
                     l.level === 'WARNING' ? 'bg-amber-950/30' :
+                    l.level === 'SUCCESS' ? 'bg-emerald-950/30' :
                     l.level === 'INFO' && l.message.startsWith('✔') ? 'bg-emerald-950/30' :
                     ''
                   }`}
                 >
-                  <span className="text-zinc-500 flex-shrink-0">{l.ts.slice(11)}</span>
+                  <span className="text-zinc-500 flex-shrink-0">{l.timestamp.slice(11)}</span>
                   <span className={`flex-shrink-0 w-14 font-bold ${
                     l.level === 'ERROR' ? 'text-rose-400' :
                     l.level === 'WARNING' ? 'text-amber-400' :
+                    l.level === 'SUCCESS' ? 'text-emerald-400' :
                     l.level === 'INFO' ? 'text-emerald-400' :
                     'text-zinc-500'
                   }`}>{l.level}</span>
-                  <span className="text-sky-400 flex-shrink-0 w-32 truncate">{l.table}</span>
+                  {l.table && <span className="text-sky-400 flex-shrink-0 w-32 truncate">{l.table}</span>}
                   <span className="text-zinc-300 flex-1">{l.message}</span>
                 </div>
               ))}
@@ -1062,24 +1073,29 @@ function LiveStreamCard({ onNavigate }: { onNavigate: (v: string) => void }) {
           {/* 可触发剧本 */}
           <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 p-3 bg-zinc-50 dark:bg-zinc-900/50">
             <div className="text-xs text-zinc-500 mb-2 flex items-center gap-1 font-medium">
-              <Zap className="h-3.5 w-3.5" /> 可触发剧本 ({streamer.scripts.length})
+              <Zap className="h-3.5 w-3.5" /> Daily 表 ({dailyScripts.length})
             </div>
             <div className="space-y-1 max-h-[260px] overflow-y-auto pr-1">
-              {streamer.scripts.map(s => {
-                const isRunning = streamer.currentRun?.table === s.table
+              {dailyScripts.map((s, i) => {
+                const isCurrent = isRunning && streamer.progress.currentTable === s.table
+                const isDone = streamer.progress.tablesCompleted > i
                 return (
                   <button
-                    key={s.idx}
+                    key={s.table}
                     onClick={() => handleTrigger(s.table)}
-                    disabled={!!streamer.currentRun}
+                    disabled={isRunning}
                     className={`w-full text-left px-3 py-2 rounded-md text-xs font-mono border transition-all flex items-center gap-1.5 ${
-                      isRunning
+                      isCurrent
                         ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                        : isDone
+                        ? 'border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400'
                         : 'border-zinc-200 dark:border-zinc-600 hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 disabled:opacity-50 disabled:cursor-not-allowed'
                     }`}
-                    title={`${s.cn} · ${s.steps} 步日志`}
+                    title={`${s.cn}`}
                   >
-                    {isRunning ? <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" /> : <Play className="h-3 w-3 flex-shrink-0 opacity-50" />}
+                    {isCurrent ? <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" /> :
+                     isDone ? <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-emerald-500" /> :
+                     <Play className="h-3 w-3 flex-shrink-0 opacity-50" />}
                     <span className="truncate flex-1">{s.table}</span>
                     <span className="text-zinc-400 text-[10px]">{s.cn}</span>
                   </button>

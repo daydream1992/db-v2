@@ -1,7 +1,6 @@
 'use client'
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { LOGS } from '@/lib/dataops/mock-data'
-import { APP_CONFIG } from '@/lib/dataops/config'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +10,8 @@ import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Search, FileText, Radio, Pause, Play, Trash2, Activity, Loader2, CheckCircle2, XCircle, Zap, Wifi, WifiOff, Download, ArrowDownToLine, ChevronDown, ChevronRight, ChevronUp, Filter, Copy, Layers, ArrowUp, Clock, AlertTriangle, Bug, Info, ArrowDown } from 'lucide-react'
 import { useLogStreamer } from '@/hooks/use-log-streamer'
+import type { LogLine } from '@/hooks/use-log-streamer'
+import { TABLES as TABLES_META } from '@/lib/dataops/mock-data'
 import { toast } from 'sonner'
 
 // ── Constants ──────────────────────────────────────────────────
@@ -72,6 +73,9 @@ export function LogsView() {
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const streamer = useLogStreamer()
+  const dailyScripts = useMemo(() => TABLES_META.filter(t => t.schedule === 'daily').map((t, i) => ({
+    idx: i, table: t.table, cn: t.cn,
+  })), [])
   const tables = useMemo(() => [...new Set(LOGS.map(l => l.table))].sort(), [])
 
   // ── Assign run_ids to static logs ────────────────────────────
@@ -110,7 +114,15 @@ export function LogsView() {
 
   // ── Merge static + live logs ─────────────────────────────────
   const allLogs = useMemo(() => {
-    const live = streamer.logs.map(l => ({ ...l, isLive: true }))
+    const live: LogItem[] = streamer.logs.map((l, i) => ({
+      id: `live-${i}-${l.timestamp}-${l.table}`,
+      ts: l.timestamp,
+      level: l.level === 'SUCCESS' ? 'INFO' as const : l.level,
+      table: l.table ?? '',
+      message: l.message,
+      runId: 'live',
+      isLive: true,
+    }))
     return liveMode ? [...live, ...staticLogsWithRunId] : staticLogsWithRunId
   }, [streamer.logs, liveMode, staticLogsWithRunId])
 
@@ -310,9 +322,9 @@ export function LogsView() {
   }, [filtered.length, liveMode, autoScroll])
 
   // ── Handlers ─────────────────────────────────────────────────
-  const handleTrigger = (table: string) => {
-    streamer.trigger(undefined, table)
-    toast.success(`已触发实时执行：${table}`, { description: '观察下方日志流' })
+  const handleTrigger = (_table: string) => {
+    streamer.startExecution('daily')
+    toast.success('已触发 daily 全量执行', { description: '观察下方日志流' })
   }
 
   const handleExport = () => {
@@ -444,10 +456,10 @@ export function LogsView() {
                   实时日志流
                   <span className={`inline-flex items-center gap-1 px-1.5 py-0 rounded text-[10px] ${streamer.connected ? 'text-emerald-600' : 'text-zinc-400'}`}>
                     <span className={`h-1.5 w-1.5 rounded-full ${streamer.connected ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'}`} />
-                    {streamer.connected ? '已连接' : '断开'}
+                    {streamer.connected ? 'WS 已连接' : '断开'}
                   </span>
                 </div>
-                <div className="text-[10px] text-zinc-400">mini-service :{APP_CONFIG.logStreamerPort} · socket.io</div>
+                <div className="text-[10px] text-zinc-400">mini-service :3003 · socket.io</div>
               </div>
             </div>
 
@@ -461,43 +473,40 @@ export function LogsView() {
             </div>
 
             {/* 当前运行 */}
-            {streamer.currentRun && (
+            {streamer.progress.status === 'running' && (
               <>
                 <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-800" />
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-zinc-500">运行中:</span>
-                  <span className="font-mono font-medium text-sky-600 dark:text-sky-400">{streamer.currentRun.table}</span>
-                  <span className="font-mono text-[10px] text-zinc-400">{streamer.currentRun.runId}</span>
-                  {streamer.currentRun.status === 'running' && (
-                    <Badge variant="outline" className="text-sky-600 border-sky-300 py-0">
-                      <Loader2 className="h-3 w-3 mr-0.5 animate-spin" /> {streamer.currentRun.progress ?? 0}%
-                    </Badge>
-                  )}
-                  {streamer.currentRun.status === 'success' && (
-                    <Badge variant="outline" className="text-emerald-600 border-emerald-300 py-0">
-                      <CheckCircle2 className="h-3 w-3 mr-0.5" /> 完成
-                    </Badge>
-                  )}
-                  {streamer.currentRun.status === 'failed' && (
-                    <Badge variant="outline" className="text-rose-600 border-rose-300 py-0">
-                      <XCircle className="h-3 w-3 mr-0.5" /> 失败
-                    </Badge>
-                  )}
+                  <span className="font-mono font-medium text-sky-600 dark:text-sky-400">{streamer.progress.currentTable}</span>
+                  <Badge variant="outline" className="text-sky-600 border-sky-300 py-0">
+                    <Loader2 className="h-3 w-3 mr-0.5 animate-spin" /> {streamer.progress.percent}%
+                  </Badge>
+                </div>
+              </>
+            )}
+            {streamer.progress.status === 'completed' && (
+              <>
+                <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-800" />
+                <div className="flex items-center gap-2 text-xs">
+                  <Badge variant="outline" className="text-emerald-600 border-emerald-300 py-0">
+                    <CheckCircle2 className="h-3 w-3 mr-0.5" /> 执行完成
+                  </Badge>
                 </div>
               </>
             )}
 
             {/* daily 全量进度 */}
-            {streamer.dailyProgress && (
+            {streamer.progress.status === 'running' && streamer.progress.tablesTotal > 0 && (
               <>
                 <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-800" />
                 <div className="flex items-center gap-2 text-xs">
                   <Zap className="h-3.5 w-3.5 text-amber-500" />
                   <span className="text-zinc-500">daily 全量</span>
                   <div className="w-24 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
-                    <div className="h-full bg-amber-500 transition-all" style={{ width: `${(streamer.dailyProgress.completed / streamer.dailyProgress.total) * 100}%` }} />
+                    <div className="h-full bg-amber-500 transition-all" style={{ width: `${streamer.progress.percent}%` }} />
                   </div>
-                  <span className="font-mono text-[10px] text-zinc-400">{streamer.dailyProgress.completed}/{streamer.dailyProgress.total}</span>
+                  <span className="font-mono text-[10px] text-zinc-400">{streamer.progress.tablesCompleted}/{streamer.progress.tablesTotal}</span>
                 </div>
               </>
             )}
@@ -507,14 +516,14 @@ export function LogsView() {
                 size="sm"
                 variant="outline"
                 className="h-8 text-xs"
-                onClick={() => streamer.triggerDaily()}
-                disabled={!streamer.connected || !!streamer.currentRun}
+                onClick={() => streamer.startExecution('daily')}
+                disabled={streamer.progress.status === 'running'}
                 title="触发 daily 全量执行"
               >
                 <Play className="h-3 w-3 mr-1" /> 触发 daily
               </Button>
-              {streamer.currentRun?.status === 'running' && (
-                <Button size="sm" variant="outline" className="h-8 text-xs text-rose-600 hover:text-rose-700" onClick={() => streamer.cancel()}>
+              {streamer.progress.status === 'running' && (
+                <Button size="sm" variant="outline" className="h-8 text-xs text-rose-600 hover:text-rose-700" onClick={() => streamer.cancelExecution()}>
                   <Pause className="h-3 w-3 mr-1" /> 取消
                 </Button>
               )}
@@ -525,40 +534,40 @@ export function LogsView() {
           </div>
 
           {/* 进度条 */}
-          {streamer.currentRun?.status === 'running' && (
+          {streamer.progress.status === 'running' && (
             <div className="mt-2 h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-sky-500 to-fuchsia-500 transition-all duration-300"
-                style={{ width: `${streamer.currentRun.progress ?? 0}%` }}
+                style={{ width: `${streamer.progress.percent}%` }}
               />
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* 触发器：可触发的脚本列表 */}
-      {streamer.scripts.length > 0 && (
+      {/* 触发器：可触发的 daily 脚本列表 */}
+      {dailyScripts.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs flex items-center gap-1.5 text-zinc-500">
-              <Activity className="h-3.5 w-3.5" /> 可触发的执行剧本 ({streamer.scripts.length})
+              <Activity className="h-3.5 w-3.5" /> Daily 表 ({dailyScripts.length})
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="flex flex-wrap gap-1.5">
-              {streamer.scripts.map(s => {
-                const isRunning = streamer.currentRun?.table === s.table
+              {dailyScripts.map(s => {
+                const isRunning = streamer.progress.status === 'running' && streamer.progress.currentTable === s.table
                 return (
                   <button
-                    key={s.idx}
+                    key={s.table}
                     onClick={() => handleTrigger(s.table)}
-                    disabled={!streamer.connected || !!streamer.currentRun}
+                    disabled={streamer.progress.status === 'running'}
                     className={`px-2 py-1 rounded text-[11px] font-mono border transition-all ${
                       isRunning
                         ? 'border-sky-400 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300'
                         : 'border-zinc-200 dark:border-zinc-700 hover:border-sky-300 dark:hover:border-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/30 disabled:opacity-50 disabled:cursor-not-allowed'
                     }`}
-                    title={`${s.cn} · ${s.steps} 步日志`}
+                    title={`${s.cn}`}
                   >
                     {isRunning && <Loader2 className="h-3 w-3 inline mr-1 animate-spin" />}
                     {s.table}
