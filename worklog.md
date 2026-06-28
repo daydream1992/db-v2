@@ -721,3 +721,43 @@ Unresolved / 下一阶段优先事项:
 - Chrome 双击 file:// 可能空白，需 HTTP 服务或 Edge/Firefox
 - 可制作 ZIP 分发包
 - 可考虑 Electron/Tauri 桌面应用封装
+
+---
+Task ID: 11
+Agent: main (Z.ai Code)
+Task: 清理冗余（只保留 Windows）+ 交易日历校验
+
+Work Log:
+- 删除 start-dataops.sh（只保留 .bat Windows 脚本）
+- 清理 dataops-ui/ 中冗余文件（404.html/_not-found/等构建辅助文件）
+- 精简 start-dataops.bat（15行→15行，去掉多余提示）
+- 重写用户使用流程.md：从 230 行精简到 55 行，只写 Windows
+- 交易日历校验改造：
+  - mock-data.ts 新增 TRADING_CALENDAR（7日交易日/休市日定义）
+  - 新增 LAST_TRADING_DATE（动态获取最后交易日）
+  - 新增 isTradingDay() 函数（基于日历判定）
+  - HEALTH_MATRIX：非交易日自动标记为 skipped
+  - DAILY_STATS：非交易日注释改为"非交易日(周日/周六)"
+  - ALERTS：滞后告警加"交易日历校验"标识
+- health-view.tsx 改造：
+  - 新增"交易日历校验"说明卡片（蓝色边框，引用 trading_calendar + is_trading 字段）
+  - 7日趋势图：非交易日显示"休"字 + 虚线边框矮柱，图例新增"非交易日"
+  - 矩阵列头：非交易日灰色 + "休"字标签
+  - "最后交易日" Badge 加"交易日历校验"标识
+- eslint 配置忽略 dataops-ui/ 构建产物
+- 重新构建静态导出（1.7MB）并更新 dataops-ui/
+- agent-browser 验证：交易日历校验卡片/休市日标记/最后交易日 Badge 全部可见
+
+Stage Summary:
+- 项目当前状态：稳定，交易日历校验 + 精简交付物
+- 已完成的修改：
+  1. 清理冗余：删除 .sh 脚本、构建辅助文件、精简文档
+  2. 交易日历校验：TRADING_CALENDAR + isTradingDay + 非交易日跳过
+  3. 健康度视图改造：校验说明卡片 + 休市日标记 + 虚线柱
+  4. 独立 UI 重新构建（1.7MB）
+- 验证结果：agent-browser 确认交易日历校验功能全部生效
+
+Unresolved / 下一阶段优先事项:
+- 可将交易日历对接真实 trading_calendar 表（当前为 mock）
+- 可制作 ZIP 分发包
+- Chrome file:// 限制仍需注意

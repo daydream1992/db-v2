@@ -1,11 +1,10 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { TABLES } from '@/lib/dataops/mock-data'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AlertTriangle, CheckCircle2, RefreshCw, Wrench, Activity, TrendingUp, BarChart3, Filter } from 'lucide-react'
-import { HEALTH_MATRIX } from '@/lib/dataops/mock-data'
+import { TABLES, HEALTH_MATRIX, TRADING_CALENDAR, LAST_TRADING_DATE, isTradingDay } from '@/lib/dataops/mock-data'
 import { freshnessClass, healthColorClass } from '@/lib/dataops/styles'
 
 export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void }) {
@@ -79,6 +78,22 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
         <StatCard icon={<Activity className="h-4 w-4" />} label="不适用(once)" value={whiteTables.length} color="zinc" />
       </div>
 
+      {/* 交易日历校验说明 */}
+      <Card className="border-sky-200 dark:border-sky-900 bg-sky-50/50 dark:bg-sky-950/20">
+        <CardContent className="p-3 flex items-center gap-3 text-xs">
+          <Activity className="h-4 w-4 text-sky-500 shrink-0" />
+          <div>
+            <span className="font-medium text-sky-700 dark:text-sky-300">交易日历校验</span>
+            <span className="text-zinc-600 dark:text-zinc-400 ml-1">
+              日期检测基于 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-[11px] font-mono">trading_calendar</code> 表的
+              <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded text-[11px] font-mono ml-0.5">is_trading</code> 字段，
+              非交易日自动跳过，不判定为滞后。当前 7 日中 <strong>{TRADING_CALENDAR.filter(d => d.isTrading).length}</strong> 个交易日、
+              <strong>{TRADING_CALENDAR.filter(d => !d.isTrading).length}</strong> 个休市日。
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 7 日健康度趋势 + 按目录分布 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
@@ -94,16 +109,21 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
               {dailyTrend.map(d => {
                 const maxTotal = Math.max(...dailyTrend.map(x => x.total), 1)
                 const unit = 140 / maxTotal
+                const nonTrading = !isTradingDay(d.date)
                 return (
                   <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group">
-                    <div className="text-[9px] text-zinc-500 font-mono">{d.rate}%</div>
-                    <div className="w-full flex flex-col-reverse rounded overflow-hidden" style={{ height: `${(d.total / maxTotal) * 140}px` }}>
-                      <div className="bg-emerald-500 group-hover:bg-emerald-600 transition-colors" style={{ height: `${d.success * unit}px` }} title={`成功 ${d.success}`} />
-                      <div className="bg-rose-500 group-hover:bg-rose-600 transition-colors" style={{ height: `${d.failed * unit}px` }} title={`失败 ${d.failed}`} />
-                      <div className="bg-zinc-300 dark:bg-zinc-600 group-hover:bg-zinc-400 transition-colors" style={{ height: `${d.skipped * unit}px` }} title={`跳过 ${d.skipped}`} />
-                      <div className="bg-zinc-100 dark:bg-zinc-800 group-hover:bg-zinc-200 transition-colors" style={{ height: `${d.pending * unit}px` }} title={`待执行 ${d.pending}`} />
+                    <div className={`text-[9px] font-mono ${nonTrading ? 'text-zinc-300' : 'text-zinc-500'}`}>{nonTrading ? '休' : `${d.rate}%`}</div>
+                    <div className={`w-full flex flex-col-reverse rounded overflow-hidden ${nonTrading ? 'border border-dashed border-zinc-200 dark:border-zinc-700' : ''}`} style={{ height: nonTrading ? '16px' : `${(d.total / maxTotal) * 140}px` }}>
+                      {!nonTrading && (
+                        <>
+                          <div className="bg-emerald-500 group-hover:bg-emerald-600 transition-colors" style={{ height: `${d.success * unit}px` }} title={`成功 ${d.success}`} />
+                          <div className="bg-rose-500 group-hover:bg-rose-600 transition-colors" style={{ height: `${d.failed * unit}px` }} title={`失败 ${d.failed}`} />
+                          <div className="bg-zinc-300 dark:bg-zinc-600 group-hover:bg-zinc-400 transition-colors" style={{ height: `${d.skipped * unit}px` }} title={`跳过 ${d.skipped}`} />
+                          <div className="bg-zinc-100 dark:bg-zinc-800 group-hover:bg-zinc-200 transition-colors" style={{ height: `${d.pending * unit}px` }} title={`待执行 ${d.pending}`} />
+                        </>
+                      )}
                     </div>
-                    <div className="text-[10px] text-zinc-400">{d.date}</div>
+                    <div className={`text-[10px] ${nonTrading ? 'text-zinc-300' : 'text-zinc-400'}`}>{d.date}</div>
                   </div>
                 )
               })}
@@ -113,6 +133,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> 失败</span>
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-zinc-300" /> 跳过</span>
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-200" /> 待执行</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm border border-dashed border-zinc-300" /> 非交易日</span>
               <span className="ml-auto text-zinc-400">7 日均成功率 {Math.round(dailyTrend.reduce((s, d) => s + d.rate, 0) / dailyTrend.length)}%</span>
             </div>
           </CardContent>
@@ -197,7 +218,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                 ))}
               </div>
             </div>
-            <Badge variant="outline" className="text-[10px]">最后交易日 2026-06-25</Badge>
+            <Badge variant="outline" className="text-[10px]">最后交易日 {LAST_TRADING_DATE}（交易日历校验）</Badge>
             {selected.size > 0 && (
               <Button size="sm" variant="destructive" onClick={() => {
                 selected.forEach(t => onRunTable?.(t))
@@ -214,7 +235,12 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
               <div className="grid grid-cols-[1fr_180px_repeat(7,60px)_90px] gap-1 px-3 py-2 text-[10px] font-medium text-zinc-500 border-b">
                 <div>表名</div>
                 <div>类型</div>
-                {['06-19', '06-20', '06-21', '06-22', '06-23', '06-24', '06-25'].map(d => <div key={d} className="text-center">{d}</div>)}
+                {['06-19', '06-20', '06-21', '06-22', '06-23', '06-24', '06-25'].map(d => (
+                  <div key={d} className={`text-center ${!isTradingDay(d) ? 'text-zinc-300 dark:text-zinc-600' : ''}`}>
+                    {d}
+                    {!isTradingDay(d) && <div className="text-[8px]">休</div>}
+                  </div>
+                ))}
                 <div className="text-center">操作</div>
               </div>
               {filteredMatrix.map(row => {

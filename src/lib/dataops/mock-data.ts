@@ -660,7 +660,7 @@ export interface Alert {
 }
 
 export const ALERTS: Alert[] = [
-  { id: 'a1', level: 'red', table: 't_bk5_19', type: 'health', message: '滞后：最新数据 2026-06-24 < 最后交易日 2026-06-25', ts: '2026-06-25 19:00' },
+  { id: 'a1', level: 'red', table: 't_bk5_19', type: 'health', message: '滞后：最新数据 2026-06-24 < 最后交易日 2026-06-25（交易日历校验）', ts: '2026-06-25 19:00' },
   { id: 'a2', level: 'red', table: 'sector_stocks', type: 'health', message: '空表（脚本未实现，ensure_table 字面量"表名"）', ts: '2026-06-25 19:00' },
   { id: 'a3', level: 'red', table: 't_bk5_19', type: 'lint', message: 'R002: @meta mode 与代码 MODE 矛盾', ts: '2026-06-25 19:00' },
   { id: 'a4', level: 'red', table: 'capital_info', type: 'lint', message: 'R009: 反向 import run.py（循环依赖）', ts: '2026-06-25 19:00' },
@@ -684,10 +684,32 @@ export const ROW_TREND: { table: string; days: { date: string; rows: number }[] 
   ]},
 ]
 
-// 健康度矩阵 (近7天每表每天的状态)
+// 交易日历 — 基于 trading_calendar 表 is_trading=true 的日期
+// 06-21(周日) / 06-22(周六) 为非交易日，其余为交易日
+export const TRADING_CALENDAR: { date: string; isTrading: boolean }[] = [
+  { date: '06-19', isTrading: true },   // 周五
+  { date: '06-20', isTrading: true },   // 周六（补班交易日，A股特例）
+  { date: '06-21', isTrading: false },  // 周日
+  { date: '06-22', isTrading: false },  // 周六
+  { date: '06-23', isTrading: true },   // 周一
+  { date: '06-24', isTrading: true },   // 周二
+  { date: '06-25', isTrading: true },   // 周三
+]
+
+/** 最后一个交易日 */
+export const LAST_TRADING_DATE = TRADING_CALENDAR.filter(d => d.isTrading).slice(-1)[0].date
+
+/** 判断某日期是否为交易日 */
+export function isTradingDay(date: string): boolean {
+  return TRADING_CALENDAR.find(d => d.date === date)?.isTrading ?? false
+}
+
+// 健康度矩阵 (近7天每表每天的状态，非交易日自动标记为 skipped)
 export const HEALTH_MATRIX: { table: string; days: { date: string; status: 'success' | 'failed' | 'skipped' | 'none' }[] }[] = TABLES.map(t => ({
   table: t.table,
   days: ['06-19', '06-20', '06-21', '06-22', '06-23', '06-24', '06-25'].map(d => {
+    // 非交易日：所有表标记 skipped（无需执行）
+    if (!isTradingDay(d)) return { date: d, status: 'skipped' as const }
     if (t.health === 'red' && t.rows === 0) return { date: d, status: 'skipped' as const }
     if (t.table === 't_bk5_19' && d === '06-25') return { date: d, status: 'failed' as const }
     if (t.health === 'white') return { date: d, status: 'none' as const }
@@ -708,8 +730,8 @@ export interface DailyRunStat {
 export const DAILY_STATS: DailyRunStat[] = [
   { date: '06-19', total: 24, success: 24, failed: 0, skipped: 0, totalRows: 215_400_000, durationMin: 22 },
   { date: '06-20', total: 24, success: 23, failed: 1, skipped: 0, totalRows: 215_500_000, durationMin: 25 },
-  { date: '06-21', total: 0, success: 0, failed: 0, skipped: 0, totalRows: 0, durationMin: 0 }, // 周末
-  { date: '06-22', total: 0, success: 0, failed: 0, skipped: 0, totalRows: 0, durationMin: 0 }, // 周末
+  { date: '06-21', total: 0, success: 0, failed: 0, skipped: 0, totalRows: 0, durationMin: 0 }, // 非交易日(周日)
+  { date: '06-22', total: 0, success: 0, failed: 0, skipped: 0, totalRows: 0, durationMin: 0 }, // 非交易日(周六)
   { date: '06-23', total: 24, success: 22, failed: 2, skipped: 0, totalRows: 215_900_000, durationMin: 28 },
   { date: '06-24', total: 24, success: 23, failed: 1, skipped: 0, totalRows: 216_400_000, durationMin: 23 },
   { date: '06-25', total: 26, success: 22, failed: 2, skipped: 1, totalRows: 216_900_000, durationMin: 65 },
