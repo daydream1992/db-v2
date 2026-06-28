@@ -1,0 +1,2123 @@
+
+{
+  "version": "3.0",
+  "last_updated": "2026-05-15",
+  "total_interfaces": 85,
+  "categories": {
+    "intraday": {
+      "description": "盘中可用接口 - 交易日9:00-15:00，实时数据",
+      "count": 13,
+      "interfaces": [
+        {
+          "name": "get_market_snapshot",
+          "description": "获取实时行情快照",
+          "response_time": "10-50ms",
+          "frequency_limit": "≤2次/秒",
+          "after_hours_limit": "只能获取收盘价，买卖盘不准确",
+          "time_availability": "盘中/盘后",
+          "verified": true,
+          "verified_date": "2026-05-20",
+          "parameters": {
+            "tqcenter": ["stock_code (单个股票代码str)", "field_list (optional)"],
+            "TdxQuant": ["stock_code"]
+          },
+          "return_fields": ["ItemNum", "LastClose", "Open", "Max", "Min", "Now", "Volume", "NowVol", "Amount", "Inside", "Outside", "Buyp", "Buyv", "Sellp", "Sellv", "Zangsu", "ZAFPre3", "Average", "XsFlag"],
+          "return_fields_detail": {
+            "ItemNum": "序号",
+            "LastClose": "昨收(元)",
+            "Open": "开盘价(元)",
+            "Max": "最高价(元)",
+            "Min": "最低价(元)",
+            "Now": "现价(元)",
+            "Volume": "成交量(手)",
+            "NowVol": "现手(手)",
+            "Amount": "成交额(万元)",
+            "Inside": "内盘(手)",
+            "Outside": "外盘(手)",
+            "Buyp": "买1-5价(元)",
+            "Buyv": "买1-5量(手)",
+            "Sellp": "卖1-5价(元)",
+            "Sellv": "卖1-5量(手)",
+            "Zangsu": "涨速",
+            "ZAFPre3": "3分钟涨幅(%)",
+            "Average": "均价(元)",
+            "XsFlag": "交易状态(2=交易中)"
+          },
+          "sample_return": {
+            "stock_code": "600519.SH",
+            "Now": "1324.30",
+            "LastClose": "1323.00",
+            "Volume": "43254",
+            "Amount": "571917.06"
+          },
+          "examples": {
+            "tqcenter": "snap = tq.get_market_snapshot(stock_code='600519.SH', field_list=[])",
+            "TdxQuant": "snap = TdxQuant.get_market_snapshot('600519.SH')"
+          },
+          "storage_info": {
+            "source": "API",
+            "table": "未入库",
+            "script": "无",
+            "fields": ["Now", "LastClose", "Open", "High", "Low", "Volume", "Amount", "Inside", "Outside", "Buyp", "Buyv", "Sellp", "Sellv", "Average"],
+            "notes": "实时盘口数据，无法回溯，短线作用有限，用于盘口分析"
+          }
+        },
+        {
+          "name": "subscribe_hq",
+          "description": "订阅实时行情推送",
+          "response_time": "实时",
+          "frequency_limit": "≤100只股票",
+          "after_hours_limit": "无法使用",
+          "parameters": {
+            "tqcenter": ["stock_list", "callback (optional)"],
+            "TdxQuant": ["stock_list"]
+          },
+          "examples": {
+            "tqcenter": "sub_hq = tq.subscribe_hq(stock_list=['300308.SZ'], callback=my_func)",
+            "TdxQuant": "TdxQuant.subscribe_hq(['300308.SZ', '600519.SH'])"
+          }
+        },
+        {
+          "name": "unsubscribe_hq",
+          "description": "取消订阅行情",
+          "response_time": "30-50ms",
+          "frequency_limit": "≤5次/秒",
+          "after_hours_limit": "无限制",
+          "parameters": {
+            "tqcenter": ["stock_list"],
+            "TdxQuant": ["stock_list"]
+          },
+          "examples": {
+            "tqcenter": "tq.unsubscribe_hq(stock_list=['300308.SZ'])",
+            "TdxQuant": "TdxQuant.unsubscribe_hq(['300308.SZ'])"
+          }
+        },
+        {
+          "name": "get_report_data",
+          "description": "获取盘口逐笔数据",
+          "response_time": "30-80ms",
+          "frequency_limit": "≤5次/秒",
+          "after_hours_limit": "只能获取当日已成交数据",
+          "parameters": {
+            "tqcenter": ["code"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "report = tq.get_report_data(code='300308.SZ')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_realtime_data",
+          "description": "获取实时分时数据",
+          "response_time": "50-100ms",
+          "frequency_limit": "≤2次/秒",
+          "after_hours_limit": "",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["code"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "data = TdxQuant.get_realtime_data('300308.SZ')"
+          }
+        },
+        {
+          "name": "formula_process_mul_xg",
+          "description": "实时选股",
+          "response_time": "100-500ms",
+          "frequency_limit": "≤0.5次/秒，≤500只股票",
+          "after_hours_limit": "使用收盘数据，结果固定",
+          "parameters": {
+            "tqcenter": ["formula_name", "formula_arg", "stock_list", "stock_period", "count", "dividend_type"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "result = tq.formula_process_mul_xg(formula_name='UP', stock_list=stock_list)",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "send_order",
+          "description": "下单交易",
+          "response_time": "100-300ms",
+          "frequency_limit": "≤5次/秒",
+          "after_hours_limit": "无法下单",
+          "parameters": {
+            "tqcenter": ["code", "price", "amount", "bs"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "order_id = tq.send_order(code='300308.SZ', price=10.0, amount=100, bs='B')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "order_stock",
+          "description": "股票下单（TdxQuant）",
+          "response_time": "100-300ms",
+          "frequency_limit": "≤5次/秒",
+          "after_hours_limit": "",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["code", "volume", "direction", "order_type", "price"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "order_id = TdxQuant.order_stock('300308.SZ', 100, 1, 'limit', 10.5)"
+          }
+        },
+        {
+          "name": "cancel_order",
+          "description": "撤单",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "after_hours_limit": "未成交单可尝试撤单",
+          "parameters": {
+            "tqcenter": ["order_id"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "tq.cancel_order(order_id='123456')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "cancel_order_stock",
+          "description": "撤销委托订单（TdxQuant）",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "after_hours_limit": "",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["order_id"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "TdxQuant.cancel_order_stock('20260508000001')"
+          }
+        },
+        {
+          "name": "query_position",
+          "description": "查询持仓",
+          "response_time": "50-100ms",
+          "frequency_limit": "≤5次/秒",
+          "after_hours_limit": "只能查看最终持仓",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "tq.query_position()",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "query_order",
+          "description": "查询委托",
+          "response_time": "50-100ms",
+          "frequency_limit": "≤5次/秒",
+          "after_hours_limit": "只能查看当日历史委托",
+          "parameters": {
+            "tqcenter": ["date (optional)"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "tq.query_order(date='2026-05-15')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "start_simulation",
+          "description": "启动模拟交易",
+          "response_time": "100-300ms",
+          "frequency_limit": "≤1次/天",
+          "after_hours_limit": "",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "TdxQuant.start_simulation()"
+          }
+        }
+      ]
+    },
+    "after_hours": {
+      "description": "盘后可用接口 - 15:00后，数据稳定，适合批量分析",
+      "count": 8,
+      "interfaces": [
+        {
+          "name": "get_market_data",
+          "description": "获取历史K线数据",
+          "response_time": "50-200ms（单只），100-500ms（10只）",
+          "frequency_limit": "≤1次/秒，≤100只股票/次，≤10000根K线",
+          "after_hours_advantage": "当日K线数据固定，可批量获取",
+          "parameters": {
+            "tqcenter": ["field_list", "stock_list", "period", "start_time", "end_time", "count", "dividend_type", "fill_data"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "df = tq.get_market_data(field_list=['Open','High','Low','Close'], stock_list=['300308.SZ'], period='1d', count=100, dividend_type='front')",
+            "TdxQuant": ""
+          },
+          "storage_info": {
+            "source": "二进制(vipdoc)",
+            "table": "stock_daily_kline, stock_kline_1m, stock_kline_5m, stock_kline_15m, stock_kline_30m, stock_kline_60m",
+            "script_daily": "1_入库/10_stock_daily_kline.py",
+            "script_minute": "1_入库/080~084_stock_kline_*.py",
+            "fields": ["open", "high", "low", "close", "volume", "amount"],
+            "notes": "日K线2881万条(1990-2026)，分钟K线2.65亿条(2026至今)"
+          }
+        },
+        {
+          "name": "get_history_data",
+          "description": "获取历史K线（TdxQuant）",
+          "response_time": "50-200ms",
+          "frequency_limit": "≤1次/秒",
+          "after_hours_advantage": "",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["code", "period", "start_date", "end_date"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "df = TdxQuant.get_history_data('300308.SZ', 'day', '20260101', '20260501')"
+          }
+        },
+        {
+          "name": "get_history_data_multi",
+          "description": "批量获取历史K线",
+          "response_time": "100-500ms",
+          "frequency_limit": "≤0.5次/秒",
+          "after_hours_advantage": "",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["stock_list", "period", "count"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "data = TdxQuant.get_history_data_multi(['300308.SZ', '600519.SH'], 'day', 100)"
+          }
+        },
+        {
+          "name": "refresh_cache",
+          "description": "刷新行情缓存",
+          "response_time": "100-500ms",
+          "frequency_limit": "≤1次/10分钟",
+          "after_hours_advantage": "",
+          "parameters": {
+            "tqcenter": ["market", "force"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "tq.refresh_cache(market='AG', force=False)",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "refresh_kline",
+          "description": "缓存K线数据",
+          "response_time": "500-2000ms",
+          "frequency_limit": "≤1次/小时",
+          "after_hours_advantage": "预缓存历史数据，盘中更快",
+          "parameters": {
+            "tqcenter": ["stock_list", "period"],
+            "TdxQuant": ["stock_code", "period", "count"]
+          },
+          "examples": {
+            "tqcenter": "tq.refresh_kline(stock_list=['300308.SZ'], period='1d')",
+            "TdxQuant": "TdxQuant.refresh_kline('300308.SZ', 'day', 1000)"
+          }
+        },
+        {
+          "name": "download_file",
+          "description": "下载数据文件",
+          "response_time": "取决于文件大小",
+          "frequency_limit": "≤1次/分钟",
+          "after_hours_advantage": "",
+          "parameters": {
+            "tqcenter": ["stock_code", "down_time", "down_type"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "tq.download_file(stock_code='300308.SZ', down_time='20241231', down_type=1)",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "set_backtest_params",
+          "description": "设置回测参数",
+          "response_time": "10-50ms",
+          "frequency_limit": "≤5次/秒",
+          "after_hours_advantage": "",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["start_date", "end_date", "initial_capital", "commission_rate"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "TdxQuant.set_backtest_params(start_date='20250101', end_date='20251231', initial_capital=1000000, commission_rate=0.0003)"
+          }
+        },
+        {
+          "name": "run_backtest",
+          "description": "运行回测",
+          "response_time": "取决于策略复杂度",
+          "frequency_limit": "≤1次/运行",
+          "after_hours_advantage": "",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["strategy_function"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "results = TdxQuant.run_backtest(my_strategy)"
+          }
+        }
+      ]
+    },
+    "all_day": {
+      "description": "全天通用接口 - 任意时间可用，不依赖实时行情",
+      "count": 64,
+      "interfaces": [
+        {
+          "name": "get_stock_list",
+          "description": "获取股票列表",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["market", "list_type"],
+            "TdxQuant": ["market"]
+          },
+          "examples": {
+            "tqcenter": "stocks = tq.get_stock_list(market='50', list_type=0)",
+            "TdxQuant": "stocks = TdxQuant.get_stock_list('SH')"
+          }
+        },
+        {
+          "name": "get_subscribe_hq_stock_list",
+          "description": "获取订阅列表",
+          "response_time": "10-30ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "sub_list = tq.get_subscribe_hq_stock_list()",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_market_info",
+          "description": "获取市场信息",
+          "response_time": "30-80ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["market"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "info = TdxQuant.get_market_info('SH')"
+          }
+        },
+        {
+          "name": "get_more_info",
+          "description": "获取扩展信息（涨停价、市值等）",
+          "response_time": "30-80ms",
+          "frequency_limit": "≤5次/秒",
+          "return_fields": ["MainBusiness", "SafeValue", "ShineValue", "ShapeValue", "TPFlag", "ZTPrice", "DTPrice", "HqDate", "fHSL", "fLianB", "Wtb", "Zsz", "Ltsz", "vzangsu", "Fzhsl", "FzAmo", "VOpenZAF", "ZAF", "ZAFYesterday", "ZAFPre2D", "ZAFPre5", "ZAFPre10", "ZAFPre20", "ZAFPre30", "ZAFPre60", "ZAFYear", "ZAFPreMyMonth", "ZAFPreOneYear", "Zjl", "Zjl_HB", "TotalBVol", "TotalSVol", "BCancel", "SCancel", "L2TicNum", "L2OrderNum", "FCAmo", "FCb", "OpenZAF", "OpenAmo", "OpenZTBuy", "OpenAmoPre1", "OpenVolPre1", "CJJEPre1", "CJJEPre3", "FDEPre1", "FDEPre2", "ZTGPNum", "LastStartZT", "LastZTHzNum", "EverZTCount", "ConZAFDateNum", "YearZTDay", "MA5Value", "HisHigh", "HisLow", "IPO_Price", "More_YJL", "BetaValue", "DynaPE", "MorePE", "StaticPE_TTM", "DYRatio", "PB_MRQ", "IsT0Fund", "IsZCZGP", "IsKzz", "Kzz_HSCode", "QHMainYYMM", "FreeLtgb", "Yield", "KfEarnMoney", "RDInputFee", "CashZJ", "PreReceiveZJ", "OtherQYJzc", "StaffNum", "RecentGGJYDate", "RecentHGDate", "RecentIncentDate", "NoticeDate_Recent", "RecentReleaseDate", "RecentDZDate", "ReportDate", "ZTDate_Recent", "DTDate_Recent", "TopDate_Recent", "StopJYDate_Recent"],
+          "return_fields_detail": {
+            "MainBusiness": "主营业务",
+            "SafeValue": "安全值",
+            "ShineValue": "闪亮值",
+            "ShapeValue": "形态值",
+            "TPFlag": "停牌标志(0=正常 1=停牌)",
+            "ZTPrice": "涨停价",
+            "DTPrice": "跌停价",
+            "HqDate": "行情日期(YYYYMMDD)",
+            "fHSL": "换手率(%)",
+            "fLianB": "量比",
+            "Wtb": "委比(%)",
+            "Zsz": "总市值(亿元)",
+            "Ltsz": "流通市值(亿元)",
+            "vzangsu": "涨速(%)",
+            "Fzhsl": "融资换手率(%)",
+            "FzAmo": "融资买入金额(万元)",
+            "VOpenZAF": "虚拟开盘涨跌幅(%)",
+            "ZAF": "涨跌幅(%)",
+            "ZAFYesterday": "昨日涨跌幅(%)",
+            "ZAFPre2D": "前2日涨跌幅(%)",
+            "ZAFPre5": "前5日涨跌幅(%)",
+            "ZAFPre10": "前10日涨跌幅(%)",
+            "ZAFPre20": "前20日涨跌幅(%)",
+            "ZAFPre30": "前30日涨跌幅(%)",
+            "ZAFPre60": "前60日涨跌幅(%)",
+            "ZAFYear": "年初至今涨跌幅(%)",
+            "ZAFPreMyMonth": "近一月涨跌幅(%)",
+            "ZAFPreOneYear": "近一年涨跌幅(%)",
+            "Zjl": "资金流(万元)",
+            "Zjl_HB": "资金流-环比(万元)",
+            "TotalBVol": "总主动买入量(手)",
+            "TotalSVol": "总主动卖出量(手)",
+            "BCancel": "买撤单量(手)",
+            "SCancel": "卖撤单量(手)",
+            "L2TicNum": "Level2成交笔数",
+            "L2OrderNum": "Level2委托笔数",
+            "FCAmo": "大宗交易金额(万元)",
+            "FCb": "大宗交易占比(%)",
+            "OpenZAF": "开盘涨跌幅(%)",
+            "OpenAmo": "开盘成交额(元)",
+            "OpenZTBuy": "开盘涨停买量(手)",
+            "OpenAmoPre1": "昨日开盘成交额(万元)",
+            "OpenVolPre1": "昨日开盘成交量(手)",
+            "CJJEPre1": "昨日成交额(元)",
+            "CJJEPre3": "前3日成交额(元)",
+            "FDEPre1": "昨日大单净额(万元)",
+            "FDEPre2": "前日大单净额(万元)",
+            "ZTGPNum": "涨停股数",
+            "LastStartZT": "最近起涨标志",
+            "LastZTHzNum": "最近涨停封单量",
+            "EverZTCount": "历史涨停次数",
+            "ConZAFDateNum": "连续上涨天数",
+            "YearZTDay": "年涨停天数",
+            "MA5Value": "MA5均线值",
+            "HisHigh": "历史最高价",
+            "HisLow": "历史最低价",
+            "IPO_Price": "发行价(元)",
+            "More_YJL": "净利润(万元)",
+            "BetaValue": "Beta系数",
+            "DynaPE": "动态市盈率",
+            "MorePE": "市盈率(另一种算法)",
+            "StaticPE_TTM": "静态市盈率(TTM)",
+            "DYRatio": "股息率(%)",
+            "PB_MRQ": "市净率(MRQ)",
+            "IsT0Fund": "是否T+0基金(0/1)",
+            "IsZCZGP": "是否注册制股票(0/1)",
+            "IsKzz": "是否可转债(0/1)",
+            "Kzz_HSCode": "可转债对应正股代码",
+            "QHMainYYMM": "期货主力合约年月",
+            "FreeLtgb": "自由流通股本(万股)",
+            "Yield": "收益率",
+            "KfEarnMoney": "扣非净利润(万元)",
+            "RDInputFee": "研发投入(万元)",
+            "CashZJ": "货币资金(万元)",
+            "PreReceiveZJ": "预收账款(万元)",
+            "OtherQYJzc": "其他权益工具(万元)",
+            "StaffNum": "员工人数",
+            "RecentGGJYDate": "最近公告交易日期",
+            "RecentHGDate": "最近回购日期",
+            "RecentIncentDate": "最近激励日期",
+            "NoticeDate_Recent": "最近公告日期",
+            "RecentReleaseDate": "最近发行日期",
+            "RecentDZDate": "最近大宗日期",
+            "ReportDate": "财报日期",
+            "ZTDate_Recent": "最近涨停日期",
+            "DTDate_Recent": "最近跌停日期",
+            "TopDate_Recent": "最近创新高日期",
+            "StopJYDate_Recent": "最近停牌日期"
+          },
+          "parameters": {
+            "tqcenter": ["code"],
+            "TdxQuant": ["code"]
+          },
+          "examples": {
+            "tqcenter": "more = tq.get_more_info('300308.SZ')",
+            "TdxQuant": "more = TdxQuant.get_more_info('300308.SZ')"
+          },
+          "storage_info": {
+            "source": "API",
+            "table": "stock_extended_info",
+            "script": "legacy/pipeline.py",
+            "explicit_fields": ["zt_price", "dt_price", "total_market_cap", "float_market_cap", "pe_ttm", "pb_mrq", "dy_ratio", "turnover_rate", "volume_ratio", "zaf", "beta_value", "free_float_shares"],
+            "notes": "API返回88字段，表只存14个显式字段，时间范围2026-01-05~2026-06-02"
+          }
+        },
+        {
+          "name": "get_stock_info",
+          "description": "获取股票基本信息（名称/股本/财务数据/板块归属）",
+          "response_time": "30-80ms",
+          "frequency_limit": "≤5次/秒",
+          "return_fields": ["Name", "Unit", "VolBase", "MinPrice", "XsFlag", "Fz", "DelayMin", "QHVolBaseRate", "HKVolBaseRate", "BelongHS300", "BelongHasKQZ", "BelongRZRQ", "BelongHSGT", "IsHKGP", "IsQH", "IsQQ", "IsSTGP", "IsQuitGP", "TodayDRFlag", "HSStockKind", "ActiveCapital", "J_zgb", "J_bg", "J_hg", "J_zzc", "J_ldzc", "J_gdzc", "J_wxzc", "J_ldfz", "J_cqfz", "J_zbgjj", "J_jzc", "J_yysy", "J_yycb", "J_yszk", "J_yyly", "J_tzsy", "J_jyxjl", "J_zxjl", "J_ch", "J_lyze", "J_shly", "J_jly", "J_wfply", "J_jyl", "J_mgwfp", "J_mgsy", "J_mgsy2", "J_mggjj", "J_mgjzc", "J_mgjzc2", "J_gdqyb", "J_gdrs", "J_HalfYearFlag", "J_start", "tdx_dycode", "tdx_dyname", "rs_hycode_sim", "rs_hyname", "blockzscode", "underly_setcode", "underly_code", "ErrorId"],
+          "return_fields_detail": {
+            "Name": "股票名称",
+            "Unit": "单位（100=手）",
+            "VolBase": "成交量基准（万手）",
+            "MinPrice": "最小报价单位",
+            "XsFlag": "涨速标志",
+            "Fz": "分档数组（8档委买/委卖价格）",
+            "DelayMin": "延迟分钟数",
+            "QHVolBaseRate": "期货成交量基准比率",
+            "HKVolBaseRate": "港股成交量基准比率",
+            "BelongHS300": "是否沪深300成分(0/1)",
+            "BelongHasKQZ": "是否科创板(0/1)",
+            "BelongRZRQ": "是否融资融券(0/1)",
+            "BelongHSGT": "是否沪港通(0/1)",
+            "IsHKGP": "是否港股(0/1)",
+            "IsQH": "是否期货(0/1)",
+            "IsQQ": "是否期权(0/1)",
+            "IsSTGP": "是否ST股(0/1)",
+            "IsQuitGP": "是否退市股(0/1)",
+            "TodayDRFlag": "今日DR标志(0=普通 1=除权除息)",
+            "HSStockKind": "股票种类(1=主板 2=创业板 3=科创板 4=北交所)",
+            "ActiveCapital": "活跃资金(万元)",
+            "J_zgb": "总股本(万股)",
+            "J_bg": "保荐人股份(万股)",
+            "J_hg": "流通股份(万股)",
+            "J_zzc": "总资产(万元)",
+            "J_ldzc": "流动资产(万元)",
+            "J_gdzc": "固定资产(万元)",
+            "J_wxzc": "无形资产(万元)",
+            "J_ldfz": "流动负债(万元)",
+            "J_cqfz": "长期负债(万元)",
+            "J_zbgjj": "资本公积金(万元)",
+            "J_jzc": "净资产/所有者权益(万元)",
+            "J_yysy": "营业收入(万元)",
+            "J_yycb": "营业成本(万元)",
+            "J_yszk": "应收账款(万元)",
+            "J_yyly": "营业利润(万元)",
+            "J_tzsy": "投资收益(万元)",
+            "J_jyxjl": "经营现金流入(万元)",
+            "J_zxjl": "最新现金(万元)",
+            "J_ch": "存货(万元)",
+            "J_lyze": "利润总额(万元)",
+            "J_shly": "税后利润(万元)",
+            "J_jly": "净利润(万元)",
+            "J_wfply": "未分配利润(万元)",
+            "J_jyl": "经营现金净流(万元)",
+            "J_mgwfp": "每股未分配利润(元)",
+            "J_mgsy": "每股收益EPS(元)",
+            "J_mgsy2": "每股收益2(元)",
+            "J_mggjj": "每股公积金(元)",
+            "J_mgjzc": "每股净资产(元)",
+            "J_mgjzc2": "每股净资产2(元)",
+            "J_gdqyb": "股东权益比(%)",
+            "J_gdrs": "股东人数",
+            "J_HalfYearFlag": "半年报标志(1=已披露半年报 3=已披露年报)",
+            "J_start": "上市日期(YYYYMMDD)",
+            "tdx_dycode": "通达信地域板块代码",
+            "tdx_dyname": "通达信地域板块名称",
+            "rs_hycode_sim": "同花顺行业代码",
+            "rs_hyname": "同花顺行业名称",
+            "blockzscode": "所属板块指数代码",
+            "underly_setcode": "标的指数类型",
+            "underly_code": "标的指数代码",
+            "ErrorId": "错误ID(0=成功)"
+          },
+          "parameters": {
+            "tqcenter": ["code"],
+            "TdxQuant": ["code"]
+          },
+          "examples": {
+            "tqcenter": "info = tq.get_stock_info('300308.SZ')",
+            "TdxQuant": "info = TdxQuant.get_stock_info('300308.SZ')"
+          },
+          "storage_info": {
+            "source": "API",
+            "table": "v_stock_list",
+            "script": "legacy/pipeline.py",
+            "fields": ["code", "name", "listing_date"],
+            "notes": "股票列表视图，get_stock_info 63字段暂未入库"
+          }
+        },
+        {
+          "name": "get_divid_factors",
+          "description": "获取分红配送数据",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["code"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "divid = TdxQuant.get_divid_factors('300308.SZ')"
+          }
+        },
+        {
+          "name": "get_ipo_info",
+          "description": "获取新股申购信息",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["ipo_type", "ipo_date"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "ipo = tq.get_ipo_info(ipo_type=2, ipo_date=1)",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_gb_info",
+          "description": "获取股本数据（流通股本、总股本）",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "time_availability": "盘后",
+          "verified": true,
+          "verified_date": "2026-05-20",
+          "return_fields": ["Date", "Zgb", "Ltgb"],
+          "return_fields_detail": {
+            "Date": "日期(YYYYMMDD)",
+            "Zgb": "总股本(股)",
+            "Ltgb": "流通股本(股)"
+          },
+          "parameters": {
+            "tqcenter": ["stock_code", "date_list (日期列表，>=count)", "count (返回条数)"],
+            "TdxQuant": []
+          },
+          "notes": "date_list 长度需 >= count；返回 list，每项含 Date/Ltgb/Zgb",
+          "sample_return": [
+            {"Date": 20260101, "Ltgb": 1252270208.0, "Zgb": 1252270208.0},
+            {"Date": 20250501, "Ltgb": 1252270208.0, "Zgb": 1252270208.0}
+          ],
+          "examples": {
+            "tqcenter": "gb = tq.get_gb_info(stock_code='600519.SH', date_list=['20260520','20260519','20260518','20260515','20260514'], count=5)",
+            "TdxQuant": ""
+          },
+          "storage_info": {
+            "source": "二进制(vipdoc/cw/gpcw*.dat)",
+            "table": "fact_finance_report",
+            "script": "1_入库/110_fact_finance_report.py",
+            "fields_from_raw": {
+              "total_shares": "fn_237",
+              "float_shares": "fn_238"
+            },
+            "notes": "实际数据来自二进制文件，非API调用。股本数据存在 raw_fields 中，可通过 fn_237/fn_238 解析"
+          }
+        },
+        {
+          "name": "get_trading_dates",
+          "description": "获取交易日历",
+          "response_time": "10-30ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["market", "start_time", "end_time", "count"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "dates = tq.get_trading_dates(market='SH', start_time='20260101', end_time='20261231', count=0)",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_financial_data",
+          "description": "获取财务指标数据",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["stock_list", "field_list", "start_time", "report_type"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "fin = tq.get_financial_data(stock_list=['300308.SZ'], field_list=['Fn008', 'Fn009', 'Fn010'], start_time='20260101')",
+            "TdxQuant": ""
+          },
+          "storage_info": {
+            "source": "二进制(vipdoc/cw/gpcw*.dat)",
+            "table": "fact_finance_report",
+            "script": "1_入库/110_fact_finance_report.py",
+            "fields_total": 584,
+            "explicit_fields": ["eps", "bvps", "roe", "ocfps", "total_assets", "total_liabilities", "share_capital", "total_equity", "net_profit_parent", "operating_cf", "investing_cf", "financing_cf", "net_profit_parent2", "total_shares", "total_revenue_wan"],
+            "raw_fields": "raw_fields (JSON格式，存储 fn_0 ~ fn_583 共584个字段)",
+            "notes": "API返回99字段，但二进制文件有584字段，全部存入raw_fields"
+          }
+        },
+        {
+          "name": "get_financial_data_by_date",
+          "description": "按日期获取财务数据",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["stock_list", "field_list", "year", "mmdd"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "fin = tq.get_financial_data_by_date(stock_list=['300308.SZ'], field_list=['Fn008'], year=0, mmdd=0)",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_gp_pe",
+          "description": "获取个股市盈率",
+          "response_time": "30-80ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["code", "date"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "pe = TdxQuant.get_gp_pe('300308.SZ', '20260331')"
+          }
+        },
+        {
+          "name": "get_gp_pb",
+          "description": "获取个股市净率",
+          "response_time": "30-80ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["code", "date"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "pb = TdxQuant.get_gp_pb('300308.SZ', '20260331')"
+          }
+        },
+        {
+          "name": "get_block_pe",
+          "description": "获取板块市盈率",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["block_name", "date"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "block_pe = TdxQuant.get_block_pe('银行', '20260331')"
+          }
+        },
+        {
+          "name": "get_market_pe",
+          "description": "获取市场市盈率",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["market", "date"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "market_pe = TdxQuant.get_market_pe('SH', '20260331')"
+          }
+        },
+        {
+          "name": "get_gp_one_data",
+          "description": "获取单只股票综合数据",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["stock_list", "field_list"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "gp = tq.get_gp_one_data(stock_list=['300308.SZ'], field_list=['GO1', 'GO3', 'GO33'])",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_gpjy_value",
+          "description": "获取股票交易数据（含融资融券、股东人数等）",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["stock_list", "field_list", "start_time", "end_time"],
+            "TdxQuant": []
+          },
+          "field_map": {
+            "GP1": "股东人数(户)",
+            "GP3": "融资融券数据 — Value[0]=融资余额(万元), Value[1]=融券余额(万元)",
+            "GP4": "融资融券明细 — Value[0]=融资买入额(万元), Value[1]=融资偿还额(万元)",
+            "GP11": "资金流向 — Value[0]=主力净流入(万元), Value[1]=散户净流入(万元)",
+            "GP12": "大单/小单 — Value[0]=大单净额(万元), Value[1]=小单净额(万元)",
+            "GP13": "中单/超大单 — Value[0]=中单净额(万元), Value[1]=超大单净额(万元)",
+            "GP16": "总市值(万元) — Value[0]=总市值, Value[1]=0",
+            "GP19": "市盈率 — Value[0]=PE, Value[1]=0",
+            "GP20": "市净率 — Value[0]=PB, Value[1]=0",
+            "GP21": "股息率(%) — Value[0]=股息率, Value[1]=0",
+            "GP25": "5日涨幅(%) — Value[0]=涨幅, Value[1]=0",
+            "GP27": "涨停统计 — Value[0]=涨停天数, Value[1]=涨停标志",
+            "GP28": "量价指标 — Value[0]=量比, Value[1]=换手率",
+            "GP44": "股票综合评分 — Value[0]=评分, Value[1]=0",
+            "GP45": "机构评级 — Value[0]=评级, Value[1]=0",
+            "GP47": "主力净额(万元) — Value[0]=净额, Value[1]=0"
+          },
+          "verified": true,
+          "verified_date": "2026-05-20",
+          "examples": {
+            "tqcenter": "gpjy = tq.get_gpjy_value(stock_list=['600519.SH'], field_list=['GP3'], start_time='20260401', end_time='20260520')",
+            "TdxQuant": ""
+          },
+          "storage_info": {
+            "source": "API",
+            "table": "dwd_stock_capital_flow, stock_trading_data",
+            "script": "1_入库/120_dwd_stock_capital_flow.py",
+            "fields_mapping": {
+              "GP11": "main_net_inflow (dwd_stock_capital_flow)",
+              "GP12": "active_buy_net (dwd_stock_capital_flow)",
+              "GP13": "seal_amount (dwd_stock_capital_flow)",
+              "GP36": "main_net_inflow (dwd_stock_capital_flow)",
+              "GP47": "main_net_inflow (dwd_stock_capital_flow)"
+            },
+            "notes": "资金流/融资融券数据存入 dwd_stock_capital_flow；GP字段原始值存 stock_trading_data(键值对结构)"
+          }
+        },
+        {
+          "name": "get_bkjy_value",
+          "description": "获取板块交易数据（含板块PE/PB/市值等）",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "time_availability": "盘后",
+          "verified": true,
+          "verified_date": "2026-05-20",
+          "parameters": {
+            "tqcenter": ["stock_list (板块代码列表)", "field_list", "start_time", "end_time"],
+            "TdxQuant": []
+          },
+          "field_map": {
+            "BK5": "板块市盈率TTM — Value[0]=PE, Value[1]=PE(另一算法)",
+            "BK6": "板块市净率MRQ — Value[0]=PB, Value[1]=PB(另一算法)",
+            "BK9": "板块涨跌幅(%)",
+            "BK10": "板块总市值(亿元)",
+            "BK12": "涨停家数",
+            "BK13": "跌停家数",
+            "BK15": "上涨家数",
+            "BK16": "下跌家数"
+          },
+          "sample_return": {
+            "block_code": "881338.SH (酿酒行业)",
+            "BK5": "Value[0]=97.29, Value[1]=230.80 (20260514)",
+            "BK6": "Value[0]=10.98, Value[1]=11.55 (20260514)"
+          },
+          "notes": "注意：参数是stock_list不是block_code，板块代码作为stock_list传入",
+          "examples": {
+            "tqcenter": "bkjy = tq.get_bkjy_value(stock_list=['881338.SH'], field_list=['BK5','BK6'], start_time='20260420', end_time='20260520')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_scjy_value",
+          "description": "获取市场交易数据（含融资融券、涨跌停、陆股通等）",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "time_availability": "盘后",
+          "parameters": {
+            "tqcenter": ["market", "date"],
+            "TdxQuant": []
+          },
+          "field_map": {
+            "SC1": "融资融券数据 — Value[0]=沪深融资余额(万元), Value[1]=沪深融券余额(万元)",
+            "SC2": "陆股通资金流入",
+            "SC3": "涨跌停股数 — Value[0]=涨停数, Value[1]=跌停数",
+            "SC4": "涨跌家数 — Value[0]=上涨家数, Value[1]=下跌家数",
+            "SC5": "融资净买入(万元)",
+            "SC6": "融券净卖出(万元)",
+            "SC7": "融资融券净额(万元)",
+            "SC8": "北向资金(万元)",
+            "SC10": "市场均价/振幅",
+            "SC31": "涨停/跌停统计 — Value[0]=涨停, Value[1]=跌停",
+            "SC34": "融资融券余额(万元) — Value[0]=融资, Value[1]=融券"
+          },
+          "verified": true,
+          "verified_date": "2026-05-20",
+          "examples": {
+            "tqcenter": "scjy = tq.get_scjy_value(market='50', date='20260515')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_relation",
+          "description": "获取股票板块归属",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["stock_code"],
+            "TdxQuant": ["code"]
+          },
+          "examples": {
+            "tqcenter": "relation = tq.get_relation(stock_code='300308.SZ')",
+            "TdxQuant": "relation = TdxQuant.get_relation('300308.SZ')"
+          }
+        },
+        {
+          "name": "get_sector_list",
+          "description": "获取板块列表",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["sector_type (optional)"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "sectors = tq.get_sector_list(sector_type='concept')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_stock_list_in_sector",
+          "description": "获取板块成份股",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["block_code", "list_type"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "stocks = tq.get_stock_list_in_sector(block_code='881338.SH', list_type=0)",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_industry_list",
+          "description": "获取行业板块列表",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "industries = TdxQuant.get_industry_list()"
+          }
+        },
+        {
+          "name": "get_concept_list",
+          "description": "获取概念板块列表",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "concepts = TdxQuant.get_concept_list()"
+          }
+        },
+        {
+          "name": "get_block_stocks",
+          "description": "获取板块成份股（TdxQuant）",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["block_name"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "stocks = TdxQuant.get_block_stocks('银行')"
+          }
+        },
+        {
+          "name": "get_user_sector",
+          "description": "获取自定义板块",
+          "response_time": "20-80ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["sector_name (optional)"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "stocks = tq.get_user_sector(sector_name='自选股')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "send_user_block",
+          "description": "添加股票到自定义板块",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["sector_name", "stock_list"],
+            "TdxQuant": ["sector_name", "stock_list", "mode"]
+          },
+          "examples": {
+            "tqcenter": "tq.send_user_block(sector_name='自选股', stock_list=['300308.SZ'])",
+            "TdxQuant": "TdxQuant.send_user_block('均线金叉', selected, 'overwrite')"
+          }
+        },
+        {
+          "name": "create_sector",
+          "description": "创建自定义板块",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["sector_name"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "tq.create_sector(sector_name='我的板块')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "delete_sector",
+          "description": "删除自定义板块",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["sector_name"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "tq.delete_sector(sector_name='我的板块')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "rename_sector",
+          "description": "重命名自定义板块",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["old_name", "new_name"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "tq.rename_sector(old_name='旧名', new_name='新名')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "clear_sector",
+          "description": "清空自定义板块",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["sector_name"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "tq.clear_sector(sector_name='我的板块')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_etf_data",
+          "description": "获取ETF数据",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["code"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "etf = TdxQuant.get_etf_data('510300.SH')"
+          }
+        },
+        {
+          "name": "get_trackzs_etf_info",
+          "description": "获取跟踪指数ETF信息",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "return_fields": ["Code", "Name", "NowPrice", "PreClose", "IOPV", "Zgb", "Sz"],
+          "parameters": {
+            "tqcenter": ["zs_code"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "etfs = tq.get_trackzs_etf_info(zs_code='950162.CSI')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_convertible_bond_data",
+          "description": "获取可转债数据",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["code"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "cb = TdxQuant.get_convertible_bond_data('113009.SH')"
+          }
+        },
+        {
+          "name": "get_kzz_info",
+          "description": "获取可转债信息",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "return_fields": ["KZZCode", "HSCode", "ZGPrice", "RestScope", "PutBack", "ForceRedeem", "KZZYj", "ZGValue"],
+          "parameters": {
+            "tqcenter": ["stock_code"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "kzz = tq.get_kzz_info(stock_code='123039.SZ')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "get_futures_data",
+          "description": "获取期货数据",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["code"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "futures = TdxQuant.get_futures_data('IF2606')"
+          }
+        },
+        {
+          "name": "formula_format_data",
+          "description": "格式化数据",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["data"],
+            "TdxQuant": ["data", "format_type"]
+          },
+          "examples": {
+            "tqcenter": "formatted = tq.formula_format_data(data)",
+            "TdxQuant": "formatted = TdxQuant.formula_format_data(df, 'kline')"
+          }
+        },
+        {
+          "name": "formula_set_data",
+          "description": "设置公式数据",
+          "response_time": "30-80ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["stock_code", "stock_data", "stock_period", "count", "dividend_type"],
+            "TdxQuant": ["formatted_data"]
+          },
+          "examples": {
+            "tqcenter": "tq.formula_set_data(stock_code='300308.SZ', stock_data=formatted, stock_period='1d', count=100, dividend_type=1)",
+            "TdxQuant": "TdxQuant.formula_set_data(formatted)"
+          }
+        },
+        {
+          "name": "formula_set_data_info",
+          "description": "设置公式数据信息",
+          "response_time": "30-80ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["stock_code", "stock_period", "count", "dividend_type"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "tq.formula_set_data_info(stock_code='300308.SZ', stock_period='1d', count=100, dividend_type=1)",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "formula_get_data",
+          "description": "获取公式数据",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["formula_name", "formula_arg"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "result = TdxQuant.formula_get_data('MACD', {'SHORT':12, 'LONG':26, 'MID':9})"
+          }
+        },
+        {
+          "name": "formula_process_mul",
+          "description": "批量执行公式（TdxQuant）",
+          "response_time": "100-500ms",
+          "frequency_limit": "≤0.5次/秒，≤500只股票",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["formula_name", "stock_list"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "result = TdxQuant.formula_process_mul('MACD', stock_list=['300308.SZ', '600519.SH'])"
+          }
+        },
+        {
+          "name": "formula_process_mul_zb",
+          "description": "批量计算技术指标",
+          "response_time": "100-500ms",
+          "frequency_limit": "≤0.5次/秒，≤500只股票",
+          "parameters": {
+            "tqcenter": ["formula_name", "formula_arg", "xsflag", "return_count", "return_date", "stock_list", "stock_period", "count", "dividend_type"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "result = tq.formula_process_mul_zb(formula_name='MACD', stock_list=['300308.SZ'], stock_period='1d', count=100)",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "formula_zb",
+          "description": "调用通达信技术指标公式（单只股票，需先调用formula_set_data_info）",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "time_availability": "盘中/盘后",
+          "verified": true,
+          "verified_date": "2026-05-20",
+          "parameters": {
+            "tqcenter": ["formula_name", "formula_arg", "xsflag"],
+            "TdxQuant": []
+          },
+          "parameter_detail": {
+            "formula_name": "公式名称，如MACD/KDJ/RSI/BOLL/MA等",
+            "formula_arg": "公式参数，如MA的参数'5'，默认空串",
+            "xsflag": "小数位数，-1=默认，2=2位小数，6=6位小数"
+          },
+          "prerequisite": "必须先调用 formula_set_data_info 设置数据",
+          "notes": "签名仅3个参数(formula_name, formula_arg, xsflag)，不支持return_count/return_date",
+          "supported_formulas": {
+            "MACD": "返回 DIF/DEA/MACD 三个数组",
+            "KDJ": "返回 K/D/J 三个数组",
+            "RSI": "返回 RSI1/RSI2/RSI3 三个数组",
+            "BOLL": "返回 BOLL/UB/LB 三个数组（需较长历史数据）",
+            "MA": "返回 MA1/MA2/MA3 数组，formula_arg指定周期"
+          },
+          "sample_return": {
+            "MACD": {"DIF": ["-58.23"], "DEA": ["-43.34"], "MACD": ["-29.78"]},
+            "KDJ": {"K": ["46.28"], "D": ["48.07"], "J": ["42.70"]},
+            "RSI": {"RSI1": [null], "RSI2": ["52.19"], "RSI3": ["34.09"]}
+          },
+          "examples": {
+            "tqcenter": "tq.formula_set_data_info(stock_code='600519.SH', stock_period='1d', count=60, dividend_type=1)\nresult = tq.formula_zb(formula_name='MACD', formula_arg='', xsflag=2)",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "formula_exp",
+          "description": "表达式选股",
+          "response_time": "100-500ms",
+          "frequency_limit": "≤1次/秒",
+          "parameters": {
+            "tqcenter": ["expression"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "result = tq.formula_exp('CROSS(MA(C,5), MA(C,10))')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "formula_zb_xg",
+          "description": "指标选股（TdxQuant）",
+          "response_time": "100-500ms",
+          "frequency_limit": "≤1次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["formula_name"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "selected = TdxQuant.formula_zb_xg('MACD')"
+          }
+        },
+        {
+          "name": "formula_zb_xg_exp",
+          "description": "表达式选股（TdxQuant）",
+          "response_time": "100-500ms",
+          "frequency_limit": "≤1次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["expression"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "selected = TdxQuant.formula_zb_xg_exp('CROSS(MA(C,5), MA(C,10))')"
+          }
+        },
+        {
+          "name": "stock_account",
+          "description": "获取资金账户句柄",
+          "response_time": "20-50ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": ["account", "account_type"],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "my_account = tq.stock_account(account='1190008847', account_type='STOCK')",
+            "TdxQuant": ""
+          }
+        },
+        {
+          "name": "query_stock_assets",
+          "description": "查询账户资产",
+          "response_time": "50-100ms",
+          "frequency_limit": "≤5次/秒",
+          "return_fields": ["Currency", "Balance", "Cash", "Asset", "MarketValue", "CurrentEquity", "ProfitLoss"],
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "assets = TdxQuant.query_stock_assets()"
+          }
+        },
+        {
+          "name": "query_stock_positions",
+          "description": "查询持仓",
+          "response_time": "50-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "positions = TdxQuant.query_stock_positions()"
+          }
+        },
+        {
+          "name": "query_stock_orders",
+          "description": "查询委托订单",
+          "response_time": "50-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "orders = TdxQuant.query_stock_orders()"
+          }
+        },
+        {
+          "name": "query_stock_deals",
+          "description": "查询成交记录",
+          "response_time": "50-150ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "deals = TdxQuant.query_stock_deals()"
+          }
+        },
+        {
+          "name": "query_new_purchase_limit",
+          "description": "查询新股申购额度",
+          "response_time": "50-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "limit = TdxQuant.query_new_purchase_limit()"
+          }
+        },
+        {
+          "name": "send_message",
+          "description": "发送消息",
+          "response_time": "50-200ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["content", "type"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "TdxQuant.send_message('策略信号：买入信号触发', 'info')"
+          }
+        },
+        {
+          "name": "send_warn",
+          "description": "发送预警",
+          "response_time": "50-200ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["code", "content", "condition"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "TdxQuant.send_warn('300308.SZ', 'urgent', '涨幅超5%')"
+          }
+        },
+        {
+          "name": "print_to_tdx",
+          "description": "打印到通达信",
+          "response_time": "30-100ms",
+          "frequency_limit": "≤5次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["content"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "TdxQuant.print_to_tdx('分析结果：当前市场处于上升趋势')"
+          }
+        },
+        {
+          "name": "exec_to_tdx",
+          "description": "执行通达信命令",
+          "response_time": "50-500ms",
+          "frequency_limit": "≤2次/秒",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": ["command"]
+          },
+          "examples": {
+            "tqcenter": "",
+            "TdxQuant": "TdxQuant.exec_to_tdx('refresh_data')"
+          }
+        },
+        {
+          "name": "close",
+          "description": "关闭连接",
+          "response_time": "10-50ms",
+          "frequency_limit": "≤1次/会话",
+          "parameters": {
+            "tqcenter": [],
+            "TdxQuant": []
+          },
+          "examples": {
+            "tqcenter": "tq.close()",
+            "TdxQuant": ""
+          }
+        }
+      ]
+    }
+  },
+  "verified_data": {
+    "description": "实测验证的数据接口（2026-05-20）",
+    "test_stock": "600519.SH",
+    "results": [
+      {
+        "data_item": "融资余额（个股）",
+        "interface": "get_gpjy_value",
+        "field": "GP3",
+        "value_index": 0,
+        "unit": "万元",
+        "sample_value": "1906207.88",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "融券余额（个股）",
+        "interface": "get_gpjy_value",
+        "field": "GP3",
+        "value_index": 1,
+        "unit": "万元",
+        "sample_value": "97267.00",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "融资融券余额（个股）",
+        "interface": "get_gpjy_value",
+        "field": "GP3",
+        "formula": "Value[0] + Value[1]",
+        "unit": "万元",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "融资余额（沪深市场）",
+        "interface": "get_scjy_value",
+        "field": "SC1",
+        "value_index": 0,
+        "unit": "万元",
+        "sample_value": "285285376.00",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "融券余额（沪深市场）",
+        "interface": "get_scjy_value",
+        "field": "SC1",
+        "value_index": 1,
+        "unit": "万元",
+        "sample_value": "2109141.75",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "融资换手率",
+        "interface": "get_more_info",
+        "field": "Fzhsl",
+        "unit": "%",
+        "sample_value": "0.02",
+        "time_availability": "盘中/盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "融资买入金额",
+        "interface": "get_more_info",
+        "field": "FzAmo",
+        "unit": "万元",
+        "sample_value": "6992.33",
+        "time_availability": "盘中/盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "市盈率(动态)",
+        "interface": "get_more_info",
+        "field": "DynaPE",
+        "sample_value": "15.22",
+        "time_availability": "盘中/盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "市盈率(TTM)",
+        "interface": "get_more_info",
+        "field": "StaticPE_TTM",
+        "sample_value": "20.03",
+        "time_availability": "盘中/盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "市净率(MRQ)",
+        "interface": "get_more_info",
+        "field": "PB_MRQ",
+        "sample_value": "6.12",
+        "time_availability": "盘中/盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "股息率",
+        "interface": "get_more_info",
+        "field": "DYRatio",
+        "unit": "%",
+        "sample_value": "3.93",
+        "time_availability": "盘中/盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "市盈率(个股)",
+        "interface": "get_gpjy_value",
+        "field": "GP19",
+        "value_index": 0,
+        "sample_value": "73.66",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "市净率(个股)",
+        "interface": "get_gpjy_value",
+        "field": "GP20",
+        "value_index": 0,
+        "sample_value": "0.06",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "股东人数",
+        "interface": "get_gpjy_value",
+        "field": "GP1",
+        "sample_value": "243159.00 (20260331)",
+        "time_availability": "盘后",
+        "note": "仅在季末日期返回数据，非季末日期返回null",
+        "status": "verified"
+      },
+      {
+        "data_item": "主力净流入",
+        "interface": "get_gpjy_value",
+        "field": "GP11",
+        "sample_value": "Value[0]=31122.51, Value[1]=-18250.00 (20260513)",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "大单/小单净额",
+        "interface": "get_gpjy_value",
+        "field": "GP12",
+        "sample_value": "Value[0]=-7750.00, Value[1]=-300.00 (20260511)",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "中单/超大单净额",
+        "interface": "get_gpjy_value",
+        "field": "GP13",
+        "sample_value": "Value[0]=-78.37, Value[1]=-7750.00 (20260511)",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "券商评级",
+        "interface": "get_gpjy_value",
+        "field": "GP45",
+        "sample_value": "Value[0]=4.93, Value[1]=0.00 (20260503)",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "综合评分",
+        "interface": "get_gpjy_value",
+        "field": "GP44",
+        "sample_value": "Value[0]=3.64, Value[1]=0.00 (20260513)",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "总市值",
+        "interface": "get_gpjy_value",
+        "field": "GP16",
+        "sample_value": "Value[0]=168075952.00 (万元) (20260514)",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "股息率",
+        "interface": "get_gpjy_value",
+        "field": "GP21",
+        "sample_value": "Value[0]=3.87 (%) (20260514)",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "量价指标",
+        "interface": "get_gpjy_value",
+        "field": "GP28",
+        "sample_value": "Value[0]=1403.96(量比), Value[1]=108.33(换手率) (20260508)",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "MACD指标",
+        "interface": "formula_zb",
+        "formula_name": "MACD",
+        "sample_value": "DIF=-58.23, DEA=-43.34, MACD=-29.78 (20260513)",
+        "time_availability": "盘中/盘后",
+        "prerequisite": "需先调用formula_set_data_info",
+        "status": "verified"
+      },
+      {
+        "data_item": "KDJ指标",
+        "interface": "formula_zb",
+        "formula_name": "KDJ",
+        "sample_value": "K=46.28, D=48.07, J=42.70",
+        "time_availability": "盘中/盘后",
+        "prerequisite": "需先调用formula_set_data_info",
+        "status": "verified"
+      },
+      {
+        "data_item": "RSI指标",
+        "interface": "formula_zb",
+        "formula_name": "RSI",
+        "sample_value": "RSI2=52.19, RSI3=34.09 (RSI1为null)",
+        "time_availability": "盘中/盘后",
+        "prerequisite": "需先调用formula_set_data_info",
+        "status": "verified"
+      },
+      {
+        "data_item": "MA均线",
+        "interface": "formula_zb",
+        "formula_name": "MA",
+        "sample_value": "MA5=1333.30 (最新值)",
+        "time_availability": "盘中/盘后",
+        "prerequisite": "需先调用formula_set_data_info",
+        "status": "verified"
+      },
+      {
+        "data_item": "批量MACD指标",
+        "interface": "formula_process_mul_zb",
+        "formula_name": "MACD",
+        "sample_value": "DIF=-58.86, DEA=-53.30, MACD=-11.12 (20260519)",
+        "time_availability": "盘中/盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "实时行情快照",
+        "interface": "get_market_snapshot",
+        "sample_value": "Now=1324.30, Volume=43254, Amount=571917.06",
+        "time_availability": "盘中/盘后",
+        "note": "参数是stock_code(单个str)，不是stock_list",
+        "status": "verified"
+      },
+      {
+        "data_item": "板块市盈率TTM",
+        "interface": "get_bkjy_value",
+        "field": "BK5",
+        "sample_value": "Value[0]=97.29, Value[1]=230.80 (881338.SH酿酒 20260514)",
+        "time_availability": "盘后",
+        "note": "参数是stock_list不是block_code",
+        "status": "verified"
+      },
+      {
+        "data_item": "板块市净率MRQ",
+        "interface": "get_bkjy_value",
+        "field": "BK6",
+        "sample_value": "Value[0]=10.98, Value[1]=11.55 (881338.SH酿酒 20260514)",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "股本数据",
+        "interface": "get_gb_info",
+        "sample_value": "Ltgb=1252270208.0, Zgb=1252270208.0 (600519.SH)",
+        "time_availability": "盘后",
+        "note": "date_list必须至少5个日期",
+        "status": "verified"
+      },
+      {
+        "data_item": "所属板块",
+        "interface": "get_relation",
+        "sample_value": "行业=酿酒(881130.SH), 概念=白酒概念(880564.SH), 风格=融资融券",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "下载综合信息文件",
+        "interface": "download_file",
+        "down_type": 4,
+        "sample_value": "下载股票综合信息文件成功",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "下载舆情信息文件",
+        "interface": "download_file",
+        "down_type": 3,
+        "sample_value": "下载最新舆情信息文件成功",
+        "time_availability": "盘后",
+        "status": "verified"
+      },
+      {
+        "data_item": "下载十大股东文件",
+        "interface": "download_file",
+        "down_type": 1,
+        "sample_value": "下载十大股东数据文件[2026]成功",
+        "time_availability": "盘后",
+        "status": "verified"
+      }
+    ],
+    "failed_tests": [
+      {
+        "data_item": "市盈率(个股-专用接口)",
+        "interface": "get_gp_pe",
+        "error": "tqcenter无此方法，仅TdxQuant方式支持",
+        "status": "unavailable_tqcenter"
+      },
+      {
+        "data_item": "市净率(个股-专用接口)",
+        "interface": "get_gp_pb",
+        "error": "tqcenter无此方法，仅TdxQuant方式支持",
+        "status": "unavailable_tqcenter"
+      },
+      {
+        "data_item": "财务数据Fn系列",
+        "interface": "get_financial_data",
+        "error": "TypeError: object of type 'NoneType' has no len() — 接口有bug",
+        "status": "bug"
+      },
+      {
+        "data_item": "个股综合数据",
+        "interface": "get_gp_one_data",
+        "error": "返回null",
+        "status": "unavailable"
+      }
+    ]
+  },
+  "formula_data": {
+    "description": "公式转换支持的数据接口 — 需通过 formula_zb / formula_process_mul_zb 调用通达信公式获取",
+    "categories": {
+      "capital_flow": {
+        "description": "资金流向（6项）",
+        "time_availability": "盘中/盘后",
+        "interface": "formula_zb / formula_process_mul_zb",
+        "items": [
+          {
+            "data_item": "主力净流入",
+            "formula_name": "ZLJE",
+            "formula_code": "超B:=L2_AMO(0,0)/10000.0; 大B:=L2_AMO(1,0)/10000.0; 超S:=L2_AMO(0,1)/10000.0; 大S:=L2_AMO(1,1)/10000.0; 主力净额:(超B+大B)-(超S+大S);",
+            "alt_interface": "get_gpjy_value GP11 Value[0]",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "超大单净流入",
+            "formula_code": "L2_AMO(0,0)/10000.0 - L2_AMO(0,1)/10000.0",
+            "alt_interface": "get_gpjy_value GP13 Value[1]",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "大单净流入",
+            "formula_code": "L2_AMO(1,0)/10000.0 - L2_AMO(1,1)/10000.0",
+            "alt_interface": "get_gpjy_value GP12 Value[0]",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "DDE资金流向",
+            "formula_name": "DDE",
+            "formula_code": "DDX:=BIGORDER(1,2)-BIGORDER(2,2); DDY:=ORDER(1)-ORDER(2); DDZ:=BIGORDER(1,3)-BIGORDER(2,3);",
+            "note": "需在通达信公式管理器中创建DDE自定义公式",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "散户数量变化",
+            "formula_code": "L2_AMO(3,0)/10000.0 - L2_AMO(3,1)/10000.0",
+            "alt_interface": "get_gpjy_value GP11 Value[1]",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "主力控盘度",
+            "formula_name": "ZLKPD",
+            "formula_code": "主力持仓:=EMA(WINNER(CLOSE)*70,3); 散户持仓:=EMA((WINNER(CLOSE*1.1)-WINNER(CLOSE*0.9))*70,3); 主力控盘度:主力持仓/(主力持仓+散户持仓)*100;",
+            "note": "需在通达信公式管理器中创建ZLKPD自定义公式",
+            "unit": "%",
+            "time_availability": "盘中/盘后"
+          }
+        ]
+      },
+      "capital_flow_detail": {
+        "description": "资金流向详情（5类流入/流出）",
+        "time_availability": "盘中/盘后",
+        "interface": "formula_zb / formula_process_mul_zb",
+        "l2_amo_reference": {
+          "L2_AMO(0,0)": "超大单买入金额(元)",
+          "L2_AMO(0,1)": "超大单卖出金额(元)",
+          "L2_AMO(1,0)": "大单买入金额(元)",
+          "L2_AMO(1,1)": "大单卖出金额(元)",
+          "L2_AMO(2,0)": "中单买入金额(元)",
+          "L2_AMO(2,1)": "中单卖出金额(元)",
+          "L2_AMO(3,0)": "小单买入金额(元)",
+          "L2_AMO(3,1)": "小单卖出金额(元)"
+        },
+        "items": [
+          {
+            "data_item": "超大单流入",
+            "formula_code": "L2_AMO(0,0)/10000.0",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "超大单流出",
+            "formula_code": "L2_AMO(0,1)/10000.0",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "大单流入",
+            "formula_code": "L2_AMO(1,0)/10000.0",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "大单流出",
+            "formula_code": "L2_AMO(1,1)/10000.0",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "中单流入",
+            "formula_code": "L2_AMO(2,0)/10000.0",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "中单流出",
+            "formula_code": "L2_AMO(2,1)/10000.0",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "小单流入",
+            "formula_code": "L2_AMO(3,0)/10000.0",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "小单流出",
+            "formula_code": "L2_AMO(3,1)/10000.0",
+            "unit": "万元",
+            "time_availability": "盘中/盘后"
+          }
+        ],
+        "custom_formula_example": {
+          "formula_name": "ZLJE",
+          "formula_code": "超B:=L2_AMO(0,0)/10000.0; 大B:=L2_AMO(1,0)/10000.0; 中B:=L2_AMO(2,0)/10000.0; 小B:=L2_AMO(3,0)/10000.0; 超S:=L2_AMO(0,1)/10000.0; 大S:=L2_AMO(1,1)/10000.0; 中S:=L2_AMO(2,1)/10000.0; 小S:=L2_AMO(3,1)/10000.0; 主力净额:(超B+大B)-(超S+大S);",
+          "python_example": "result = tq.formula_process_mul_zb(formula_name='ZLJE', formula_arg='', xsflag=6, return_count=2, return_date=True, stock_list=['600519.SH'], stock_period='1d', count=-1, start_time='20260401', end_time='20260520', dividend_type=1)"
+        }
+      },
+      "avg_shares_per_holder": {
+        "description": "户均持股",
+        "time_availability": "盘后",
+        "interface": "get_gb_info + get_gpjy_value GP1",
+        "formula": "户均持股(股) = 流通股本(股) / 股东人数(户)",
+        "steps": [
+          "1. get_gb_info(stock_code='600519.SH') → 获取 Ltgb(流通股本)",
+          "2. get_gpjy_value(field_list=['GP1']) → 获取股东人数",
+          "3. 计算: 户均持股 = Ltgb / GP1"
+        ],
+        "python_example": "gb = tq.get_gb_info(stock_code='600519.SH', date_list=['20260513'], count=1)\ngp = tq.get_gpjy_value(stock_list=['600519.SH'], field_list=['GP1'], start_time='20260513', end_time='20260513')\nltgb = gb['600519.SH']['Ltgb']  # 流通股本(万股)\nholders = gp['600519.SH']['GP1'][-1]['Value']  # 股东人数\navg_shares = float(ltgb) * 10000 / float(holders)  # 户均持股(股)"
+      }
+    }
+  },
+  "partial_support_data": {
+    "description": "部分支持的数据接口 — 有替代方案但非直接API",
+    "categories": {
+      "dragon_tiger": {
+        "description": "龙虎榜数据",
+        "time_availability": "盘后",
+        "items": [
+          {
+            "data_item": "龙虎榜数据",
+            "interface": "download_file",
+            "down_type": 4,
+            "down_type_desc": "股票综合信息文件",
+            "note": "综合信息文件可能包含龙虎榜摘要，但非结构化数据",
+            "coverage": "部分",
+            "alternative": "东方财富网爬虫 / 第三方数据源",
+            "python_example": "tq.download_file(stock_code='300308.SZ', down_time='20260515', down_type=4)"
+          },
+          {
+            "data_item": "龙虎榜买卖明细",
+            "interface": "无直接API",
+            "coverage": "不支持",
+            "alternative": "东方财富网爬虫 / 同花顺iFinD"
+          },
+          {
+            "data_item": "营业部买卖",
+            "interface": "无直接API",
+            "coverage": "不支持",
+            "alternative": "东方财富网爬虫 / 同花顺iFinD"
+          }
+        ]
+      },
+      "margin_trading": {
+        "description": "融资融券数据（已验证）",
+        "time_availability": "盘后",
+        "items": [
+          {
+            "data_item": "融资余额(个股)",
+            "interface": "get_gpjy_value",
+            "field": "GP3",
+            "value_index": 0,
+            "unit": "万元",
+            "coverage": "完全支持",
+            "time_availability": "盘后"
+          },
+          {
+            "data_item": "融券余额(个股)",
+            "interface": "get_gpjy_value",
+            "field": "GP3",
+            "value_index": 1,
+            "unit": "万元",
+            "coverage": "完全支持",
+            "time_availability": "盘后"
+          },
+          {
+            "data_item": "融资余额(沪深)",
+            "interface": "get_scjy_value",
+            "field": "SC1",
+            "value_index": 0,
+            "unit": "万元",
+            "coverage": "完全支持",
+            "time_availability": "盘后"
+          },
+          {
+            "data_item": "融券余额(沪深)",
+            "interface": "get_scjy_value",
+            "field": "SC1",
+            "value_index": 1,
+            "unit": "万元",
+            "coverage": "完全支持",
+            "time_availability": "盘后"
+          },
+          {
+            "data_item": "融资换手率",
+            "interface": "get_more_info",
+            "field": "Fzhsl",
+            "coverage": "完全支持",
+            "time_availability": "盘中/盘后"
+          },
+          {
+            "data_item": "融资买入金额",
+            "interface": "get_more_info",
+            "field": "FzAmo",
+            "unit": "万元",
+            "coverage": "完全支持",
+            "time_availability": "盘中/盘后"
+          }
+        ]
+      },
+      "abnormal_monitor": {
+        "description": "异动监控",
+        "time_availability": "盘中",
+        "items": [
+          {
+            "data_item": "盘中异动",
+            "interface": "subscribe_hq + 自行判断逻辑",
+            "note": "TDXQuant无现成异动接口，需订阅实时行情后自行编写异动判断",
+            "coverage": "需自研",
+            "implementation": [
+              "1. subscribe_hq(stock_list=watch_list) 订阅实时行情",
+              "2. 在回调中判断: 涨幅>3%、成交量突增(量比>2)、快速拉升等",
+              "3. 触发条件时推送预警"
+            ],
+            "time_availability": "盘中"
+          },
+          {
+            "data_item": "大宗交易",
+            "interface": "download_file",
+            "down_type": 4,
+            "down_type_desc": "股票综合信息文件",
+            "note": "综合信息文件可能包含大宗交易摘要",
+            "coverage": "部分",
+            "time_availability": "盘后"
+          },
+          {
+            "data_item": "股东增减持",
+            "interface": "download_file",
+            "down_type": 1,
+            "down_type_desc": "十大股东数据文件",
+            "alt_interface": "get_gpjy_value GP1 对比多期数据",
+            "note": "可通过对比不同期股东人数变化间接判断",
+            "coverage": "部分",
+            "time_availability": "盘后"
+          }
+        ]
+      },
+      "research_report": {
+        "description": "研报资讯",
+        "time_availability": "盘后",
+        "items": [
+          {
+            "data_item": "券商评级",
+            "interface": "get_gpjy_value",
+            "field": "GP45",
+            "note": "GP45返回机构评级数值，非完整研报",
+            "coverage": "部分",
+            "time_availability": "盘后"
+          },
+          {
+            "data_item": "机构调研",
+            "interface": "无直接API",
+            "coverage": "不支持",
+            "alternative": "东方财富Choice / 同花顺iFinD"
+          }
+        ]
+      },
+      "announcement": {
+        "description": "公告数据",
+        "time_availability": "盘后",
+        "items": [
+          {
+            "data_item": "公告查询",
+            "interface": "download_file",
+            "down_type": 4,
+            "down_type_desc": "股票综合信息文件",
+            "note": "综合信息文件可能包含公告摘要，但无法获取完整公告文本",
+            "coverage": "部分",
+            "time_availability": "盘后"
+          },
+          {
+            "data_item": "重要公告",
+            "interface": "download_file",
+            "down_type": 4,
+            "down_type_desc": "股票综合信息文件",
+            "note": "get_more_info 中 RecentGGJYDate/RecentReleaseDate 等字段可获取最近公告日期",
+            "coverage": "部分",
+            "time_availability": "盘后"
+          }
+        ]
+      }
+    }
+  }
+}

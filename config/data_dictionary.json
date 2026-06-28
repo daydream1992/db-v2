@@ -1,0 +1,3727 @@
+{
+  "_meta": {
+    "version": "1.1",
+    "generated_at": "2026-06-27T03:15:31",
+    "note": "SSOT - 数据字典. 字段中文来源: 脚本FIELD_MAP(ast) > DB dim表 > TODO"
+  },
+  "stock_kline_1m": {
+    "cn": "股票分钟K线1m",
+    "source_script": "1_入库/080_stock_kline_1m.py",
+    "dir": "1_入库",
+    "sort": "080",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "二进制",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "open",
+        "type": "DOUBLE",
+        "cn": "今开",
+        "note": ""
+      },
+      {
+        "name": "high",
+        "type": "DOUBLE",
+        "cn": "最高",
+        "note": ""
+      },
+      {
+        "name": "low",
+        "type": "DOUBLE",
+        "cn": "最低",
+        "note": ""
+      },
+      {
+        "name": "close",
+        "type": "DOUBLE",
+        "cn": "收盘价",
+        "note": ""
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": ""
+      },
+      {
+        "name": "amount",
+        "type": "DOUBLE",
+        "cn": "成交额",
+        "note": ""
+      },
+      {
+        "name": "trade_time",
+        "type": "TIMESTAMP",
+        "cn": "交易时间",
+        "note": ""
+      }
+    ]
+  },
+  "stock_kline_5m": {
+    "cn": "股票分钟K线5m",
+    "source_script": "1_入库/081_stock_kline_5m.py",
+    "dir": "1_入库",
+    "sort": "081",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "二进制",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "trade_time",
+        "type": "TIMESTAMP",
+        "cn": "交易时间",
+        "note": ""
+      },
+      {
+        "name": "open",
+        "type": "DOUBLE",
+        "cn": "今开",
+        "note": ""
+      },
+      {
+        "name": "high",
+        "type": "DOUBLE",
+        "cn": "最高",
+        "note": ""
+      },
+      {
+        "name": "low",
+        "type": "DOUBLE",
+        "cn": "最低",
+        "note": ""
+      },
+      {
+        "name": "close",
+        "type": "DOUBLE",
+        "cn": "收盘价",
+        "note": ""
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": ""
+      },
+      {
+        "name": "amount",
+        "type": "DOUBLE",
+        "cn": "成交额",
+        "note": ""
+      }
+    ]
+  },
+  "sjb_api_plhqL2kz_88zd": {
+    "cn": "L2快照88字段",
+    "source_script": "1_入库/101_jb_api_plhqL2kz_88zd.py",
+    "dir": "1_入库",
+    "sort": "101",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "tqcenter",
+    "note": "",
+    "columns": [
+      {
+        "name": "MainBusiness",
+        "type": "VARCHAR",
+        "cn": "主营构成",
+        "note": ""
+      },
+      {
+        "name": "SafeValue",
+        "type": "VARCHAR",
+        "cn": "安全值",
+        "note": ""
+      },
+      {
+        "name": "ShineValue",
+        "type": "VARCHAR",
+        "cn": "发光值",
+        "note": ""
+      },
+      {
+        "name": "ShapeValue",
+        "type": "VARCHAR",
+        "cn": "形状值",
+        "note": ""
+      },
+      {
+        "name": "TPFlag",
+        "type": "VARCHAR",
+        "cn": "T+0标志",
+        "note": ""
+      },
+      {
+        "name": "ZTPrice",
+        "type": "VARCHAR",
+        "cn": "涨停价",
+        "note": ""
+      },
+      {
+        "name": "DTPrice",
+        "type": "VARCHAR",
+        "cn": "跌停价",
+        "note": ""
+      },
+      {
+        "name": "HqDate",
+        "type": "VARCHAR",
+        "cn": "行情日期",
+        "note": ""
+      },
+      {
+        "name": "fHSL",
+        "type": "VARCHAR",
+        "cn": "换手率%",
+        "note": ""
+      },
+      {
+        "name": "fLianB",
+        "type": "VARCHAR",
+        "cn": "连板天数",
+        "note": ""
+      },
+      {
+        "name": "Wtb",
+        "type": "VARCHAR",
+        "cn": "委比",
+        "note": ""
+      },
+      {
+        "name": "Zsz",
+        "type": "VARCHAR",
+        "cn": "总市值_万",
+        "note": ""
+      },
+      {
+        "name": "Ltsz",
+        "type": "VARCHAR",
+        "cn": "流通市值_万",
+        "note": ""
+      },
+      {
+        "name": "vzangsu",
+        "type": "VARCHAR",
+        "cn": "涨速",
+        "note": ""
+      },
+      {
+        "name": "Fzhsl",
+        "type": "VARCHAR",
+        "cn": "振幅%",
+        "note": ""
+      },
+      {
+        "name": "FzAmo",
+        "type": "VARCHAR",
+        "cn": "成交金额_万",
+        "note": ""
+      },
+      {
+        "name": "VOpenZAF",
+        "type": "VARCHAR",
+        "cn": "抢筹涨幅%",
+        "note": ""
+      },
+      {
+        "name": "ZAF",
+        "type": "VARCHAR",
+        "cn": "日涨跌幅%",
+        "note": ""
+      },
+      {
+        "name": "ZAFYesterday",
+        "type": "VARCHAR",
+        "cn": "昨日涨跌幅%",
+        "note": ""
+      },
+      {
+        "name": "ZAFPre2D",
+        "type": "VARCHAR",
+        "cn": "前2日涨跌幅%",
+        "note": ""
+      },
+      {
+        "name": "ZAFPre5",
+        "type": "VARCHAR",
+        "cn": "近5日涨跌幅%",
+        "note": ""
+      },
+      {
+        "name": "ZAFPre10",
+        "type": "VARCHAR",
+        "cn": "近10日涨跌幅%",
+        "note": ""
+      },
+      {
+        "name": "ZAFPre20",
+        "type": "VARCHAR",
+        "cn": "近20日涨跌幅%",
+        "note": ""
+      },
+      {
+        "name": "ZAFPre30",
+        "type": "VARCHAR",
+        "cn": "近30日涨跌幅%",
+        "note": ""
+      },
+      {
+        "name": "ZAFPre60",
+        "type": "VARCHAR",
+        "cn": "近60日涨跌幅%",
+        "note": ""
+      },
+      {
+        "name": "ZAFYear",
+        "type": "VARCHAR",
+        "cn": "近一年涨跌幅%",
+        "note": ""
+      },
+      {
+        "name": "ZAFPreMyMonth",
+        "type": "VARCHAR",
+        "cn": "近一月涨跌幅%",
+        "note": ""
+      },
+      {
+        "name": "ZAFPreOneYear",
+        "type": "VARCHAR",
+        "cn": "近一年涨幅2%",
+        "note": ""
+      },
+      {
+        "name": "Zjl",
+        "type": "VARCHAR",
+        "cn": "主买净额_万",
+        "note": ""
+      },
+      {
+        "name": "Zjl_HB",
+        "type": "VARCHAR",
+        "cn": "主力净流入_万",
+        "note": ""
+      },
+      {
+        "name": "TotalBVol",
+        "type": "VARCHAR",
+        "cn": "总买量",
+        "note": ""
+      },
+      {
+        "name": "TotalSVol",
+        "type": "VARCHAR",
+        "cn": "总卖量",
+        "note": ""
+      },
+      {
+        "name": "BCancel",
+        "type": "VARCHAR",
+        "cn": "买撤单笔数",
+        "note": ""
+      },
+      {
+        "name": "SCancel",
+        "type": "VARCHAR",
+        "cn": "卖撤单笔数",
+        "note": ""
+      },
+      {
+        "name": "L2TicNum",
+        "type": "VARCHAR",
+        "cn": "L2逐笔成交数",
+        "note": ""
+      },
+      {
+        "name": "L2OrderNum",
+        "type": "VARCHAR",
+        "cn": "L2逐笔委托数",
+        "note": ""
+      },
+      {
+        "name": "FCAmo",
+        "type": "VARCHAR",
+        "cn": "主买成交额_万",
+        "note": ""
+      },
+      {
+        "name": "FCb",
+        "type": "VARCHAR",
+        "cn": "封单比",
+        "note": ""
+      },
+      {
+        "name": "OpenZAF",
+        "type": "VARCHAR",
+        "cn": "开盘涨跌幅%",
+        "note": ""
+      },
+      {
+        "name": "OpenAmo",
+        "type": "VARCHAR",
+        "cn": "开盘金额",
+        "note": ""
+      },
+      {
+        "name": "OpenZTBuy",
+        "type": "VARCHAR",
+        "cn": "开盘涨停买入",
+        "note": ""
+      },
+      {
+        "name": "OpenAmoPre1",
+        "type": "VARCHAR",
+        "cn": "昨日开盘金额",
+        "note": ""
+      },
+      {
+        "name": "OpenVolPre1",
+        "type": "VARCHAR",
+        "cn": "昨日开盘量",
+        "note": ""
+      },
+      {
+        "name": "CJJEPre1",
+        "type": "VARCHAR",
+        "cn": "昨日成交金额",
+        "note": ""
+      },
+      {
+        "name": "CJJEPre3",
+        "type": "VARCHAR",
+        "cn": "前3日成交金额",
+        "note": ""
+      },
+      {
+        "name": "FDEPre1",
+        "type": "VARCHAR",
+        "cn": "昨日封单额",
+        "note": ""
+      },
+      {
+        "name": "FDEPre2",
+        "type": "VARCHAR",
+        "cn": "前2日封单额",
+        "note": ""
+      },
+      {
+        "name": "ZTGPNum",
+        "type": "VARCHAR",
+        "cn": "板块内涨停个股数",
+        "note": ""
+      },
+      {
+        "name": "LastStartZT",
+        "type": "VARCHAR",
+        "cn": "首次涨停时间",
+        "note": ""
+      },
+      {
+        "name": "LastZTHzNum",
+        "type": "VARCHAR",
+        "cn": "连板数",
+        "note": ""
+      },
+      {
+        "name": "EverZTCount",
+        "type": "VARCHAR",
+        "cn": "历史涨停次数",
+        "note": ""
+      },
+      {
+        "name": "ConZAFDateNum",
+        "type": "VARCHAR",
+        "cn": "连涨天数",
+        "note": ""
+      },
+      {
+        "name": "YearZTDay",
+        "type": "VARCHAR",
+        "cn": "近一年涨停天数",
+        "note": ""
+      },
+      {
+        "name": "MA5Value",
+        "type": "VARCHAR",
+        "cn": "MA5均线值",
+        "note": ""
+      },
+      {
+        "name": "HisHigh",
+        "type": "VARCHAR",
+        "cn": "历史最高价",
+        "note": ""
+      },
+      {
+        "name": "HisLow",
+        "type": "VARCHAR",
+        "cn": "历史最低价",
+        "note": ""
+      },
+      {
+        "name": "IPO_Price",
+        "type": "VARCHAR",
+        "cn": "IPO发行价",
+        "note": ""
+      },
+      {
+        "name": "More_YJL",
+        "type": "VARCHAR",
+        "cn": "业绩预告",
+        "note": ""
+      },
+      {
+        "name": "BetaValue",
+        "type": "VARCHAR",
+        "cn": "Beta系数",
+        "note": ""
+      },
+      {
+        "name": "DynaPE",
+        "type": "VARCHAR",
+        "cn": "动态市盈率",
+        "note": ""
+      },
+      {
+        "name": "MorePE",
+        "type": "VARCHAR",
+        "cn": "更多PE",
+        "note": ""
+      },
+      {
+        "name": "StaticPE_TTM",
+        "type": "VARCHAR",
+        "cn": "静态PE_TTM",
+        "note": ""
+      },
+      {
+        "name": "DYRatio",
+        "type": "VARCHAR",
+        "cn": "股息率",
+        "note": ""
+      },
+      {
+        "name": "PB_MRQ",
+        "type": "VARCHAR",
+        "cn": "市净率",
+        "note": ""
+      },
+      {
+        "name": "IsT0Fund",
+        "type": "VARCHAR",
+        "cn": "是否T+0基金",
+        "note": ""
+      },
+      {
+        "name": "IsZCZGP",
+        "type": "VARCHAR",
+        "cn": "是否中概股",
+        "note": ""
+      },
+      {
+        "name": "IsKzz",
+        "type": "VARCHAR",
+        "cn": "是否可转债",
+        "note": ""
+      },
+      {
+        "name": "Kzz_HSCode",
+        "type": "VARCHAR",
+        "cn": "可转债沪市代码",
+        "note": ""
+      },
+      {
+        "name": "QHMainYYMM",
+        "type": "VARCHAR",
+        "cn": "期货主力合约月份",
+        "note": ""
+      },
+      {
+        "name": "FreeLtgb",
+        "type": "VARCHAR",
+        "cn": "自由流通股本",
+        "note": ""
+      },
+      {
+        "name": "Yield",
+        "type": "VARCHAR",
+        "cn": "收益率",
+        "note": ""
+      },
+      {
+        "name": "KfEarnMoney",
+        "type": "VARCHAR",
+        "cn": "可赚钱",
+        "note": ""
+      },
+      {
+        "name": "RDInputFee",
+        "type": "VARCHAR",
+        "cn": "研发投入费用",
+        "note": ""
+      },
+      {
+        "name": "CashZJ",
+        "type": "VARCHAR",
+        "cn": "现金资金",
+        "note": ""
+      },
+      {
+        "name": "PreReceiveZJ",
+        "type": "VARCHAR",
+        "cn": "预收资金",
+        "note": ""
+      },
+      {
+        "name": "OtherQYJzc",
+        "type": "VARCHAR",
+        "cn": "其他权益净资产",
+        "note": ""
+      },
+      {
+        "name": "StaffNum",
+        "type": "VARCHAR",
+        "cn": "员工人数",
+        "note": ""
+      },
+      {
+        "name": "RecentGGJYDate",
+        "type": "VARCHAR",
+        "cn": "最近股权激励日期",
+        "note": ""
+      },
+      {
+        "name": "RecentHGDate",
+        "type": "VARCHAR",
+        "cn": "最近回购日期",
+        "note": ""
+      },
+      {
+        "name": "RecentIncentDate",
+        "type": "VARCHAR",
+        "cn": "最近激励日期",
+        "note": ""
+      },
+      {
+        "name": "NoticeDate_Recent",
+        "type": "VARCHAR",
+        "cn": "最近公告日期",
+        "note": ""
+      },
+      {
+        "name": "RecentReleaseDate",
+        "type": "VARCHAR",
+        "cn": "最近解禁日期",
+        "note": ""
+      },
+      {
+        "name": "RecentDZDate",
+        "type": "VARCHAR",
+        "cn": "最近大宗交易日期",
+        "note": ""
+      },
+      {
+        "name": "ReportDate",
+        "type": "VARCHAR",
+        "cn": "报告期",
+        "note": ""
+      },
+      {
+        "name": "ZTDate_Recent",
+        "type": "VARCHAR",
+        "cn": "最近涨停日期",
+        "note": ""
+      },
+      {
+        "name": "DTDate_Recent",
+        "type": "VARCHAR",
+        "cn": "最近跌停日期",
+        "note": ""
+      },
+      {
+        "name": "TopDate_Recent",
+        "type": "VARCHAR",
+        "cn": "最近创新高日期",
+        "note": ""
+      },
+      {
+        "name": "StopJYDate_Recent",
+        "type": "VARCHAR",
+        "cn": "最近停牌日期",
+        "note": ""
+      },
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "股票代码",
+        "note": ""
+      },
+      {
+        "name": "stock_type",
+        "type": "VARCHAR",
+        "cn": "标的类型",
+        "note": ""
+      },
+      {
+        "name": "fetch_time",
+        "type": "VARCHAR",
+        "cn": "查询时间",
+        "note": ""
+      }
+    ]
+  },
+  "stock_financial_data": {
+    "cn": "股票专业财务数据(2026季度)",
+    "source_script": "1_入库/104_stock_financial_data.py",
+    "dir": "1_入库",
+    "sort": "104",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "API(TQ:get_financial_data)",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "announce_time",
+        "type": "BIGINT",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "tag_time",
+        "type": "BIGINT",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "FN1",
+        "type": "DOUBLE",
+        "cn": "基本每股收益",
+        "note": ""
+      },
+      {
+        "name": "FN2",
+        "type": "DOUBLE",
+        "cn": "扣非每股收益",
+        "note": ""
+      },
+      {
+        "name": "FN3",
+        "type": "DOUBLE",
+        "cn": "每股未分配利润",
+        "note": ""
+      },
+      {
+        "name": "FN4",
+        "type": "DOUBLE",
+        "cn": "每股净资产",
+        "note": ""
+      },
+      {
+        "name": "FN5",
+        "type": "DOUBLE",
+        "cn": "每股资本公积金",
+        "note": ""
+      },
+      {
+        "name": "FN6",
+        "type": "DOUBLE",
+        "cn": "净资产收益率",
+        "note": ""
+      },
+      {
+        "name": "FN7",
+        "type": "DOUBLE",
+        "cn": "每股经营现金流量",
+        "note": ""
+      },
+      {
+        "name": "FN8",
+        "type": "DOUBLE",
+        "cn": "货币资金",
+        "note": ""
+      },
+      {
+        "name": "FN17",
+        "type": "DOUBLE",
+        "cn": "存货",
+        "note": ""
+      },
+      {
+        "name": "FN21",
+        "type": "DOUBLE",
+        "cn": "流动资产合计",
+        "note": ""
+      },
+      {
+        "name": "FN27",
+        "type": "DOUBLE",
+        "cn": "固定资产",
+        "note": ""
+      },
+      {
+        "name": "FN28",
+        "type": "DOUBLE",
+        "cn": "在建工程",
+        "note": ""
+      },
+      {
+        "name": "FN33",
+        "type": "DOUBLE",
+        "cn": "无形资产",
+        "note": ""
+      },
+      {
+        "name": "FN35",
+        "type": "DOUBLE",
+        "cn": "商誉",
+        "note": ""
+      },
+      {
+        "name": "FN39",
+        "type": "DOUBLE",
+        "cn": "非流动资产合计",
+        "note": ""
+      },
+      {
+        "name": "FN40",
+        "type": "DOUBLE",
+        "cn": "资产总计",
+        "note": ""
+      },
+      {
+        "name": "FN41",
+        "type": "DOUBLE",
+        "cn": "短期借款",
+        "note": ""
+      },
+      {
+        "name": "FN54",
+        "type": "DOUBLE",
+        "cn": "流动负债合计",
+        "note": ""
+      },
+      {
+        "name": "FN55",
+        "type": "DOUBLE",
+        "cn": "长期借款",
+        "note": ""
+      },
+      {
+        "name": "FN62",
+        "type": "DOUBLE",
+        "cn": "非流动负债合计",
+        "note": ""
+      },
+      {
+        "name": "FN63",
+        "type": "DOUBLE",
+        "cn": "负债合计",
+        "note": ""
+      },
+      {
+        "name": "FN64",
+        "type": "DOUBLE",
+        "cn": "实收资本",
+        "note": ""
+      },
+      {
+        "name": "FN65",
+        "type": "DOUBLE",
+        "cn": "资本公积",
+        "note": ""
+      },
+      {
+        "name": "FN66",
+        "type": "DOUBLE",
+        "cn": "盈余公积",
+        "note": ""
+      },
+      {
+        "name": "FN68",
+        "type": "DOUBLE",
+        "cn": "未分配利润",
+        "note": ""
+      },
+      {
+        "name": "FN72",
+        "type": "DOUBLE",
+        "cn": "所有者权益合计",
+        "note": ""
+      },
+      {
+        "name": "FN134",
+        "type": "DOUBLE",
+        "cn": "净利润",
+        "note": ""
+      },
+      {
+        "name": "FN207",
+        "type": "DOUBLE",
+        "cn": "息税前利润EBIT",
+        "note": ""
+      },
+      {
+        "name": "FN208",
+        "type": "DOUBLE",
+        "cn": "息税折旧摊销前利润EBITDA",
+        "note": ""
+      },
+      {
+        "name": "FN230",
+        "type": "DOUBLE",
+        "cn": "营业收入",
+        "note": ""
+      },
+      {
+        "name": "FN231",
+        "type": "DOUBLE",
+        "cn": "营业利润",
+        "note": ""
+      },
+      {
+        "name": "FN232",
+        "type": "DOUBLE",
+        "cn": "归母净利润",
+        "note": ""
+      },
+      {
+        "name": "FN233",
+        "type": "DOUBLE",
+        "cn": "扣非净利润",
+        "note": ""
+      },
+      {
+        "name": "FN304",
+        "type": "DOUBLE",
+        "cn": "研发费用",
+        "note": ""
+      },
+      {
+        "name": "FN234",
+        "type": "DOUBLE",
+        "cn": "经营活动现金流量净额",
+        "note": ""
+      },
+      {
+        "name": "FN235",
+        "type": "DOUBLE",
+        "cn": "投资活动现金流量净额",
+        "note": ""
+      },
+      {
+        "name": "FN236",
+        "type": "DOUBLE",
+        "cn": "筹资活动现金流量净额",
+        "note": ""
+      },
+      {
+        "name": "FN133",
+        "type": "DOUBLE",
+        "cn": "期末现金及现金等价物余额",
+        "note": ""
+      },
+      {
+        "name": "FN219",
+        "type": "DOUBLE",
+        "cn": "每股经营性现金流",
+        "note": ""
+      },
+      {
+        "name": "FN225",
+        "type": "DOUBLE",
+        "cn": "每股现金流量净额",
+        "note": ""
+      },
+      {
+        "name": "FN238",
+        "type": "DOUBLE",
+        "cn": "总股本",
+        "note": ""
+      },
+      {
+        "name": "FN281",
+        "type": "DOUBLE",
+        "cn": "加权净资产收益率",
+        "note": ""
+      },
+      {
+        "name": "FN311",
+        "type": "DOUBLE",
+        "cn": "基本每股收益_单季度",
+        "note": ""
+      },
+      {
+        "name": "FN312",
+        "type": "DOUBLE",
+        "cn": "营业总收入_单季度",
+        "note": ""
+      },
+      {
+        "name": "FN324",
+        "type": "DOUBLE",
+        "cn": "净利润_单季度",
+        "note": ""
+      },
+      {
+        "name": "fetch_time",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      }
+    ]
+  },
+  "market_snapshot": {
+    "cn": "市场快照数据",
+    "source_script": "1_入库/105_market_snapshot.py",
+    "dir": "1_入库",
+    "sort": "105",
+    "schedule": "intraday",
+    "mode": "increment",
+    "source": "tqcenter",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "snapshot_time",
+        "type": "TIMESTAMP",
+        "cn": "快照时间",
+        "note": ""
+      },
+      {
+        "name": "LastClose",
+        "type": "DOUBLE",
+        "cn": "前收盘价",
+        "note": ""
+      },
+      {
+        "name": "Open",
+        "type": "DOUBLE",
+        "cn": "开盘价",
+        "note": ""
+      },
+      {
+        "name": "Max",
+        "type": "DOUBLE",
+        "cn": "最高价",
+        "note": ""
+      },
+      {
+        "name": "Min",
+        "type": "DOUBLE",
+        "cn": "最低价",
+        "note": ""
+      },
+      {
+        "name": "Now",
+        "type": "DOUBLE",
+        "cn": "现价",
+        "note": ""
+      },
+      {
+        "name": "Volume",
+        "type": "INTEGER",
+        "cn": "总手",
+        "note": ""
+      },
+      {
+        "name": "NowVol",
+        "type": "INTEGER",
+        "cn": "现手",
+        "note": ""
+      },
+      {
+        "name": "Amount",
+        "type": "DOUBLE",
+        "cn": "总成交金额",
+        "note": ""
+      },
+      {
+        "name": "Inside",
+        "type": "INTEGER",
+        "cn": "内盘",
+        "note": ""
+      },
+      {
+        "name": "Outside",
+        "type": "INTEGER",
+        "cn": "外盘",
+        "note": ""
+      },
+      {
+        "name": "TickDiff",
+        "type": "DOUBLE",
+        "cn": "笔涨跌",
+        "note": ""
+      },
+      {
+        "name": "InOutFlag",
+        "type": "INTEGER",
+        "cn": "内外盘标志",
+        "note": ""
+      },
+      {
+        "name": "Jjjz",
+        "type": "DOUBLE",
+        "cn": "基金净值",
+        "note": ""
+      },
+      {
+        "name": "Buyp1",
+        "type": "DOUBLE",
+        "cn": "买一价",
+        "note": ""
+      },
+      {
+        "name": "Buyp2",
+        "type": "DOUBLE",
+        "cn": "买二价",
+        "note": ""
+      },
+      {
+        "name": "Buyp3",
+        "type": "DOUBLE",
+        "cn": "买三价",
+        "note": ""
+      },
+      {
+        "name": "Buyp4",
+        "type": "DOUBLE",
+        "cn": "买四价",
+        "note": ""
+      },
+      {
+        "name": "Buyp5",
+        "type": "DOUBLE",
+        "cn": "买五价",
+        "note": ""
+      },
+      {
+        "name": "Buyv1",
+        "type": "INTEGER",
+        "cn": "买一量",
+        "note": ""
+      },
+      {
+        "name": "Buyv2",
+        "type": "INTEGER",
+        "cn": "买二量",
+        "note": ""
+      },
+      {
+        "name": "Buyv3",
+        "type": "INTEGER",
+        "cn": "买三量",
+        "note": ""
+      },
+      {
+        "name": "Buyv4",
+        "type": "INTEGER",
+        "cn": "买四量",
+        "note": ""
+      },
+      {
+        "name": "Buyv5",
+        "type": "INTEGER",
+        "cn": "买五量",
+        "note": ""
+      },
+      {
+        "name": "Sellp1",
+        "type": "DOUBLE",
+        "cn": "卖一价",
+        "note": ""
+      },
+      {
+        "name": "Sellp2",
+        "type": "DOUBLE",
+        "cn": "卖二价",
+        "note": ""
+      },
+      {
+        "name": "Sellp3",
+        "type": "DOUBLE",
+        "cn": "卖三价",
+        "note": ""
+      },
+      {
+        "name": "Sellp4",
+        "type": "DOUBLE",
+        "cn": "卖四价",
+        "note": ""
+      },
+      {
+        "name": "Sellp5",
+        "type": "DOUBLE",
+        "cn": "卖五价",
+        "note": ""
+      },
+      {
+        "name": "Sellv1",
+        "type": "INTEGER",
+        "cn": "卖一量",
+        "note": ""
+      },
+      {
+        "name": "Sellv2",
+        "type": "INTEGER",
+        "cn": "卖二量",
+        "note": ""
+      },
+      {
+        "name": "Sellv3",
+        "type": "INTEGER",
+        "cn": "卖三量",
+        "note": ""
+      },
+      {
+        "name": "Sellv4",
+        "type": "INTEGER",
+        "cn": "卖四量",
+        "note": ""
+      },
+      {
+        "name": "Sellv5",
+        "type": "INTEGER",
+        "cn": "卖五量",
+        "note": ""
+      },
+      {
+        "name": "UpHome",
+        "type": "INTEGER",
+        "cn": "上涨家数",
+        "note": ""
+      },
+      {
+        "name": "DownHome",
+        "type": "INTEGER",
+        "cn": "下跌家数",
+        "note": ""
+      },
+      {
+        "name": "Before5MinNow",
+        "type": "DOUBLE",
+        "cn": "5分钟前价格",
+        "note": ""
+      },
+      {
+        "name": "Average",
+        "type": "DOUBLE",
+        "cn": "均价",
+        "note": ""
+      },
+      {
+        "name": "XsFlag",
+        "type": "INTEGER",
+        "cn": "小数位数",
+        "note": ""
+      },
+      {
+        "name": "Zangsu",
+        "type": "DOUBLE",
+        "cn": "涨速",
+        "note": ""
+      },
+      {
+        "name": "ZAFPre3",
+        "type": "DOUBLE",
+        "cn": "3日涨幅",
+        "note": ""
+      }
+    ]
+  },
+  "stock_daily_kline": {
+    "cn": "股票日K线",
+    "source_script": "1_入库/10_stock_daily_kline.py",
+    "dir": "1_入库",
+    "sort": "010",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "二进制",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期（YYYYMMDD）",
+        "note": ""
+      },
+      {
+        "name": "open",
+        "type": "DOUBLE",
+        "cn": "今开",
+        "note": ""
+      },
+      {
+        "name": "high",
+        "type": "DOUBLE",
+        "cn": "最高",
+        "note": ""
+      },
+      {
+        "name": "low",
+        "type": "DOUBLE",
+        "cn": "最低",
+        "note": ""
+      },
+      {
+        "name": "close",
+        "type": "DOUBLE",
+        "cn": "收盘价",
+        "note": ""
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": ""
+      },
+      {
+        "name": "amount",
+        "type": "DOUBLE",
+        "cn": "成交额",
+        "note": ""
+      },
+      {
+        "name": "涨跌幅",
+        "type": "DOUBLE",
+        "cn": "涨跌幅",
+        "note": ""
+      },
+      {
+        "name": "换手率",
+        "type": "INTEGER",
+        "cn": "换手率",
+        "note": ""
+      },
+      {
+        "name": "前复权因子",
+        "type": "INTEGER",
+        "cn": "前复权因子",
+        "note": ""
+      }
+    ]
+  },
+  "capital_info": {
+    "cn": "股本数据(近1年)",
+    "source_script": "1_入库/137_capital_info.py",
+    "dir": "1_入库",
+    "sort": "137",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "tqcenter",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "股票代码(带交易所后缀)",
+        "note": ""
+      },
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期",
+        "note": ""
+      },
+      {
+        "name": "zgb",
+        "type": "DOUBLE",
+        "cn": "总股本(股)",
+        "note": ""
+      },
+      {
+        "name": "ltgb",
+        "type": "DOUBLE",
+        "cn": "流通股本(股)",
+        "note": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "cn": "入库时间",
+        "note": ""
+      }
+    ]
+  },
+  "stock_block_relation": {
+    "cn": "股票板块关系",
+    "source_script": "1_入库/262_stock_block_relation.py",
+    "dir": "1_入库",
+    "sort": "262",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "API(TQ:get_relation)",
+    "note": "",
+    "columns": [
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "股票代码",
+        "note": ""
+      },
+      {
+        "name": "板块代码",
+        "type": "VARCHAR",
+        "cn": "板块代码",
+        "note": ""
+      },
+      {
+        "name": "板块名称",
+        "type": "VARCHAR",
+        "cn": "板块名称",
+        "note": ""
+      },
+      {
+        "name": "板块类型",
+        "type": "VARCHAR",
+        "cn": "板块类型",
+        "note": ""
+      },
+      {
+        "name": "成分股数",
+        "type": "INTEGER",
+        "cn": "成分股数",
+        "note": ""
+      },
+      {
+        "name": "fetch_time",
+        "type": "TIMESTAMP",
+        "cn": "采集时间",
+        "note": ""
+      }
+    ]
+  },
+  "sector_stocks": {
+    "cn": "板块成份股",
+    "source_script": "1_入库/33_sector_stocks.py",
+    "dir": "1_入库",
+    "sort": "033",
+    "schedule": "daily",
+    "mode": "full",
+    "source": "二进制",
+    "note": "",
+    "columns": [
+      {
+        "name": "sector_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      }
+    ]
+  },
+  "t_bk5_19": {
+    "cn": "板块BK交易数据",
+    "source_script": "1_入库/34_t_bk5_19_.py",
+    "dir": "1_入库",
+    "sort": "034",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "二进制",
+    "note": "",
+    "columns": [
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期（YYYYMMDD）",
+        "note": ""
+      },
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "bk_name",
+        "type": "VARCHAR",
+        "cn": "板块指标名",
+        "note": ""
+      },
+      {
+        "name": "pe_ttm",
+        "type": "DOUBLE",
+        "cn": "市盈率TTM",
+        "note": ""
+      },
+      {
+        "name": "pb_mrq",
+        "type": "DOUBLE",
+        "cn": "市净率（MRQ）",
+        "note": ""
+      },
+      {
+        "name": "ps_ttm",
+        "type": "DOUBLE",
+        "cn": "市销率TTM",
+        "note": ""
+      },
+      {
+        "name": "pc_ttm",
+        "type": "DOUBLE",
+        "cn": "市现率TTM",
+        "note": ""
+      },
+      {
+        "name": "涨跌数",
+        "type": "DOUBLE",
+        "cn": "涨跌数",
+        "note": ""
+      },
+      {
+        "name": "总市值",
+        "type": "DOUBLE",
+        "cn": "总市值",
+        "note": ""
+      },
+      {
+        "name": "流通市值",
+        "type": "DOUBLE",
+        "cn": "流通市值",
+        "note": ""
+      },
+      {
+        "name": "涨停数",
+        "type": "DOUBLE",
+        "cn": "涨停数",
+        "note": ""
+      },
+      {
+        "name": "跌停数",
+        "type": "DOUBLE",
+        "cn": "跌停数",
+        "note": ""
+      },
+      {
+        "name": "涨停数据",
+        "type": "DOUBLE",
+        "cn": "涨停数据",
+        "note": ""
+      },
+      {
+        "name": "融资融券",
+        "type": "DOUBLE",
+        "cn": "融资融券",
+        "note": ""
+      },
+      {
+        "name": "陆股通流入",
+        "type": "DOUBLE",
+        "cn": "陆股通流入",
+        "note": ""
+      },
+      {
+        "name": "开盘成交数",
+        "type": "DOUBLE",
+        "cn": "开盘成交数",
+        "note": ""
+      },
+      {
+        "name": "股息率",
+        "type": "DOUBLE",
+        "cn": "股息率",
+        "note": ""
+      },
+      {
+        "name": "自由流通市值",
+        "type": "DOUBLE",
+        "cn": "自由流通市值",
+        "note": ""
+      }
+    ]
+  },
+  "stock_industry_3level": {
+    "cn": "股票行业三级分类",
+    "source_script": "1_入库/35_stock_industry_3level.py",
+    "dir": "1_入库",
+    "sort": "035",
+    "schedule": "weekly",
+    "mode": "full",
+    "source": "API(TQ:get_stock_list+get_stock_list_in_sector)",
+    "note": "",
+    "columns": [
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "股票代码",
+        "note": ""
+      },
+      {
+        "name": "行业一级代码",
+        "type": "VARCHAR",
+        "cn": "行业一级代码",
+        "note": ""
+      },
+      {
+        "name": "行业一级名称",
+        "type": "VARCHAR",
+        "cn": "行业一级名称",
+        "note": ""
+      },
+      {
+        "name": "行业二级代码",
+        "type": "VARCHAR",
+        "cn": "行业二级代码",
+        "note": ""
+      },
+      {
+        "name": "行业二级名称",
+        "type": "VARCHAR",
+        "cn": "行业二级名称",
+        "note": ""
+      },
+      {
+        "name": "行业三级代码",
+        "type": "VARCHAR",
+        "cn": "行业三级代码",
+        "note": ""
+      },
+      {
+        "name": "行业三级名称",
+        "type": "VARCHAR",
+        "cn": "行业三级名称",
+        "note": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "cn": "本批刷新时间",
+        "note": ""
+      }
+    ]
+  },
+  "trading_calendar": {
+    "cn": "交易日历",
+    "source_script": "1_入库/91_trading_calendar.py",
+    "dir": "1_入库",
+    "sort": "091",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "API(TQ)",
+    "note": "",
+    "columns": [
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期（YYYYMMDD）",
+        "note": ""
+      },
+      {
+        "name": "is_trading",
+        "type": "BOOLEAN",
+        "cn": "是否交易日",
+        "note": ""
+      },
+      {
+        "name": "market",
+        "type": "VARCHAR",
+        "cn": "所属市场",
+        "note": ""
+      }
+    ]
+  },
+  "market_sc1_42": {
+    "cn": "市场SC宏观指标",
+    "source_script": "1_入库/92_market_sc1_42.py",
+    "dir": "1_入库",
+    "sort": "092",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "二进制",
+    "note": "",
+    "columns": [
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期（YYYYMMDD）",
+        "note": ""
+      },
+      {
+        "name": "融资融券_融资余额",
+        "type": "DOUBLE",
+        "cn": "融资融券_融资余额",
+        "note": ""
+      },
+      {
+        "name": "融资融券_融券余额",
+        "type": "DOUBLE",
+        "cn": "融资融券_融券余额",
+        "note": ""
+      },
+      {
+        "name": "陆股通资金流入_沪股通流入",
+        "type": "DOUBLE",
+        "cn": "陆股通资金流入_沪股通流入",
+        "note": ""
+      },
+      {
+        "name": "陆股通资金流入_深股通流入",
+        "type": "DOUBLE",
+        "cn": "陆股通资金流入_深股通流入",
+        "note": ""
+      },
+      {
+        "name": "沪深京涨停股个数_涨停股个数",
+        "type": "DOUBLE",
+        "cn": "沪深京涨停股个数_涨停股个数",
+        "note": ""
+      },
+      {
+        "name": "沪深京涨停股个数_曾涨停股个数",
+        "type": "DOUBLE",
+        "cn": "沪深京涨停股个数_曾涨停股个数",
+        "note": ""
+      },
+      {
+        "name": "沪深京跌停股个数_跌停股个数",
+        "type": "DOUBLE",
+        "cn": "沪深京跌停股个数_跌停股个数",
+        "note": ""
+      },
+      {
+        "name": "沪深京跌停股个数_曾跌停股个数",
+        "type": "DOUBLE",
+        "cn": "沪深京跌停股个数_曾跌停股个数",
+        "note": ""
+      },
+      {
+        "name": "上证50股指期货_净持仓",
+        "type": "DOUBLE",
+        "cn": "上证50股指期货_净持仓",
+        "note": ""
+      },
+      {
+        "name": "沪深300股指期货_净持仓",
+        "type": "DOUBLE",
+        "cn": "沪深300股指期货_净持仓",
+        "note": ""
+      },
+      {
+        "name": "中证500股指期货_净持仓",
+        "type": "DOUBLE",
+        "cn": "中证500股指期货_净持仓",
+        "note": ""
+      },
+      {
+        "name": "ETF基金规模份额_ETF规模",
+        "type": "DOUBLE",
+        "cn": "ETF基金规模份额_ETF规模",
+        "note": ""
+      },
+      {
+        "name": "ETF基金规模份额_ETF净申赎",
+        "type": "DOUBLE",
+        "cn": "ETF基金规模份额_ETF净申赎",
+        "note": ""
+      },
+      {
+        "name": "沪月新开A股账户_新开账户",
+        "type": "DOUBLE",
+        "cn": "沪月新开A股账户_新开账户",
+        "note": ""
+      },
+      {
+        "name": "增减持统计_增持额",
+        "type": "DOUBLE",
+        "cn": "增减持统计_增持额",
+        "note": ""
+      },
+      {
+        "name": "增减持统计_减持额",
+        "type": "DOUBLE",
+        "cn": "增减持统计_减持额",
+        "note": ""
+      },
+      {
+        "name": "大宗交易_溢价交易额",
+        "type": "DOUBLE",
+        "cn": "大宗交易_溢价交易额",
+        "note": ""
+      },
+      {
+        "name": "大宗交易_折价交易额",
+        "type": "DOUBLE",
+        "cn": "大宗交易_折价交易额",
+        "note": ""
+      },
+      {
+        "name": "限售解禁_计划额",
+        "type": "DOUBLE",
+        "cn": "限售解禁_计划额",
+        "note": ""
+      },
+      {
+        "name": "限售解禁_实际上市",
+        "type": "DOUBLE",
+        "cn": "限售解禁_实际上市",
+        "note": ""
+      },
+      {
+        "name": "分红_总分红额",
+        "type": "DOUBLE",
+        "cn": "分红_总分红额",
+        "note": ""
+      },
+      {
+        "name": "募资_总募资额",
+        "type": "DOUBLE",
+        "cn": "募资_总募资额",
+        "note": ""
+      },
+      {
+        "name": "打板资金_封板成功",
+        "type": "DOUBLE",
+        "cn": "打板资金_封板成功",
+        "note": ""
+      },
+      {
+        "name": "打板资金_封板失败",
+        "type": "DOUBLE",
+        "cn": "打板资金_封板失败",
+        "note": ""
+      },
+      {
+        "name": "龙虎榜_买入总额",
+        "type": "DOUBLE",
+        "cn": "龙虎榜_买入总额",
+        "note": ""
+      },
+      {
+        "name": "龙虎榜_卖出总额",
+        "type": "DOUBLE",
+        "cn": "龙虎榜_卖出总额",
+        "note": ""
+      },
+      {
+        "name": "龙虎榜机构数据_机构买入",
+        "type": "DOUBLE",
+        "cn": "龙虎榜机构数据_机构买入",
+        "note": ""
+      },
+      {
+        "name": "龙虎榜机构数据_机构卖出",
+        "type": "DOUBLE",
+        "cn": "龙虎榜机构数据_机构卖出",
+        "note": ""
+      },
+      {
+        "name": "龙虎榜营业部数据_营业部买入",
+        "type": "DOUBLE",
+        "cn": "龙虎榜营业部数据_营业部买入",
+        "note": ""
+      },
+      {
+        "name": "龙虎榜营业部数据_营业部卖出",
+        "type": "DOUBLE",
+        "cn": "龙虎榜营业部数据_营业部卖出",
+        "note": ""
+      },
+      {
+        "name": "龙虎榜沪深股通数据_沪深股通买入",
+        "type": "DOUBLE",
+        "cn": "龙虎榜沪深股通数据_沪深股通买入",
+        "note": ""
+      },
+      {
+        "name": "龙虎榜沪深股通数据_沪深股通卖出",
+        "type": "DOUBLE",
+        "cn": "龙虎榜沪深股通数据_沪深股通卖出",
+        "note": ""
+      },
+      {
+        "name": "陆股通净买入_沪股通净买入",
+        "type": "DOUBLE",
+        "cn": "陆股通净买入_沪股通净买入",
+        "note": ""
+      },
+      {
+        "name": "陆股通净买入_深股通净买入",
+        "type": "DOUBLE",
+        "cn": "陆股通净买入_深股通净买入",
+        "note": ""
+      },
+      {
+        "name": "每周无限售质押率_深市质押率",
+        "type": "DOUBLE",
+        "cn": "每周无限售质押率_深市质押率",
+        "note": ""
+      },
+      {
+        "name": "每周无限售质押率_沪市质押率",
+        "type": "DOUBLE",
+        "cn": "每周无限售质押率_沪市质押率",
+        "note": ""
+      },
+      {
+        "name": "每周有限售质押率_深市质押率",
+        "type": "DOUBLE",
+        "cn": "每周有限售质押率_深市质押率",
+        "note": ""
+      },
+      {
+        "name": "每周有限售质押率_沪市质押率",
+        "type": "DOUBLE",
+        "cn": "每周有限售质押率_沪市质押率",
+        "note": ""
+      },
+      {
+        "name": "连板家数_含ST连板数",
+        "type": "DOUBLE",
+        "cn": "连板家数_含ST连板数",
+        "note": ""
+      },
+      {
+        "name": "连板家数_不含ST连板数",
+        "type": "DOUBLE",
+        "cn": "连板家数_不含ST连板数",
+        "note": ""
+      },
+      {
+        "name": "沪深京涨跌停_涨停",
+        "type": "DOUBLE",
+        "cn": "沪深京涨跌停_涨停",
+        "note": ""
+      },
+      {
+        "name": "沪深京涨跌停_跌停",
+        "type": "DOUBLE",
+        "cn": "沪深京涨跌停_跌停",
+        "note": ""
+      },
+      {
+        "name": "融资融券_融资买入额",
+        "type": "DOUBLE",
+        "cn": "融资融券_融资买入额",
+        "note": ""
+      },
+      {
+        "name": "融资融券_融券卖出量",
+        "type": "DOUBLE",
+        "cn": "融资融券_融券卖出量",
+        "note": ""
+      },
+      {
+        "name": "每周市场质押比_质押比例",
+        "type": "DOUBLE",
+        "cn": "每周市场质押比_质押比例",
+        "note": ""
+      },
+      {
+        "name": "央行公开市场净投放_净投放",
+        "type": "DOUBLE",
+        "cn": "央行公开市场净投放_净投放",
+        "note": ""
+      },
+      {
+        "name": "历史A股新高新低_历史新高",
+        "type": "DOUBLE",
+        "cn": "历史A股新高新低_历史新高",
+        "note": ""
+      },
+      {
+        "name": "历史A股新高新低_历史新低",
+        "type": "DOUBLE",
+        "cn": "历史A股新高新低_历史新低",
+        "note": ""
+      },
+      {
+        "name": "120天A股新高新低_120天新高",
+        "type": "DOUBLE",
+        "cn": "120天A股新高新低_120天新高",
+        "note": ""
+      },
+      {
+        "name": "120天A股新高新低_120天新低",
+        "type": "DOUBLE",
+        "cn": "120天A股新高新低_120天新低",
+        "note": ""
+      },
+      {
+        "name": "涨停数据_市场高度",
+        "type": "DOUBLE",
+        "cn": "涨停数据_市场高度",
+        "note": ""
+      },
+      {
+        "name": "涨停数据_2板以上涨停",
+        "type": "DOUBLE",
+        "cn": "涨停数据_2板以上涨停",
+        "note": ""
+      },
+      {
+        "name": "涨跌家数_涨家数",
+        "type": "DOUBLE",
+        "cn": "涨跌家数_涨家数",
+        "note": ""
+      },
+      {
+        "name": "涨跌家数_跌家数",
+        "type": "DOUBLE",
+        "cn": "涨跌家数_跌家数",
+        "note": ""
+      },
+      {
+        "name": "20天A股新高新低_20天新高",
+        "type": "DOUBLE",
+        "cn": "20天A股新高新低_20天新高",
+        "note": ""
+      },
+      {
+        "name": "20天A股新高新低_20天新低",
+        "type": "DOUBLE",
+        "cn": "20天A股新高新低_20天新低",
+        "note": ""
+      },
+      {
+        "name": "市场总封单金额_涨停封单",
+        "type": "DOUBLE",
+        "cn": "市场总封单金额_涨停封单",
+        "note": ""
+      },
+      {
+        "name": "市场总封单金额_跌停封单",
+        "type": "DOUBLE",
+        "cn": "市场总封单金额_跌停封单",
+        "note": ""
+      },
+      {
+        "name": "涨跌股成交量_上涨成交量",
+        "type": "DOUBLE",
+        "cn": "涨跌股成交量_上涨成交量",
+        "note": ""
+      },
+      {
+        "name": "涨跌股成交量_下跌成交量",
+        "type": "DOUBLE",
+        "cn": "涨跌股成交量_下跌成交量",
+        "note": ""
+      },
+      {
+        "name": "涨停数据_换手板家数",
+        "type": "DOUBLE",
+        "cn": "涨停数据_换手板家数",
+        "note": ""
+      },
+      {
+        "name": "涨停数据_回封率",
+        "type": "DOUBLE",
+        "cn": "涨停数据_回封率",
+        "note": ""
+      },
+      {
+        "name": "曾涨跌停股个数_曾涨停",
+        "type": "DOUBLE",
+        "cn": "曾涨跌停股个数_曾涨停",
+        "note": ""
+      },
+      {
+        "name": "曾涨跌停股个数_曾跌停",
+        "type": "DOUBLE",
+        "cn": "曾涨跌停股个数_曾跌停",
+        "note": ""
+      },
+      {
+        "name": "转融券_融出市值",
+        "type": "DOUBLE",
+        "cn": "转融券_融出市值",
+        "note": ""
+      },
+      {
+        "name": "转融券_期末余额",
+        "type": "DOUBLE",
+        "cn": "转融券_期末余额",
+        "note": ""
+      },
+      {
+        "name": "ETF基金规模金额_ETF规模",
+        "type": "DOUBLE",
+        "cn": "ETF基金规模金额_ETF规模",
+        "note": ""
+      },
+      {
+        "name": "ETF基金规模金额_ETF净申赎",
+        "type": "DOUBLE",
+        "cn": "ETF基金规模金额_ETF净申赎",
+        "note": ""
+      },
+      {
+        "name": "涨跌5%家数_涨超5",
+        "type": "DOUBLE",
+        "cn": "涨跌5%家数_涨超5",
+        "note": ""
+      },
+      {
+        "name": "涨跌5%家数_跌超5",
+        "type": "DOUBLE",
+        "cn": "涨跌5%家数_跌超5",
+        "note": ""
+      },
+      {
+        "name": "陆股通成交_陆股通总额",
+        "type": "DOUBLE",
+        "cn": "陆股通成交_陆股通总额",
+        "note": ""
+      },
+      {
+        "name": "陆股通成交_陆股通总笔",
+        "type": "DOUBLE",
+        "cn": "陆股通成交_陆股通总笔",
+        "note": ""
+      },
+      {
+        "name": "中证1000股指期货_净持仓",
+        "type": "DOUBLE",
+        "cn": "中证1000股指期货_净持仓",
+        "note": ""
+      },
+      {
+        "name": "沪深股通成交金额_沪股通总额",
+        "type": "DOUBLE",
+        "cn": "沪深股通成交金额_沪股通总额",
+        "note": ""
+      },
+      {
+        "name": "沪深股通成交金额_深股通总额",
+        "type": "DOUBLE",
+        "cn": "沪深股通成交金额_深股通总额",
+        "note": ""
+      }
+    ]
+  },
+  "stock_gp1_46_indicators": {
+    "cn": "个股GP指标",
+    "source_script": "1_入库/93_stock_gp1_46_indicators.py",
+    "dir": "1_入库",
+    "sort": "093",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "二进制",
+    "note": "",
+    "columns": [
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期（YYYYMMDD）",
+        "note": ""
+      },
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "gp_code",
+        "type": "VARCHAR",
+        "cn": "指标代码",
+        "note": ""
+      },
+      {
+        "name": "gp_name",
+        "type": "VARCHAR",
+        "cn": "指标名称",
+        "note": ""
+      },
+      {
+        "name": "value_0",
+        "type": "DOUBLE",
+        "cn": "指标值1",
+        "note": ""
+      },
+      {
+        "name": "value_1",
+        "type": "DOUBLE",
+        "cn": "指标值2",
+        "note": ""
+      }
+    ]
+  },
+  "stock_signals_20001_20011": {
+    "cn": "股票信号数据",
+    "source_script": "1_入库/95_stock_signals_20001_20011.py",
+    "dir": "1_入库",
+    "sort": "095",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "文本(T0002)",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期（YYYYMMDD）",
+        "note": ""
+      },
+      {
+        "name": "value",
+        "type": "DOUBLE",
+        "cn": "信号值",
+        "note": ""
+      },
+      {
+        "name": "signal_code",
+        "type": "VARCHAR",
+        "cn": "信号代码",
+        "note": ""
+      },
+      {
+        "name": "signal_name",
+        "type": "VARCHAR",
+        "cn": "信号名称",
+        "note": ""
+      }
+    ]
+  },
+  "dim_security_type": {
+    "cn": "证券类型维表",
+    "source_script": "2_计算/001_dim_security_type_sync.py",
+    "dir": "2_计算",
+    "sort": "001",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "SQL派生",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "type",
+        "type": "VARCHAR",
+        "cn": "证券类型",
+        "note": ""
+      },
+      {
+        "name": "market",
+        "type": "VARCHAR",
+        "cn": "所属市场",
+        "note": ""
+      },
+      {
+        "name": "prefix",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": ""
+      }
+    ]
+  },
+  "stock_kline_weekly": {
+    "cn": "股票周K线",
+    "source_script": "2_计算/17_stock_kline_weekly.py",
+    "dir": "2_计算",
+    "sort": "017",
+    "schedule": "weekly",
+    "mode": "full",
+    "source": "SQL聚合",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期（YYYYMMDD）",
+        "note": ""
+      },
+      {
+        "name": "open",
+        "type": "DOUBLE",
+        "cn": "今开",
+        "note": ""
+      },
+      {
+        "name": "high",
+        "type": "DOUBLE",
+        "cn": "最高",
+        "note": ""
+      },
+      {
+        "name": "low",
+        "type": "DOUBLE",
+        "cn": "最低",
+        "note": ""
+      },
+      {
+        "name": "close",
+        "type": "DOUBLE",
+        "cn": "收盘价",
+        "note": ""
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": ""
+      },
+      {
+        "name": "amount",
+        "type": "DOUBLE",
+        "cn": "成交额",
+        "note": ""
+      },
+      {
+        "name": "涨跌幅",
+        "type": "DOUBLE",
+        "cn": "涨跌幅",
+        "note": ""
+      }
+    ]
+  },
+  "stock_kline_monthly": {
+    "cn": "股票月K线",
+    "source_script": "2_计算/18_stock_kline_monthly.py",
+    "dir": "2_计算",
+    "sort": "018",
+    "schedule": "monthly",
+    "mode": "full",
+    "source": "SQL聚合",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期（YYYYMMDD）",
+        "note": ""
+      },
+      {
+        "name": "open",
+        "type": "DOUBLE",
+        "cn": "今开",
+        "note": ""
+      },
+      {
+        "name": "high",
+        "type": "DOUBLE",
+        "cn": "最高",
+        "note": ""
+      },
+      {
+        "name": "low",
+        "type": "DOUBLE",
+        "cn": "最低",
+        "note": ""
+      },
+      {
+        "name": "close",
+        "type": "DOUBLE",
+        "cn": "收盘价",
+        "note": ""
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": ""
+      },
+      {
+        "name": "amount",
+        "type": "DOUBLE",
+        "cn": "成交额",
+        "note": ""
+      },
+      {
+        "name": "涨跌幅",
+        "type": "DOUBLE",
+        "cn": "涨跌幅",
+        "note": ""
+      }
+    ]
+  },
+  "stock_daily_turnover": {
+    "cn": "日换手率涨跌幅",
+    "source_script": "2_计算/19_stock_daily_turnover.py",
+    "dir": "2_计算",
+    "sort": "019",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "SQL派生(stock_daily_kline+capital_info",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "股票代码(带后缀)",
+        "note": ""
+      },
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期",
+        "note": ""
+      },
+      {
+        "name": "turnover",
+        "type": "DOUBLE",
+        "cn": "换手率%(成交量/流通股本*100)",
+        "note": ""
+      },
+      {
+        "name": "pct_chg",
+        "type": "DOUBLE",
+        "cn": "涨跌幅%((close-前日close)/前日close*100)",
+        "note": ""
+      }
+    ]
+  },
+  "dim_industry_code": {
+    "cn": "研究行业代码维度表",
+    "source_script": "2_计算/36_dim_industry_code.py",
+    "dir": "2_计算",
+    "sort": "036",
+    "schedule": "weekly",
+    "mode": "full",
+    "source": "SQL派生(stock_industry_3level)",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "名称",
+        "type": "VARCHAR",
+        "cn": "名称",
+        "note": ""
+      },
+      {
+        "name": "级别",
+        "type": "VARCHAR",
+        "cn": "级别",
+        "note": ""
+      },
+      {
+        "name": "行业一级代码",
+        "type": "VARCHAR",
+        "cn": "行业一级代码",
+        "note": ""
+      },
+      {
+        "name": "行业一级名称",
+        "type": "VARCHAR",
+        "cn": "行业一级名称",
+        "note": ""
+      },
+      {
+        "name": "行业二级代码",
+        "type": "VARCHAR",
+        "cn": "行业二级代码",
+        "note": ""
+      },
+      {
+        "name": "行业二级名称",
+        "type": "VARCHAR",
+        "cn": "行业二级名称",
+        "note": ""
+      },
+      {
+        "name": "行业三级代码",
+        "type": "VARCHAR",
+        "cn": "行业三级代码",
+        "note": ""
+      },
+      {
+        "name": "行业三级名称",
+        "type": "VARCHAR",
+        "cn": "行业三级名称",
+        "note": ""
+      }
+    ]
+  },
+  "pianpao_daily": {
+    "cn": "骗炮每日明细",
+    "source_script": "2_计算/70_pianpao_daily.py",
+    "dir": "2_计算",
+    "sort": "070",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "SQL派生",
+    "note": "",
+    "columns": [
+      {
+        "name": "trade_date",
+        "type": "DATE",
+        "cn": "交易日期",
+        "note": ""
+      },
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "stock_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "level",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "severity",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "prev_close",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "open_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "close_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "high_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "low_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": ""
+      },
+      {
+        "name": "gap_up_pct",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "open_to_close_pct",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "day_change_pct",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "upper_shadow_ratio",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "zt_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "zt_distance",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "touched_zt",
+        "type": "BOOLEAN",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "prev1_change",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "prev3_trend",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "prev3_total_change",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "scenario",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "sectors",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "trap_direction",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "trap_type",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "lifecycle_stage",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "trap_confirmed",
+        "type": "BOOLEAN",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "turnover",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "vol_ratio_5d",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "consecutive_zt",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "break_count",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "seal_ratio",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      },
+      {
+        "name": "ma5",
+        "type": "DOUBLE",
+        "cn": "5日均线",
+        "note": ""
+      },
+      {
+        "name": "ma10",
+        "type": "DOUBLE",
+        "cn": "10日均线",
+        "note": ""
+      },
+      {
+        "name": "ma20",
+        "type": "DOUBLE",
+        "cn": "20日均线",
+        "note": ""
+      },
+      {
+        "name": "ma60",
+        "type": "DOUBLE",
+        "cn": "60日均线",
+        "note": ""
+      },
+      {
+        "name": "dev_ma20",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": ""
+      }
+    ]
+  },
+  "stock_kline_15m": {
+    "cn": "股票15分钟K线",
+    "source_script": "2_计算/82_stock_kline_15m.py",
+    "dir": "2_计算",
+    "sort": "082",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "SQL聚合",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "trade_time",
+        "type": "TIMESTAMP",
+        "cn": "交易时间",
+        "note": ""
+      },
+      {
+        "name": "open",
+        "type": "DOUBLE",
+        "cn": "今开",
+        "note": ""
+      },
+      {
+        "name": "high",
+        "type": "DOUBLE",
+        "cn": "最高",
+        "note": ""
+      },
+      {
+        "name": "low",
+        "type": "DOUBLE",
+        "cn": "最低",
+        "note": ""
+      },
+      {
+        "name": "close",
+        "type": "DOUBLE",
+        "cn": "收盘价",
+        "note": ""
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": ""
+      },
+      {
+        "name": "amount",
+        "type": "DOUBLE",
+        "cn": "成交额",
+        "note": ""
+      }
+    ]
+  },
+  "stock_kline_30m": {
+    "cn": "股票30分钟K线",
+    "source_script": "2_计算/83_stock_kline_30m.py",
+    "dir": "2_计算",
+    "sort": "083",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "SQL聚合",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "trade_time",
+        "type": "TIMESTAMP",
+        "cn": "交易时间",
+        "note": ""
+      },
+      {
+        "name": "open",
+        "type": "DOUBLE",
+        "cn": "今开",
+        "note": ""
+      },
+      {
+        "name": "high",
+        "type": "DOUBLE",
+        "cn": "最高",
+        "note": ""
+      },
+      {
+        "name": "low",
+        "type": "DOUBLE",
+        "cn": "最低",
+        "note": ""
+      },
+      {
+        "name": "close",
+        "type": "DOUBLE",
+        "cn": "收盘价",
+        "note": ""
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": ""
+      },
+      {
+        "name": "amount",
+        "type": "DOUBLE",
+        "cn": "成交额",
+        "note": ""
+      }
+    ]
+  },
+  "stock_kline_60m": {
+    "cn": "股票60分钟K线",
+    "source_script": "2_计算/84_stock_kline_60m.py",
+    "dir": "2_计算",
+    "sort": "084",
+    "schedule": "daily",
+    "mode": "increment",
+    "source": "SQL聚合",
+    "note": "",
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "证券代码",
+        "note": ""
+      },
+      {
+        "name": "trade_time",
+        "type": "TIMESTAMP",
+        "cn": "交易时间",
+        "note": ""
+      },
+      {
+        "name": "open",
+        "type": "DOUBLE",
+        "cn": "今开",
+        "note": ""
+      },
+      {
+        "name": "high",
+        "type": "DOUBLE",
+        "cn": "最高",
+        "note": ""
+      },
+      {
+        "name": "low",
+        "type": "DOUBLE",
+        "cn": "最低",
+        "note": ""
+      },
+      {
+        "name": "close",
+        "type": "DOUBLE",
+        "cn": "收盘价",
+        "note": ""
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": ""
+      },
+      {
+        "name": "amount",
+        "type": "DOUBLE",
+        "cn": "成交额",
+        "note": ""
+      }
+    ]
+  },
+  "pianpao_daily_summary": {
+    "cn": "[多表产物-70_pianpao_daily]",
+    "source_script": "2_计算/70_pianpao_daily.py",
+    "is_view": false,
+    "multi_table": true,
+    "columns": [
+      {
+        "name": "trade_date",
+        "type": "DATE",
+        "cn": "交易日期",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "total_count",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "s_count",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "a_count",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "b_count",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "c_count",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "avg_gap_up",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "avg_intraday_drop",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "zt_rejected",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "sector_linked",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      }
+    ]
+  },
+  "pianpao_intraday": {
+    "cn": "[多表产物-70_pianpao_daily]",
+    "source_script": "2_计算/70_pianpao_daily.py",
+    "is_view": false,
+    "multi_table": true,
+    "columns": [
+      {
+        "name": "trade_date",
+        "type": "DATE",
+        "cn": "交易日期",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "total_bars",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "peak_time",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "peak_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "peak_idx",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "rise_bars",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "rise_pct",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "rise_speed",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "fall_bars",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "fall_pct",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "fall_speed",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "surge_count",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "crash_count",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "surge_vol_ratio",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "crash_vol_ratio",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "rise_fall_vol_ratio",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "surge_vol_label",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "crash_vol_label",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      }
+    ]
+  },
+  "pianpao_intraday_events": {
+    "cn": "[多表产物-70_pianpao_daily]",
+    "source_script": "2_计算/70_pianpao_daily.py",
+    "is_view": false,
+    "multi_table": true,
+    "columns": [
+      {
+        "name": "trade_date",
+        "type": "DATE",
+        "cn": "交易日期",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "seq",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "event_type",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "start_time",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "end_time",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "start_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "end_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "pct",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "speed_label",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": "pianpao多表产物"
+      }
+    ]
+  },
+  "pianpao_intraday_periods": {
+    "cn": "[多表产物-70_pianpao_daily]",
+    "source_script": "2_计算/70_pianpao_daily.py",
+    "is_view": false,
+    "multi_table": true,
+    "columns": [
+      {
+        "name": "trade_date",
+        "type": "DATE",
+        "cn": "交易日期",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "period_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "change_pct",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "max_gain",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "max_loss",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "vol_ratio",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "bar_count",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      }
+    ]
+  },
+  "pianpao_trap_stats": {
+    "cn": "[多表产物-70_pianpao_daily]",
+    "source_script": "2_计算/70_pianpao_daily.py",
+    "is_view": false,
+    "multi_table": true,
+    "columns": [
+      {
+        "name": "stat_date",
+        "type": "DATE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "trap_type",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "trap_direction",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "sample_n",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "avg_t1_open_chg",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "avg_t1_max_gain",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "avg_t1_close_chg",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "win_rate",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      },
+      {
+        "name": "median_t1_close_chg",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "pianpao多表产物"
+      }
+    ]
+  },
+  "stock_gp1_46_indicators_labeled": {
+    "cn": "[VIEW] 个股GP指标 - 带字段含义",
+    "source_script": "1_入库/93_stock_gp1_46_indicators.py",
+    "is_view": true,
+    "derived_from": "stock_gp1_46_indicators",
+    "columns": [
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "代码",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "gp_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "gp_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_0",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_1",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_0_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_0_unit",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_1_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_1_unit",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "present",
+        "type": "BOOLEAN",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "note",
+        "type": "VARCHAR",
+        "cn": "备注",
+        "note": "视图, 字段同主表"
+      }
+    ]
+  },
+  "t_bk5_19_industry_labeled": {
+    "cn": "板块BK交易数据_打行业标签",
+    "source_script": "",
+    "is_view": true,
+    "derived_from": "t_bk5_19",
+    "columns": [
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "bk_name",
+        "type": "VARCHAR",
+        "cn": "板块指标名",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "pe_ttm",
+        "type": "DOUBLE",
+        "cn": "市盈率TTM",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "pb_mrq",
+        "type": "DOUBLE",
+        "cn": "市净率MRQ",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "ps_ttm",
+        "type": "DOUBLE",
+        "cn": "市销率TTM",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "pc_ttm",
+        "type": "DOUBLE",
+        "cn": "市现率TTM",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "涨跌数",
+        "type": "DOUBLE",
+        "cn": "涨跌数",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "总市值",
+        "type": "DOUBLE",
+        "cn": "总市值",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "流通市值",
+        "type": "DOUBLE",
+        "cn": "流通市值",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "涨停数",
+        "type": "DOUBLE",
+        "cn": "涨停数",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "跌停数",
+        "type": "DOUBLE",
+        "cn": "跌停数",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "涨停数据",
+        "type": "DOUBLE",
+        "cn": "涨停数据",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "融资融券",
+        "type": "DOUBLE",
+        "cn": "融资融券",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "陆股通流入",
+        "type": "DOUBLE",
+        "cn": "陆股通流入",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "开盘成交数",
+        "type": "DOUBLE",
+        "cn": "开盘成交数",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "股息率",
+        "type": "DOUBLE",
+        "cn": "股息率",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "自由流通市值",
+        "type": "DOUBLE",
+        "cn": "自由流通市值",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "级别",
+        "type": "VARCHAR",
+        "cn": "级别",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业一级代码",
+        "type": "VARCHAR",
+        "cn": "行业一级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业一级名称",
+        "type": "VARCHAR",
+        "cn": "行业一级名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业二级代码",
+        "type": "VARCHAR",
+        "cn": "行业二级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业二级名称",
+        "type": "VARCHAR",
+        "cn": "行业二级名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级代码",
+        "type": "VARCHAR",
+        "cn": "行业三级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级名称",
+        "type": "VARCHAR",
+        "cn": "行业三级名称",
+        "note": "视图, 字段含义继承主表"
+      }
+    ]
+  },
+  "stock_block_relation_industry_labeled": {
+    "cn": "股票板块关系_打行业归属",
+    "source_script": "",
+    "is_view": true,
+    "derived_from": "stock_block_relation",
+    "columns": [
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块代码",
+        "type": "VARCHAR",
+        "cn": "板块代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块名称",
+        "type": "VARCHAR",
+        "cn": "板块名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块类型",
+        "type": "VARCHAR",
+        "cn": "板块类型",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "成分股数",
+        "type": "INTEGER",
+        "cn": "成分股数",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "fetch_time",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业一级代码",
+        "type": "VARCHAR",
+        "cn": "行业一级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业一级名称",
+        "type": "VARCHAR",
+        "cn": "行业一级名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业二级代码",
+        "type": "VARCHAR",
+        "cn": "行业二级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业二级名称",
+        "type": "VARCHAR",
+        "cn": "行业二级名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级代码",
+        "type": "VARCHAR",
+        "cn": "行业三级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级名称",
+        "type": "VARCHAR",
+        "cn": "行业三级名称",
+        "note": "视图, 字段含义继承主表"
+      }
+    ]
+  },
+  "dim_gp_indicator": {
+    "cn": "[配套维度表]",
+    "source_script": "",
+    "is_dim": true,
+    "columns": [
+      {
+        "name": "gp_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "gp_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "value_0_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "value_0_unit",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "value_1_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "value_1_unit",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "note",
+        "type": "VARCHAR",
+        "cn": "备注",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "present",
+        "type": "BOOLEAN",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      }
+    ]
+  },
+  "dim_88field_indicator": {
+    "cn": "[配套维度表]",
+    "source_script": "",
+    "is_dim": true,
+    "columns": [
+      {
+        "name": "field_en",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "field_cn",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "category",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "category_cn",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "unit",
+        "type": "VARCHAR",
+        "cn": "单位",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "remark",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "source",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      }
+    ]
+  }
+}

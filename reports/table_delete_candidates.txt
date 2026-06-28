@@ -1,0 +1,24 @@
+# 待确认删除的表
+# 请人工确认后手动删除
+
+
+# 待复核的表
+# dim_fn_meta
+# dim_sector_tree
+# dwd_stock_capital_flow
+# etf_derived_indicator
+# etf_index_tracking
+# fact_finance_report
+# go_data
+# lhb_broker_detail
+# lhb_broker_stat
+# lhb_daily_summary
+# lhb_daily_summary_sina
+# lhb_institution_detail
+# lhb_institution_increase
+# lhb_stock_stat
+# lhb_yyb_activity
+# sector_hierarchy
+# sector_list
+# sector_stocks
+# stock_sector_relation

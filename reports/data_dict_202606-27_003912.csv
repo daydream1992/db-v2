@@ -1,0 +1,35 @@
+﻿序号,表名,中文名,列数,行数,日期范围,周期,模式,时段,数据源,脚本路径
+1,dim_security_type,证券类型维表,7,12091,2026-06-26 ~ 2026-06-26,daily,increment,每日盘后,SQL派生,python 2_计算/001_dim_security_type_sync.py
+2,stock_daily_kline,股票日K线,11,28931466,1990-12-19 ~ 2026-06-26,daily,increment,每日盘后,二进制,python 1_入库/10_stock_daily_kline.py
+3,stock_kline_weekly,股票周K线,9,6135204,1990-12-19 ~ 2026-06-26,weekly,full,每周,SQL聚合,python 2_计算/17_stock_kline_weekly.py
+4,stock_kline_monthly,股票月K线,9,1461585,1990-12-19 ~ 2026-06-26,monthly,full,每月,SQL聚合,python 2_计算/18_stock_kline_monthly.py
+5,stock_daily_turnover,日换手率涨跌幅,4,1336955,2025-06-24 ~ 2026-06-25,daily,increment,每日盘后,SQL派生,python 2_计算/19_stock_daily_turnover.py
+6,sector_stocks,板块成份股,2,91564,-,daily,full,每日盘后,二进制,python 1_入库/33_sector_stocks.py
+7,t_bk5_19,板块BK交易数据,18,2171182,2013-01-31 ~ 2026-06-26,daily,increment,每日盘后,二进制,python 1_入库/34_t_bk5_19_.py
+8,stock_industry_3level,股票行业三级分类,8,5534,2026-06-26 ~ 2026-06-26,weekly,full,每周,API(TQ),python 1_入库/35_stock_industry_3level.py
+9,dim_industry_code,研究行业代码维度表,9,466,-,weekly,full,每周,SQL派生,python 2_计算/36_dim_industry_code.py
+10,stock_block_relation_industry_labeled,股票板块关系_打行业归属,12,330232,-,-,-,-,视图(SQL派生),-
+11,t_bk5_19_industry_labeled,板块BK交易数据_打行业标签,25,2171182,2013-01-31 ~ 2026-06-26,-,-,-,视图(SQL派生),-
+12,pianpao_daily,骗炮日表,37,134026,2025-01-02 ~ 2026-06-25,daily,increment,每日,pianpao_engine,2_计算/70
+13,pianpao_daily_summary,骗炮日汇总,10,355,2025-01-02 ~ 2026-06-25,daily,increment,每日,pianpao_engine,2_计算/70
+14,pianpao_intraday,骗炮分时表,19,355437,2026-01-16 ~ 2026-06-25,daily,increment,每日,pianpao_engine,2_计算/70
+15,pianpao_intraday_events,骗炮事件,11,2675705,2026-01-16 ~ 2026-06-25,daily,increment,每日,pianpao_engine,python 2_计算/70_pianpao_daily.py
+16,pianpao_intraday_periods,骗炮分时时段,8,1415741,2026-01-16 ~ 2026-06-25,daily,increment,每日,pianpao_engine,2_计算/70
+17,pianpao_trap_stats,骗炮陷阱统计,9,20,2026-06-12 ~ 2026-06-12,daily,increment,每日,pianpao_engine,2_计算/70
+18,stock_kline_1m,股票分钟K线1m,8,291635990,2026-01-16 ~ 2026-06-26,daily,increment,每日盘后,二进制,python 1_入库/80_stock_kline_1m.py
+19,stock_kline_5m,股票分钟K线5m,8,201794122,2024-06-28 ~ 2026-06-26,daily,increment,每日盘后,二进制,python 1_入库/81_stock_kline_5m.py
+20,stock_kline_15m,股票15分钟K线,8,67265833,2024-06-28 ~ 2026-06-26,daily,increment,每日盘后,SQL聚合,python 2_计算/82_stock_kline_15m.py
+21,stock_kline_30m,股票30分钟K线,8,33633720,2024-06-28 ~ 2026-06-26,daily,increment,每日盘后,SQL聚合,python 2_计算/83_stock_kline_30m.py
+22,stock_kline_60m,股票60分钟K线,8,16817663,2024-06-28 ~ 2026-06-26,daily,increment,每日盘后,SQL聚合,python 2_计算/84_stock_kline_60m.py
+23,trading_calendar,交易日历,3,6415,2000-01-04 ~ 2026-06-26,daily,increment,每日盘后,API(TQ),python 1_入库/91_trading_calendar.py
+24,market_sc1_42,市场SC宏观指标,76,5644,2004-06-25 ~ 2026-06-25,daily,increment,每日盘后,二进制,python 1_入库/92_market_sc1_42.py
+25,stock_gp1_46_indicators,个股GP指标,6,118722855,2000-01-04 ~ 2026-06-25,daily,increment,每日盘后,二进制,python 1_入库/93_stock_gp1_46_indicators.py
+26,dim_gp_indicator,GP指标映射维度表,8,48,-,once,full,一次性,文档,1_入库
+27,stock_signals_20001_20011,股票信号数据,5,7091070,2021-05-26 ~ 2024-08-16,daily,increment,每日盘后,文本(T0002),python 1_入库/95_stock_signals_20001_20011.py
+28,sjb_api_plhqL2kz_88zd,L2快照88字段,91,60366,20260612 ~ 20260625,daily,increment,每日盘后,API(TQ),python 1_入库/101_jb_api_plhqL2kz_88zd.py
+29,dim_88field_indicator,88字段映射维度表,8,91,-,once,full,一次性,文档,1_入库
+30,stock_financial_data,股票专业财务数据(2026季度),49,5522,-,daily,increment,每日盘后,API(TQ),python 1_入库/104_stock_financial_data.py
+31,market_snapshot,市场快照数据,42,0,-,intraday,increment,盘中实时,API(TQ),python 1_入库/105_market_snapshot.py
+32,capital_info,股本数据(近1年),5,2176571,2025-06-26 ~ 2026-06-26,daily,increment,每日盘后,tqcenter API,python 1_入库/137_capital_info.py
+33,stock_block_relation,股票板块关系,6,330232,-,daily,increment,每日盘后,API(TQ),python 1_入库/262_stock_block_relation.py
+34,stock_gp1_46_indicators_labeled,个股GP指标_打标签,12,118722855,2000-01-04 ~ 2026-06-25,-,-,-,视图(SQL派生),-
