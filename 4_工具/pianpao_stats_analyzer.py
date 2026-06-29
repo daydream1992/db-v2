@@ -21,7 +21,7 @@
 口径:
   - trap_type 用 '|' 拼接, 必须 unnest 拆单标签 (否则组合淹没单类)
   - T+1 取 trading_calendar.lead() 跳过周末/节假日
-  - 过滤 trap_confirmed IS NOT FALSE (与 pianpao_engine.backtest_traps 一致)
+  - 过滤 trap_confirmed IS NOT FALSE (只统计已确认陷阱)
   - 默认近 30 天, --days / --start+--end 可调
 
 用法:

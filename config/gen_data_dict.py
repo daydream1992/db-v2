@@ -177,8 +177,8 @@ def build_data_dict() -> dict:
             pass
         # pianpao 系列一脚本多表
         multi_table_scripts = {
-            '70_pianpao_daily': ['pianpao_daily', 'pianpao_daily_summary', 'pianpao_intraday', 'pianpao_intraday_events', 'pianpao_intraday_periods', 'pianpao_trap_stats'],
-            '71_pianpao_batch': ['pianpao_daily', 'pianpao_daily_summary', 'pianpao_intraday', 'pianpao_intraday_events', 'pianpao_intraday_periods', 'pianpao_trap_stats'],
+            '70_pianpao_daily': ['pianpao_daily', 'pianpao_daily_summary', 'pianpao_intraday', 'pianpao_intraday_events', 'pianpao_intraday_periods'],
+            '71_pianpao_batch': ['pianpao_daily', 'pianpao_daily_summary', 'pianpao_intraday', 'pianpao_intraday_events', 'pianpao_intraday_periods'],
         }
 
         data_dict = {

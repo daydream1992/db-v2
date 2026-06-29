@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": "1.1",
-    "generated_at": "2026-06-27T03:15:31",
+    "generated_at": "2026-06-30T00:38:33",
     "note": "SSOT - 数据字典. 字段中文来源: 脚本FIELD_MAP(ast) > DB dim表 > TODO"
   },
   "stock_kline_1m": {
@@ -3234,68 +3234,6 @@
       }
     ]
   },
-  "pianpao_trap_stats": {
-    "cn": "[多表产物-70_pianpao_daily]",
-    "source_script": "2_计算/70_pianpao_daily.py",
-    "is_view": false,
-    "multi_table": true,
-    "columns": [
-      {
-        "name": "stat_date",
-        "type": "DATE",
-        "cn": "TODO",
-        "note": "pianpao多表产物"
-      },
-      {
-        "name": "trap_type",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "pianpao多表产物"
-      },
-      {
-        "name": "trap_direction",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "pianpao多表产物"
-      },
-      {
-        "name": "sample_n",
-        "type": "INTEGER",
-        "cn": "TODO",
-        "note": "pianpao多表产物"
-      },
-      {
-        "name": "avg_t1_open_chg",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "pianpao多表产物"
-      },
-      {
-        "name": "avg_t1_max_gain",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "pianpao多表产物"
-      },
-      {
-        "name": "avg_t1_close_chg",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "pianpao多表产物"
-      },
-      {
-        "name": "win_rate",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "pianpao多表产物"
-      },
-      {
-        "name": "median_t1_close_chg",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "pianpao多表产物"
-      }
-    ]
-  },
   "stock_gp1_46_indicators_labeled": {
     "cn": "[VIEW] 个股GP指标 - 带字段含义",
     "source_script": "1_入库/93_stock_gp1_46_indicators.py",
@@ -3373,6 +3311,86 @@
         "type": "VARCHAR",
         "cn": "备注",
         "note": "视图, 字段同主表"
+      }
+    ]
+  },
+  "stock_block_relation_industry_labeled": {
+    "cn": "股票板块关系_打行业归属",
+    "source_script": "",
+    "is_view": true,
+    "derived_from": "stock_block_relation",
+    "columns": [
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块代码",
+        "type": "VARCHAR",
+        "cn": "板块代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块名称",
+        "type": "VARCHAR",
+        "cn": "板块名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块类型",
+        "type": "VARCHAR",
+        "cn": "板块类型",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "成分股数",
+        "type": "INTEGER",
+        "cn": "成分股数",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "fetch_time",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业一级代码",
+        "type": "VARCHAR",
+        "cn": "行业一级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业一级名称",
+        "type": "VARCHAR",
+        "cn": "行业一级名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业二级代码",
+        "type": "VARCHAR",
+        "cn": "行业二级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业二级名称",
+        "type": "VARCHAR",
+        "cn": "行业二级名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级代码",
+        "type": "VARCHAR",
+        "cn": "行业三级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级名称",
+        "type": "VARCHAR",
+        "cn": "行业三级名称",
+        "note": "视图, 字段含义继承主表"
       }
     ]
   },
@@ -3534,86 +3552,6 @@
       }
     ]
   },
-  "stock_block_relation_industry_labeled": {
-    "cn": "股票板块关系_打行业归属",
-    "source_script": "",
-    "is_view": true,
-    "derived_from": "stock_block_relation",
-    "columns": [
-      {
-        "name": "stock_code",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块代码",
-        "type": "VARCHAR",
-        "cn": "板块代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块名称",
-        "type": "VARCHAR",
-        "cn": "板块名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块类型",
-        "type": "VARCHAR",
-        "cn": "板块类型",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "成分股数",
-        "type": "INTEGER",
-        "cn": "成分股数",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "fetch_time",
-        "type": "TIMESTAMP",
-        "cn": "TODO",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业一级代码",
-        "type": "VARCHAR",
-        "cn": "行业一级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业一级名称",
-        "type": "VARCHAR",
-        "cn": "行业一级名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业二级代码",
-        "type": "VARCHAR",
-        "cn": "行业二级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业二级名称",
-        "type": "VARCHAR",
-        "cn": "行业二级名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业三级代码",
-        "type": "VARCHAR",
-        "cn": "行业三级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业三级名称",
-        "type": "VARCHAR",
-        "cn": "行业三级名称",
-        "note": "视图, 字段含义继承主表"
-      }
-    ]
-  },
   "dim_gp_indicator": {
     "cn": "[配套维度表]",
     "source_script": "",
@@ -3721,6 +3659,106 @@
         "type": "TIMESTAMP",
         "cn": "TODO",
         "note": "维度表, 提供枚举/字段含义"
+      }
+    ]
+  },
+  "xa_indicators": {
+    "cn": "[ORPHAN-无脚本]",
+    "source_script": "",
+    "is_view": false,
+    "orphan": true,
+    "columns": [
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "代码",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "close",
+        "type": "DOUBLE",
+        "cn": "收盘价",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "XA_2",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "XA_4",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "XA_8",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "XA_9",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "XA_10",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "XA_13",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "XA_16",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "prev_close",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      }
+    ]
+  },
+  "表名": {
+    "cn": "[ORPHAN-无脚本]",
+    "source_script": "",
+    "is_view": false,
+    "orphan": true,
+    "columns": [
+      {
+        "name": "sector_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
       }
     ]
   }

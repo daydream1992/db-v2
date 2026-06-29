@@ -230,17 +230,6 @@
     "status": "implemented",
     "depends_on": ["pianpao_intraday"]
   },
-  "pianpao_trap_stats": {
-    "cn": "骗炮陷阱统计",
-    "source": "pianpao_engine",
-    "period": "每日",
-    "schedule": "daily",
-    "mode": "increment",
-    "dir": "2_计算/70",
-    "sort": 70,
-    "status": "implemented",
-    "depends_on": ["pianpao_daily"]
-  },
   "dim_security_type": {
     "cn": "证券类型维表",
     "source": "SQL派生",

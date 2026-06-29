@@ -6,14 +6,13 @@
       分时级(1m): 诱多 5 型 + 诱空 5 型 (尾盘偷鸡板 / 早盘冲高回落 / ... )
       日线级    : 诱多 2 型 + 诱空 2 型 (假突破 / 放量滞涨 / 均线假破位 / 缩量深跌)
   - 生命周期打标: 主升浪 / 吸筹 / 洗盘 / 派发 / 下跌 / 震荡  ↔ 策略映射
-  - 回测验证: backtest_traps() 按 trap_type×direction 统计 T+1 胜率/收益
 
 数据源:
   stock_daily_kline (OHLCV) + stock_daily_turnover (换手率/涨跌幅) +
   stock_kline_1m (分时) + dim_security_type (A股全集)
 
 写入: pianpao_daily(主) + pianpao_intraday/events/periods(分时) +
-      pianpao_daily_summary + pianpao_trap_stats(回测)
+      pianpao_daily_summary
 
 性能主线 (针对 stock_kline_1m 2.83亿行, 防OOM):
   日级全量向量化(5257股×~100日) → 日级预筛候选 → 仅候选批量取1m(groupby分发)
@@ -617,7 +616,7 @@ def _add_column_if_missing(con, table, col, ddl):
 
 
 def ensure_tables(con):
-    """建表(IF NOT EXISTS) + 安全迁移 pianpao_daily 新列 + 建 trap_stats。"""
+    """建表(IF NOT EXISTS) + 安全迁移 pianpao_daily 新列。"""
     # 主表(含新列直接写在DDL里, 适配全新库)
     con.execute("""
     CREATE TABLE IF NOT EXISTS pianpao_daily (
@@ -690,13 +689,6 @@ def ensure_tables(con):
         trade_date DATE PRIMARY KEY, total_count INTEGER,
         s_count INTEGER, a_count INTEGER, b_count INTEGER, c_count INTEGER,
         avg_gap_up DOUBLE, avg_intraday_drop DOUBLE, zt_rejected INTEGER, sector_linked INTEGER
-    )""")
-    con.execute("""
-    CREATE TABLE IF NOT EXISTS pianpao_trap_stats (
-        stat_date DATE NOT NULL, trap_type VARCHAR NOT NULL, trap_direction VARCHAR NOT NULL,
-        sample_n INTEGER, avg_t1_open_chg DOUBLE, avg_t1_max_gain DOUBLE,
-        avg_t1_close_chg DOUBLE, win_rate DOUBLE, median_t1_close_chg DOUBLE,
-        PRIMARY KEY (stat_date, trap_type, trap_direction)
     )""")
 
 
@@ -808,61 +800,6 @@ def save_to_db(con, results_df, sector_analysis=None, target_date=None, stock_na
                 [dd, len(df), counts['S级'], counts['A级'], counts['B级'], counts['C级'],
                  round(avg_gap, 2), round(avg_otc, 2), zt_rej, 0])
     logger.info(f"  保存: daily={len(df)}, intraday={len(ia_map)}")
-
-
-# ==================== 回测层 ====================
-
-def backtest_traps(con, start_date, end_date=None) -> pd.DataFrame:
-    """回测: [start,end] 内所有打标记录 → T+1表现 → 按 trap_type×direction 聚合 → 落 trap_stats。
-    返回聚合 DataFrame。"""
-    if end_date is None:
-        end_date = start_date
-    sql = f"""
-    WITH exploded AS (
-        SELECT p.trade_date, p.stock_code,
-               unnest(string_split(p.trap_type, '|')) AS trap_type,
-               p.trap_direction, p.close_price AS t0_close
-        FROM pianpao_daily p
-        WHERE p.trade_date BETWEEN DATE '{_iso(start_date)}' AND DATE '{_iso(end_date)}'
-          AND p.trap_direction IN ('bull','bear')
-          AND p.trap_confirmed IS NOT FALSE
-    ),
-    next_td AS (
-        SELECT date AS td, lead(date) OVER (ORDER BY date) AS next_td
-        FROM trading_calendar WHERE is_trading = TRUE
-    )
-    SELECT e.trade_date, e.stock_code, e.trap_type, e.trap_direction,
-           (d1.open  - e.t0_close)/e.t0_close*100 AS t1_open_chg,
-           (d1.high  - e.t0_close)/e.t0_close*100 AS t1_max_gain,
-           (d1.close - e.t0_close)/e.t0_close*100 AS t1_close_chg,
-           (d1.close > e.t0_close)               AS t1_win
-    FROM exploded e
-    JOIN next_td n ON n.td = e.trade_date
-    JOIN stock_daily_kline d1 ON d1.code = e.stock_code AND d1.date = n.next_td
-    """
-    df = con.execute(sql).fetchdf()
-    if df.empty:
-        logger.warning("  回测: 无可统计记录")
-        return df
-    stats = (df.groupby(['trap_type', 'trap_direction'])
-             .agg(sample_n=('t1_close_chg', 'size'),
-                  avg_t1_open_chg=('t1_open_chg', 'mean'),
-                  avg_t1_max_gain=('t1_max_gain', 'mean'),
-                  avg_t1_close_chg=('t1_close_chg', 'mean'),
-                  win_rate=('t1_win', 'mean'),
-                  median_t1_close_chg=('t1_close_chg', 'median'))
-             .reset_index())
-    stats['stat_date'] = _iso(start_date)
-    con.execute("DELETE FROM pianpao_trap_stats WHERE stat_date = ?", [_iso(start_date)])
-    con.register('_ts', stats)
-    con.execute("""INSERT INTO pianpao_trap_stats
-                   (stat_date,trap_type,trap_direction,sample_n,avg_t1_open_chg,
-                    avg_t1_max_gain,avg_t1_close_chg,win_rate,median_t1_close_chg)
-                   SELECT stat_date,trap_type,trap_direction,sample_n,avg_t1_open_chg,
-                          avg_t1_max_gain,avg_t1_close_chg,win_rate,median_t1_close_chg FROM _ts""")
-    con.unregister('_ts')
-    logger.info(f"  回测统计 {len(stats)} 类陷阱, 落 pianpao_trap_stats")
-    return stats
 
 
 # ==================== 主流程 ====================

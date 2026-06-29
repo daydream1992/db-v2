@@ -1,9 +1,9 @@
 # 数据字典 (自动生成)
 
-> 生成时间: 2026-06-27T03:15:31
+> 生成时间: 2026-06-30T00:38:33
 > 来源: 脚本@meta + DB DESCRIBE + 脚本FIELD_MAP(ast) + dim_*维度表
 
-## 📊 正式表 (34 个)
+## 📊 正式表 (33 个)
 
 ### ? pianpao_daily_summary
 - **中文**: [多表产物-70_pianpao_daily]
@@ -81,22 +81,6 @@
 | vol_ratio | DOUBLE | TODO | pianpao多表产物 |
 | bar_count | INTEGER | TODO | pianpao多表产物 |
 
-### ? pianpao_trap_stats
-- **中文**: [多表产物-70_pianpao_daily]
-- **脚本**: `2_计算/70_pianpao_daily.py`
-
-| 字段 | 类型 | 中文 | 备注 |
-|------|------|------|------|
-| stat_date | DATE | TODO | pianpao多表产物 |
-| trap_type | VARCHAR | TODO | pianpao多表产物 |
-| trap_direction | VARCHAR | TODO | pianpao多表产物 |
-| sample_n | INTEGER | TODO | pianpao多表产物 |
-| avg_t1_open_chg | DOUBLE | TODO | pianpao多表产物 |
-| avg_t1_max_gain | DOUBLE | TODO | pianpao多表产物 |
-| avg_t1_close_chg | DOUBLE | TODO | pianpao多表产物 |
-| win_rate | DOUBLE | TODO | pianpao多表产物 |
-| median_t1_close_chg | DOUBLE | TODO | pianpao多表产物 |
-
 ### ? stock_gp1_46_indicators_labeled
 - **中文**: [VIEW] 个股GP指标 - 带字段含义
 - **脚本**: `1_入库/93_stock_gp1_46_indicators.py`
@@ -115,6 +99,25 @@
 | value_1_unit | VARCHAR | TODO | 视图, 字段同主表 |
 | present | BOOLEAN | TODO | 视图, 字段同主表 |
 | note | VARCHAR | 备注 | 视图, 字段同主表 |
+
+### ? stock_block_relation_industry_labeled
+- **中文**: 股票板块关系_打行业归属
+- **脚本**: ``
+
+| 字段 | 类型 | 中文 | 备注 |
+|------|------|------|------|
+| stock_code | VARCHAR | TODO | 视图, 字段含义继承主表 |
+| 板块代码 | VARCHAR | 板块代码 | 视图, 字段含义继承主表 |
+| 板块名称 | VARCHAR | 板块名称 | 视图, 字段含义继承主表 |
+| 板块类型 | VARCHAR | 板块类型 | 视图, 字段含义继承主表 |
+| 成分股数 | INTEGER | 成分股数 | 视图, 字段含义继承主表 |
+| fetch_time | TIMESTAMP | TODO | 视图, 字段含义继承主表 |
+| 行业一级代码 | VARCHAR | 行业一级代码 | 视图, 字段含义继承主表 |
+| 行业一级名称 | VARCHAR | 行业一级名称 | 视图, 字段含义继承主表 |
+| 行业二级代码 | VARCHAR | 行业二级代码 | 视图, 字段含义继承主表 |
+| 行业二级名称 | VARCHAR | 行业二级名称 | 视图, 字段含义继承主表 |
+| 行业三级代码 | VARCHAR | 行业三级代码 | 视图, 字段含义继承主表 |
+| 行业三级名称 | VARCHAR | 行业三级名称 | 视图, 字段含义继承主表 |
 
 ### ? t_bk5_19_industry_labeled
 - **中文**: 板块BK交易数据_打行业标签
@@ -141,25 +144,6 @@
 | 股息率 | DOUBLE | 股息率 | 视图, 字段含义继承主表 |
 | 自由流通市值 | DOUBLE | 自由流通市值 | 视图, 字段含义继承主表 |
 | 级别 | VARCHAR | 级别 | 视图, 字段含义继承主表 |
-| 行业一级代码 | VARCHAR | 行业一级代码 | 视图, 字段含义继承主表 |
-| 行业一级名称 | VARCHAR | 行业一级名称 | 视图, 字段含义继承主表 |
-| 行业二级代码 | VARCHAR | 行业二级代码 | 视图, 字段含义继承主表 |
-| 行业二级名称 | VARCHAR | 行业二级名称 | 视图, 字段含义继承主表 |
-| 行业三级代码 | VARCHAR | 行业三级代码 | 视图, 字段含义继承主表 |
-| 行业三级名称 | VARCHAR | 行业三级名称 | 视图, 字段含义继承主表 |
-
-### ? stock_block_relation_industry_labeled
-- **中文**: 股票板块关系_打行业归属
-- **脚本**: ``
-
-| 字段 | 类型 | 中文 | 备注 |
-|------|------|------|------|
-| stock_code | VARCHAR | TODO | 视图, 字段含义继承主表 |
-| 板块代码 | VARCHAR | 板块代码 | 视图, 字段含义继承主表 |
-| 板块名称 | VARCHAR | 板块名称 | 视图, 字段含义继承主表 |
-| 板块类型 | VARCHAR | 板块类型 | 视图, 字段含义继承主表 |
-| 成分股数 | INTEGER | 成分股数 | 视图, 字段含义继承主表 |
-| fetch_time | TIMESTAMP | TODO | 视图, 字段含义继承主表 |
 | 行业一级代码 | VARCHAR | 行业一级代码 | 视图, 字段含义继承主表 |
 | 行业一级名称 | VARCHAR | 行业一级名称 | 视图, 字段含义继承主表 |
 | 行业二级代码 | VARCHAR | 行业二级代码 | 视图, 字段含义继承主表 |
@@ -849,3 +833,11 @@
 | close | DOUBLE | 收盘价 |  |
 | volume | BIGINT | 成交量 |  |
 | amount | DOUBLE | 成交额 |  |
+
+
+## ⚠️ 孤儿表 (2 个, 无对应脚本)
+
+- **xa_indicators** (12 字段)
+- **表名** (2 字段)
+
+> 处理: `python config/gen_data_dict.py --check` 给出建议
