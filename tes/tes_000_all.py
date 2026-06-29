@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""tes_000_all — 顺序跑完 001~010,汇总各脚本退出码
-    用途:一次性看哪些 API 通了,哪些报错。
+"""tes_000_all — 顺序跑根目录剩余探针,汇总退出码
+    用途:TQ 连通性体检(初始化/K线/指标/财务/估值/下单签名)。
+    已归档探针(001/002/005/006/010)在 archive/,需单独跑。
 """
 from __future__ import annotations
 import subprocess
@@ -9,16 +10,11 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 SCRIPTS = [
-    "tes_001_init.py",
-    "tes_002_stock_list.py",
     "tes_003_market_data.py",
     "tes_004_indicator.py",
-    "tes_005_account.py",
-    "tes_006_calendar.py",
     "tes_007_financial.py",
     "tes_008_gpjy.py",
-    "tes_009_order.py",
-    "tes_010_misc.py",
+    "tes_009_order.py",   # dry-run, 不真实下单
 ]
 
 
