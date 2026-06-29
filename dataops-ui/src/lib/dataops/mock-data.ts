@@ -785,7 +785,7 @@ export const TABLES: TableMeta[] = [
     rows: 9_840_000, maxDate: _todayStr, dateCol: 'trade_date', freshness: '最新', health: 'green',
     script: '70_pianpao_daily.py', scriptLines: 124, hasLintIssue: true,
     dependsOn: ['stock_daily_kline'], sourceDeps: ['pianpao_engine'],
-    downstream: ['pianpao_daily_summary', 'pianpao_trap_stats'],
+    downstream: ['pianpao_daily_summary'],
     columns: [
       { name: 'trade_date', type: 'DATE', cn: '交易日期', nullable: false },
       { name: 'stock_code', type: 'VARCHAR', cn: 'TODO', nullable: true },
@@ -920,26 +920,6 @@ export const TABLES: TableMeta[] = [
     dedupKey: ['trade_date', 'stock_code'], retryConfig: { max: 2, backoff: 30 },
   },
   {
-    table: 'pianpao_trap_stats', cn: '骗炮陷阱统计', dir: '2_计算', sort: '070',
-    schedule: 'daily', mode: 'increment', source: 'pianpao_engine', type: '多表',
-    rows: 50_000, maxDate: _todayStr, dateCol: 'stat_date', freshness: '最新', health: 'green',
-    script: '71_pianpao_batch.py', scriptLines: 171, hasLintIssue: true,
-    dependsOn: ['pianpao_daily'], sourceDeps: ['pianpao_engine'],
-    downstream: [],
-    columns: [
-      { name: 'stat_date', type: 'DATE', cn: 'TODO', nullable: true },
-      { name: 'trap_type', type: 'VARCHAR', cn: 'TODO', nullable: true },
-      { name: 'trap_direction', type: 'VARCHAR', cn: 'TODO', nullable: true },
-      { name: 'sample_n', type: 'INTEGER', cn: 'TODO', nullable: true },
-      { name: 'avg_t1_open_chg', type: 'DOUBLE', cn: 'TODO', nullable: true },
-      { name: 'avg_t1_max_gain', type: 'DOUBLE', cn: 'TODO', nullable: true },
-      { name: 'avg_t1_close_chg', type: 'DOUBLE', cn: 'TODO', nullable: true },
-      { name: 'win_rate', type: 'DOUBLE', cn: 'TODO', nullable: true },
-      { name: 'median_t1_close_chg', type: 'DOUBLE', cn: 'TODO', nullable: true }
-    ],
-    dedupKey: ['stat_date', 'trap_type', 'trap_direction'], retryConfig: { max: 2, backoff: 30 },
-  },
-  {
     table: 'stock_kline_15m', cn: '股票15分钟K线', dir: '2_计算', sort: '082',
     schedule: 'daily', mode: 'increment', source: 'SQL聚合', type: '事实',
     rows: 13_200_000, maxDate: _todayStr, dateCol: 'trade_time', freshness: '最新', health: 'green',
@@ -1049,7 +1029,7 @@ export const LINT_RULES: LintRule[] = [
     id: 'R005', name: 'sort编号唯一', level: 'RED',
     description: 'sort 编号全局唯一，禁撞号',
     violations: [
-      { table: 'pianpao_daily/pianpao_daily_summary/pianpao_intraday/pianpao_intraday_events/pianpao_intraday_periods/pianpao_trap_stats', detail: 'sort=070 6表撞号（多表产物共享脚本）', fix: '多表产物可保持，但建议 070/071/072... 子编号' },
+      { table: 'pianpao_daily/pianpao_daily_summary/pianpao_intraday/pianpao_intraday_events/pianpao_intraday_periods', detail: 'sort=070 5表撞号（多表产物共享脚本）', fix: '多表产物可保持，但建议 070/071/072... 子编号' },
       { table: 'dim_industry_code/t_bk5_19_industry_labeled/stock_block_relation_industry_labeled', detail: 'sort=036 3表撞号（视图与源表同脚本）', fix: '视图可标记为派生，不占独立编号' },
     ],
   },

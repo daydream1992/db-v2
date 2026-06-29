@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": "1.1",
-    "generated_at": "2026-06-30T00:38:33",
+    "generated_at": "2026-06-30T01:10:36",
     "note": "SSOT - 数据字典. 字段中文来源: 脚本FIELD_MAP(ast) > DB dim表 > TODO"
   },
   "stock_kline_1m": {
@@ -3314,86 +3314,6 @@
       }
     ]
   },
-  "stock_block_relation_industry_labeled": {
-    "cn": "股票板块关系_打行业归属",
-    "source_script": "",
-    "is_view": true,
-    "derived_from": "stock_block_relation",
-    "columns": [
-      {
-        "name": "stock_code",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块代码",
-        "type": "VARCHAR",
-        "cn": "板块代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块名称",
-        "type": "VARCHAR",
-        "cn": "板块名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块类型",
-        "type": "VARCHAR",
-        "cn": "板块类型",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "成分股数",
-        "type": "INTEGER",
-        "cn": "成分股数",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "fetch_time",
-        "type": "TIMESTAMP",
-        "cn": "TODO",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业一级代码",
-        "type": "VARCHAR",
-        "cn": "行业一级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业一级名称",
-        "type": "VARCHAR",
-        "cn": "行业一级名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业二级代码",
-        "type": "VARCHAR",
-        "cn": "行业二级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业二级名称",
-        "type": "VARCHAR",
-        "cn": "行业二级名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业三级代码",
-        "type": "VARCHAR",
-        "cn": "行业三级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业三级名称",
-        "type": "VARCHAR",
-        "cn": "行业三级名称",
-        "note": "视图, 字段含义继承主表"
-      }
-    ]
-  },
   "t_bk5_19_industry_labeled": {
     "cn": "板块BK交易数据_打行业标签",
     "source_script": "",
@@ -3552,58 +3472,83 @@
       }
     ]
   },
-  "dim_gp_indicator": {
-    "cn": "[配套维度表]",
+  "stock_block_relation_industry_labeled": {
+    "cn": "股票板块关系_打行业归属",
     "source_script": "",
-    "is_dim": true,
+    "is_view": true,
+    "derived_from": "stock_block_relation",
     "columns": [
       {
-        "name": "gp_code",
+        "name": "stock_code",
         "type": "VARCHAR",
         "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
+        "note": "视图, 字段含义继承主表"
       },
       {
-        "name": "gp_name",
+        "name": "板块代码",
         "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
+        "cn": "板块代码",
+        "note": "视图, 字段含义继承主表"
       },
       {
-        "name": "value_0_name",
+        "name": "板块名称",
         "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
+        "cn": "板块名称",
+        "note": "视图, 字段含义继承主表"
       },
       {
-        "name": "value_0_unit",
+        "name": "板块类型",
         "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
+        "cn": "板块类型",
+        "note": "视图, 字段含义继承主表"
       },
       {
-        "name": "value_1_name",
+        "name": "成分股数",
+        "type": "INTEGER",
+        "cn": "成分股数",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "fetch_time",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业一级代码",
         "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
+        "cn": "行业一级代码",
+        "note": "视图, 字段含义继承主表"
       },
       {
-        "name": "value_1_unit",
+        "name": "行业一级名称",
         "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
+        "cn": "行业一级名称",
+        "note": "视图, 字段含义继承主表"
       },
       {
-        "name": "note",
+        "name": "行业二级代码",
         "type": "VARCHAR",
-        "cn": "备注",
-        "note": "维度表, 提供枚举/字段含义"
+        "cn": "行业二级代码",
+        "note": "视图, 字段含义继承主表"
       },
       {
-        "name": "present",
-        "type": "BOOLEAN",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
+        "name": "行业二级名称",
+        "type": "VARCHAR",
+        "cn": "行业二级名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级代码",
+        "type": "VARCHAR",
+        "cn": "行业三级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级名称",
+        "type": "VARCHAR",
+        "cn": "行业三级名称",
+        "note": "视图, 字段含义继承主表"
       }
     ]
   },
@@ -3662,103 +3607,58 @@
       }
     ]
   },
-  "xa_indicators": {
-    "cn": "[ORPHAN-无脚本]",
+  "dim_gp_indicator": {
+    "cn": "[配套维度表]",
     "source_script": "",
-    "is_view": false,
-    "orphan": true,
+    "is_dim": true,
     "columns": [
       {
-        "name": "code",
-        "type": "VARCHAR",
-        "cn": "代码",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "date",
-        "type": "DATE",
-        "cn": "日期",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "close",
-        "type": "DOUBLE",
-        "cn": "收盘价",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "XA_2",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "XA_4",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "XA_8",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "XA_9",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "XA_10",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "XA_13",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "XA_16",
-        "type": "INTEGER",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "prev_close",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "updated_at",
-        "type": "TIMESTAMP",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      }
-    ]
-  },
-  "表名": {
-    "cn": "[ORPHAN-无脚本]",
-    "source_script": "",
-    "is_view": false,
-    "orphan": true,
-    "columns": [
-      {
-        "name": "sector_code",
+        "name": "gp_code",
         "type": "VARCHAR",
         "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
+        "note": "维度表, 提供枚举/字段含义"
       },
       {
-        "name": "stock_code",
+        "name": "gp_name",
         "type": "VARCHAR",
         "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "value_0_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "value_0_unit",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "value_1_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "value_1_unit",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "note",
+        "type": "VARCHAR",
+        "cn": "备注",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "present",
+        "type": "BOOLEAN",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
       }
     ]
   }

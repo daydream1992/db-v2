@@ -1,6 +1,6 @@
 # 数据字典 (自动生成)
 
-> 生成时间: 2026-06-30T00:38:33
+> 生成时间: 2026-06-30T01:10:36
 > 来源: 脚本@meta + DB DESCRIBE + 脚本FIELD_MAP(ast) + dim_*维度表
 
 ## 📊 正式表 (33 个)
@@ -100,25 +100,6 @@
 | present | BOOLEAN | TODO | 视图, 字段同主表 |
 | note | VARCHAR | 备注 | 视图, 字段同主表 |
 
-### ? stock_block_relation_industry_labeled
-- **中文**: 股票板块关系_打行业归属
-- **脚本**: ``
-
-| 字段 | 类型 | 中文 | 备注 |
-|------|------|------|------|
-| stock_code | VARCHAR | TODO | 视图, 字段含义继承主表 |
-| 板块代码 | VARCHAR | 板块代码 | 视图, 字段含义继承主表 |
-| 板块名称 | VARCHAR | 板块名称 | 视图, 字段含义继承主表 |
-| 板块类型 | VARCHAR | 板块类型 | 视图, 字段含义继承主表 |
-| 成分股数 | INTEGER | 成分股数 | 视图, 字段含义继承主表 |
-| fetch_time | TIMESTAMP | TODO | 视图, 字段含义继承主表 |
-| 行业一级代码 | VARCHAR | 行业一级代码 | 视图, 字段含义继承主表 |
-| 行业一级名称 | VARCHAR | 行业一级名称 | 视图, 字段含义继承主表 |
-| 行业二级代码 | VARCHAR | 行业二级代码 | 视图, 字段含义继承主表 |
-| 行业二级名称 | VARCHAR | 行业二级名称 | 视图, 字段含义继承主表 |
-| 行业三级代码 | VARCHAR | 行业三级代码 | 视图, 字段含义继承主表 |
-| 行业三级名称 | VARCHAR | 行业三级名称 | 视图, 字段含义继承主表 |
-
 ### ? t_bk5_19_industry_labeled
 - **中文**: 板块BK交易数据_打行业标签
 - **脚本**: ``
@@ -151,20 +132,24 @@
 | 行业三级代码 | VARCHAR | 行业三级代码 | 视图, 字段含义继承主表 |
 | 行业三级名称 | VARCHAR | 行业三级名称 | 视图, 字段含义继承主表 |
 
-### ? dim_gp_indicator
-- **中文**: [配套维度表]
+### ? stock_block_relation_industry_labeled
+- **中文**: 股票板块关系_打行业归属
 - **脚本**: ``
 
 | 字段 | 类型 | 中文 | 备注 |
 |------|------|------|------|
-| gp_code | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| gp_name | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| value_0_name | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| value_0_unit | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| value_1_name | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| value_1_unit | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| note | VARCHAR | 备注 | 维度表, 提供枚举/字段含义 |
-| present | BOOLEAN | TODO | 维度表, 提供枚举/字段含义 |
+| stock_code | VARCHAR | TODO | 视图, 字段含义继承主表 |
+| 板块代码 | VARCHAR | 板块代码 | 视图, 字段含义继承主表 |
+| 板块名称 | VARCHAR | 板块名称 | 视图, 字段含义继承主表 |
+| 板块类型 | VARCHAR | 板块类型 | 视图, 字段含义继承主表 |
+| 成分股数 | INTEGER | 成分股数 | 视图, 字段含义继承主表 |
+| fetch_time | TIMESTAMP | TODO | 视图, 字段含义继承主表 |
+| 行业一级代码 | VARCHAR | 行业一级代码 | 视图, 字段含义继承主表 |
+| 行业一级名称 | VARCHAR | 行业一级名称 | 视图, 字段含义继承主表 |
+| 行业二级代码 | VARCHAR | 行业二级代码 | 视图, 字段含义继承主表 |
+| 行业二级名称 | VARCHAR | 行业二级名称 | 视图, 字段含义继承主表 |
+| 行业三级代码 | VARCHAR | 行业三级代码 | 视图, 字段含义继承主表 |
+| 行业三级名称 | VARCHAR | 行业三级名称 | 视图, 字段含义继承主表 |
 
 ### ? dim_88field_indicator
 - **中文**: [配套维度表]
@@ -180,6 +165,21 @@
 | remark | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
 | source | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
 | created_at | TIMESTAMP | TODO | 维度表, 提供枚举/字段含义 |
+
+### ? dim_gp_indicator
+- **中文**: [配套维度表]
+- **脚本**: ``
+
+| 字段 | 类型 | 中文 | 备注 |
+|------|------|------|------|
+| gp_code | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| gp_name | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| value_0_name | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| value_0_unit | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| value_1_name | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| value_1_unit | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| note | VARCHAR | 备注 | 维度表, 提供枚举/字段含义 |
+| present | BOOLEAN | TODO | 维度表, 提供枚举/字段含义 |
 
 ### 010 stock_daily_kline
 - **中文**: 股票日K线
@@ -833,11 +833,3 @@
 | close | DOUBLE | 收盘价 |  |
 | volume | BIGINT | 成交量 |  |
 | amount | DOUBLE | 成交额 |  |
-
-
-## ⚠️ 孤儿表 (2 个, 无对应脚本)
-
-- **xa_indicators** (12 字段)
-- **表名** (2 字段)
-
-> 处理: `python config/gen_data_dict.py --check` 给出建议
