@@ -84,11 +84,6 @@ const SIM_DAILY_TABLES: SimScript[] = [
     { delay: 700, level: 'INFO', msg: () => '  读取二进制 46 字段', progress: 40 },
     { delay: 500, level: 'SUCCESS', msg: () => '✔ stock_gp1_46_indicators 完成 89,000 行', progress: 100 },
   ]},
-  { table: 'stock_signals_20001_20011', cn: '股票信号数据', steps: [
-    { delay: 300, level: 'INFO', msg: () => '▶ 开始 stock_signals_20001_20011' },
-    { delay: 600, level: 'INFO', msg: () => '  解析文本信号文件', progress: 50 },
-    { delay: 400, level: 'SUCCESS', msg: () => '✔ stock_signals_20001_20011 完成', progress: 100 },
-  ]},
   { table: 'sector_stocks', cn: '板块成份股', steps: [
     { delay: 250, level: 'INFO', msg: () => '▶ 开始 sector_stocks' },
     { delay: 400, level: 'WARNING', msg: () => '  ○ sector_stocks 数据为空，跳过' },

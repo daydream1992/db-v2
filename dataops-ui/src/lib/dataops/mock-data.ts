@@ -345,22 +345,6 @@ export const TABLES: TableMeta[] = [
     dedupKey: ['gp_code'], retryConfig: { max: 3, backoff: 30 },
   },
   {
-    table: 'stock_signals_20001_20011', cn: '股票信号数据', dir: '1_入库', sort: '095',
-    schedule: 'daily', mode: 'increment', source: '文本(T0002)', type: '事实',
-    rows: 4_000_000, maxDate: _todayStr, dateCol: 'date', freshness: '最新', health: 'green',
-    script: '95_stock_signals_20001_20011.py', scriptLines: 87, hasLintIssue: false,
-    dependsOn: [], sourceDeps: ['TDX T0002/signals'],
-    downstream: [],
-    columns: [
-      { name: 'code', type: 'VARCHAR', cn: '证券代码', nullable: false },
-      { name: 'date', type: 'DATE', cn: '日期（YYYYMMDD）', nullable: false },
-      { name: 'value', type: 'DOUBLE', cn: '信号值', nullable: true },
-      { name: 'signal_code', type: 'VARCHAR', cn: '信号代码', nullable: true },
-      { name: 'signal_name', type: 'VARCHAR', cn: '信号名称', nullable: true }
-    ],
-    dedupKey: ['code', 'date'], retryConfig: { max: 3, backoff: 30 },
-  },
-  {
     table: 'sjb_api_plhqL2kz_88zd', cn: 'L2快照88字段', dir: '1_入库', sort: '101',
     schedule: 'daily', mode: 'increment', source: 'API(TQ)', type: '事实',
     rows: 6_000_000, maxDate: _todayStr, dateCol: 'HqDate', freshness: '最新', health: 'green',

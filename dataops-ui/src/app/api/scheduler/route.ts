@@ -44,7 +44,6 @@ const DAILY_TABLES = [
   'stock_block_relation',
   'market_sc1_42',
   'stock_gp1_46_indicators',
-  'stock_signals_20001_20011',
   'stock_industry_3level',
   'stock_kline_15m',
   'stock_kline_30m',
