@@ -292,6 +292,19 @@ def build_data_dict() -> dict:
         # 视图是派生产物(如 *_labeled), 不计入孤儿表
         db_tables -= is_view
 
+        # 外部子系统表 (竞价监控/, 见 memory call-auction-monitor): 不参与 run.py 治理, 不算孤儿
+        EXTERNAL_TABLES = {'auction_labels', 'auction_snapshot'}
+        for t in list(db_tables):
+            if t in EXTERNAL_TABLES:
+                cols = get_table_columns(con, t)
+                data_dict[t] = {
+                    'cn': '[外部子系统-竞价监控]',
+                    'source_script': '',
+                    'is_external': True,
+                    'columns': [{'name': c['name'], 'type': c['type'], 'cn': 'TODO', 'note': '外部子系统表(竞价监控), 不参与run.py治理'} for c in cols],
+                }
+                db_tables.discard(t)
+
         # 真正的孤儿: DB有, 上面都没处理
         for t in sorted(db_tables):
             cols = get_table_columns(con, t)

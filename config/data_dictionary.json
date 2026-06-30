@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": "1.1",
-    "generated_at": "2026-06-30T18:49:01",
+    "generated_at": "2026-06-30T20:48:32",
     "note": "SSOT - 数据字典. 字段中文来源: 脚本FIELD_MAP(ast) > DB dim表 > TODO"
   },
   "stock_kline_1m": {
@@ -3350,86 +3350,6 @@
       }
     ]
   },
-  "stock_block_relation_industry_labeled": {
-    "cn": "股票板块关系_打行业归属",
-    "source_script": "",
-    "is_view": true,
-    "derived_from": "stock_block_relation",
-    "columns": [
-      {
-        "name": "stock_code",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块代码",
-        "type": "VARCHAR",
-        "cn": "板块代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块名称",
-        "type": "VARCHAR",
-        "cn": "板块名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块类型",
-        "type": "VARCHAR",
-        "cn": "板块类型",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "成分股数",
-        "type": "INTEGER",
-        "cn": "成分股数",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "fetch_time",
-        "type": "TIMESTAMP",
-        "cn": "TODO",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业一级代码",
-        "type": "VARCHAR",
-        "cn": "行业一级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业一级名称",
-        "type": "VARCHAR",
-        "cn": "行业一级名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业二级代码",
-        "type": "VARCHAR",
-        "cn": "行业二级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业二级名称",
-        "type": "VARCHAR",
-        "cn": "行业二级名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业三级代码",
-        "type": "VARCHAR",
-        "cn": "行业三级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业三级名称",
-        "type": "VARCHAR",
-        "cn": "行业三级名称",
-        "note": "视图, 字段含义继承主表"
-      }
-    ]
-  },
   "stock_gp1_46_indicators_labeled": {
     "cn": "[VIEW] 个股GP指标 - 带字段含义",
     "source_script": "1_入库/93_stock_gp1_46_indicators.py",
@@ -3507,6 +3427,86 @@
         "type": "VARCHAR",
         "cn": "备注",
         "note": "视图, 字段同主表"
+      }
+    ]
+  },
+  "stock_block_relation_industry_labeled": {
+    "cn": "股票板块关系_打行业归属",
+    "source_script": "",
+    "is_view": true,
+    "derived_from": "stock_block_relation",
+    "columns": [
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块代码",
+        "type": "VARCHAR",
+        "cn": "板块代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块名称",
+        "type": "VARCHAR",
+        "cn": "板块名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块类型",
+        "type": "VARCHAR",
+        "cn": "板块类型",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "成分股数",
+        "type": "INTEGER",
+        "cn": "成分股数",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "fetch_time",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业一级代码",
+        "type": "VARCHAR",
+        "cn": "行业一级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业一级名称",
+        "type": "VARCHAR",
+        "cn": "行业一级名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业二级代码",
+        "type": "VARCHAR",
+        "cn": "行业二级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业二级名称",
+        "type": "VARCHAR",
+        "cn": "行业二级名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级代码",
+        "type": "VARCHAR",
+        "cn": "行业三级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级名称",
+        "type": "VARCHAR",
+        "cn": "行业三级名称",
+        "note": "视图, 字段含义继承主表"
       }
     ]
   },
@@ -3620,145 +3620,143 @@
       }
     ]
   },
-  "auction_labels": {
-    "cn": "[ORPHAN-无脚本]",
-    "source_script": "",
-    "is_view": false,
-    "orphan": true,
-    "columns": [
-      {
-        "name": "hq_date",
-        "type": "DATE",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "code",
-        "type": "VARCHAR",
-        "cn": "代码",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "phase",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "label",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "aux",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "confidence",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "open_pct",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "zjl_ratio",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "float_mcap",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "trap_cnt",
-        "type": "INTEGER",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "reason",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      },
-      {
-        "name": "run_ts",
-        "type": "TIMESTAMP",
-        "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
-      }
-    ]
-  },
   "auction_snapshot": {
-    "cn": "[ORPHAN-无脚本]",
+    "cn": "[外部子系统-竞价监控]",
     "source_script": "",
-    "is_view": false,
-    "orphan": true,
+    "is_external": true,
     "columns": [
       {
         "name": "hq_date",
         "type": "DATE",
         "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
       },
       {
         "name": "code",
         "type": "VARCHAR",
         "cn": "代码",
-        "note": "孤儿表, 待登记或删除"
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
       },
       {
         "name": "last_close",
         "type": "DOUBLE",
         "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
       },
       {
         "name": "open_price",
         "type": "DOUBLE",
         "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
       },
       {
         "name": "now_price",
         "type": "DOUBLE",
         "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
       },
       {
         "name": "volume",
         "type": "BIGINT",
         "cn": "成交量",
-        "note": "孤儿表, 待登记或删除"
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
       },
       {
         "name": "amount",
         "type": "DOUBLE",
         "cn": "成交额",
-        "note": "孤儿表, 待登记或删除"
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
       },
       {
         "name": "fetch_time",
         "type": "TIMESTAMP",
         "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
       },
       {
         "name": "source",
         "type": "VARCHAR",
         "cn": "TODO",
-        "note": "孤儿表, 待登记或删除"
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      }
+    ]
+  },
+  "auction_labels": {
+    "cn": "[外部子系统-竞价监控]",
+    "source_script": "",
+    "is_external": true,
+    "columns": [
+      {
+        "name": "hq_date",
+        "type": "DATE",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "代码",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "phase",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "label",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "aux",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "confidence",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "open_pct",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "zjl_ratio",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "float_mcap",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "trap_cnt",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "reason",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "run_ts",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
       }
     ]
   }
