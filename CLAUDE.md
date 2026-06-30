@@ -5,7 +5,7 @@
 读完才能动手；骨架够用就不要再 Read 业务文件全文。
 
 > **增删表/读写/内存/协作规范全部在 `docs/data_governance.md`，动表前必读必守。**
-> 改表后必跑 `python run.py sync-dict && python run.py integrity`，贴结果给用户。
+> 改表/改入库脚本后必跑 `python run.py sync-dict && integrity && check-dup [表名]`，贴结果给用户。详见 `memory/data-governance-framework.md`。
 
 ## 🚫 禁止清单
 1. 禁止实现 fetch_data() 业务逻辑，只留 WARNING 占位（**需用户明确授权**）
