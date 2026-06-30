@@ -26,22 +26,24 @@ MODE = 'increment'
 SCHEDULE = 'daily'
 
 
-def fetch_data(con):
+def fetch_data(con, force=False):
     """并行读取 .day 文件（增量模式）"""
     reader = TdxReader()
-
-    # 获取数据库最新日期
-    try:
-        latest = con.execute(f"SELECT MAX(date) FROM {TABLE}").fetchone()[0]
-        if latest:
-            min_date = (latest + pd.Timedelta(days=1)).strftime('%Y%m%d')
-            logger.info(f"  增量模式，最小日期: {min_date}")
-        else:
+    if not force:
+        # 增量: 只读数据库最新日期之后的数据
+        try:
+            latest = con.execute(f"SELECT MAX(date) FROM {TABLE}").fetchone()[0]
+            if latest:
+                min_date = (latest + pd.Timedelta(days=1)).strftime('%Y%m%d')
+                logger.info(f"  增量模式，最小日期: {min_date}")
+            else:
+                min_date = None
+                logger.info(f"  全量模式（首次入库）")
+        except Exception:
             min_date = None
-            logger.info(f"  全量模式（首次入库）")
-    except Exception:
+    else:
         min_date = None
-
+        logger.info(f"  force: 全量重读")
     return reader.read_daily_parallel(min_date=min_date)
 
 
@@ -62,7 +64,10 @@ def ensure_table(con):
 
 
 def save_data(con, df):
-    """COPY + parquet 批量入库"""
+    """COPY + parquet 批量入库 (调用方须已 DELETE 待写区间, 保证幂等)。入库前去重。"""
+    if df.empty:
+        return
+    df = df.drop_duplicates(['code', 'date'])
     if df.empty:
         return
     df['date'] = pd.to_datetime(df['date']).dt.date
@@ -86,13 +91,27 @@ def run(force=False):
     con = duckdb.connect(DB_PATH)
     try:
         ensure_table(con)
-        df = fetch_data(con)
+        df = fetch_data(con, force=force)
 
         if df.empty:
             logger.info(f"○ {TABLE} 无新数据")
             return True
 
-        save_data(con, df)
+        # 按范围覆盖 (防重复): force=清空全表; 增量=DELETE >= 本次df最小日期 (含重叠日重灌)。
+        # DELETE 在前、COPY 在后, 同一事务包裹 → 幂等可重跑, 永不产生重复。
+        min_d = pd.to_datetime(df['date']).min().date()
+        con.execute("BEGIN")
+        try:
+            if force:
+                con.execute(f"DELETE FROM {TABLE}")
+            else:
+                con.execute(f"DELETE FROM {TABLE} WHERE date >= ?", [min_d])
+            save_data(con, df)
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
+
         logger.info(f"✔ {TABLE} 完成，共 {len(df):,} 条")
         return True
     except Exception as e:
