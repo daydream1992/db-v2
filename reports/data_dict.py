@@ -5,9 +5,99 @@
 import duckdb
 import json
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from loguru import logger
+
+
+def _should_run_today(schedule: str, last_date_str: str | None) -> tuple[bool, str]:
+    """判断今天该不该跑这张表
+
+    Returns: (should_run, status_text)
+        status_text 取值: '✓ 今天已更新' / '✗ 今天该跑但没跑' /
+                         '⚠ 超期未更新(N天)' / '○ 一次性表' /
+                         '- 不在调度范围' / '? 未知'
+    """
+    if schedule in ('-', '', None):
+        return False, '- 不在调度范围'
+    if schedule == 'once':
+        return False, '○ 一次性表'
+    if schedule == 'intraday':
+        return False, '⚡ 盘中实时'
+
+    today = date.today()
+    if not last_date_str:
+        return schedule == 'daily', '? 无数据日期'
+
+    # last_date_str 可能是 'YYYY-MM-DD' 或 'YYYYMMDD' 或 'YYYY-MM-DD HH:MM:SS'
+    s = str(last_date_str)[:10].replace('-', '')
+    if len(s) >= 8:
+        try:
+            last_d = date(int(s[:4]), int(s[4:6]), int(s[6:8]))
+        except ValueError:
+            return False, '? 日期解析失败'
+    else:
+        return False, '? 日期格式异常'
+
+    days_late = (today - last_d).days
+
+    if schedule == 'daily':
+        if days_late == 0:
+            return False, '✓ 今天已更新'
+        elif days_late == 1:
+            return True, f'⚠ 昨天没跑'  # 当天可能没收盘
+        else:
+            return True, f'⚠ 超期 {days_late} 天'
+    elif schedule == 'weekly':
+        if days_late <= 7:
+            return False, f'✓ {days_late} 天内更新'
+        else:
+            return True, f'⚠ 超期 {days_late} 天 (应周更)'
+    elif schedule == 'monthly':
+        if days_late <= 31:
+            return False, f'✓ {days_late} 天内更新'
+        else:
+            return True, f'⚠ 超期 {days_late} 天 (应月更)'
+    return False, '? 未知 schedule'
+
+
+def _get_last_date(conn, table_name: str) -> str | None:
+    """获取表的最近数据日期(尝试多个常见日期列)"""
+    try:
+        cols = conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+            [table_name]
+        ).df()['column_name'].tolist()
+    except:
+        return None
+
+    date_cols_priority = ['trade_date', 'date', 'trade_time', 'hqdate',
+                          'snapshot_date', 'update_date', 'fetch_time', 'dt', 'report_date']
+    for dc in date_cols_priority:
+        for c in cols:
+            if c.lower() == dc:
+                try:
+                    r = conn.execute(f'SELECT MAX({c}) FROM {table_name}').fetchone()
+                    if r and r[0]:
+                        return str(r[0])
+                except:
+                    continue
+    return None
+
+
+def _classify_status(schedule: str, status_text: str) -> str:
+    """把状态文字分类成 emoji-safe 标签(GBK 渲染不报错)"""
+    if status_text.startswith('✓'):
+        return '[OK]'
+    if status_text.startswith('⚠'):
+        return '[STALE]'
+    if status_text.startswith('?'):
+        return '[?]'
+    if status_text.startswith('○'):
+        return '[ONCE]'
+    if status_text.startswith('⚡'):
+        return '[INTRADAY]'
+    return '[-]'
 
 # ========== 路径常量 ==========
 DB_PATH = r'K:\DB数据库_v2\db\profit_radar.duckdb'
@@ -157,7 +247,21 @@ def scan_tables(conn, tables_meta):
             'source': source,
             'script_path': script_path,
             'sort_key': sort_num,
+            'last_date': '-',
+            'should_run': False,
+            'status': '-',
         })
+
+    # 第二轮:计算状态(依赖全部 row 已知)
+    for r in results:
+        if r['row_count'] == 0:
+            r['status'] = '[EMPTY] 无数据'
+            continue
+        last = _get_last_date(conn, r['table_name'])
+        r['last_date'] = last if last else '-'
+        should_run, status_text = _should_run_today(r['schedule'], last)
+        r['should_run'] = should_run
+        r['status'] = _classify_status(r['schedule'], status_text) + ' ' + status_text
 
     results.sort(key=lambda x: (x['sort_key'], x['table_name']))
     for i, r in enumerate(results, 1):
@@ -260,27 +364,43 @@ def format_markdown(tables_data, col_data, tables_meta):
     lines.append("")
     header = " | ".join([
         f"{'序':^4}", f"{'表名':<30}", f"{'中文名':<14}", f"{'列':>4}",
-        f"{'行数':>12}", f"{'日期范围':<24}", f"{'周期':<8}",
-        f"{'模式':<8}", f"{'数据源':<14}"
+        f"{'行数':>12}", f"{'最新日期':<12}", f"{'周期':<8}",
+        f"{'模式':<8}", f"{'状态':<30}", f"{'数据源':<14}"
     ])
     lines.append(header)
-    sep = "-|-".join(['-'*4, '-'*30, '-'*14, '-'*4, '-'*12, '-'*24, '-'*8, '-'*8, '-'*14])
+    sep = "-|-".join(['-'*4, '-'*30, '-'*14, '-'*4, '-'*12, '-'*12, '-'*8, '-'*8, '-'*30, '-'*14])
     lines.append(sep)
     for d in tables_data:
         col_count_val = int(d['col_count']) if d['col_count'] else 0
         row_count_val = int(d['row_count']) if d['row_count'] else 0
+        last_date_str = str(d.get('last_date', '-'))[:10]
         row = " | ".join([
             f"{d['idx']:^4}",
             f"{d['table_name']:<30}",
             f"{d['table_name_cn']:<14}",
             f"{col_count_val:>4}",
             f"{row_count_val:>12,}",
-            f"{d['date_range']:<24}",
+            f"{last_date_str:<12}",
             f"{d['schedule']:<8}",
             f"{d['mode']:<8}",
+            f"{d.get('status','-'):<30}",
             f"{d['source']:<14}",
         ])
         lines.append(row)
+
+    # 待跑清单:基于 should_run=True
+    todo = [d for d in tables_data if d.get('should_run')]
+    if todo:
+        lines.append("")
+        lines.append("## 待跑清单 (今天该跑未跑)")
+        lines.append("")
+        lines.append("| 序 | 表名 | 中文名 | 周期 | 状态 |")
+        lines.append("|--|------|--------|------|------|")
+        for d in todo:
+            lines.append(
+                f"| {d['idx']} | {d['table_name']} | {d['table_name_cn']} | "
+                f"{d['schedule']} | {d['status']} |"
+            )
 
     # 列字典摘要
     lines.append("")
@@ -326,10 +446,12 @@ def save_reports(tables_data, col_data, tables_meta, sync_db=False):
     # CSV - 表维度
     df_table = pd.DataFrame(tables_data)[
         ['idx', 'table_name', 'table_name_cn', 'col_count', 'row_count',
-         'date_range', 'schedule', 'mode', 'period', 'source', 'script_path']
+         'last_date', 'date_range', 'schedule', 'mode', 'period', 'source',
+         'script_path', 'status', 'should_run']
     ]
-    df_table.columns = ['序号', '表名', '中文名', '列数', '行数', '日期范围',
-                         '周期', '模式', '时段', '数据源', '脚本路径']
+    df_table.columns = ['序号', '表名', '中文名', '列数', '行数', '最新日期',
+                         '日期范围', '周期', '模式', '时段', '数据源',
+                         '脚本路径', '状态', '是否该跑']
     csv_table_file = f"data_dict_{prefix}.csv"
     df_table.to_csv(OUTPUT_DIR / csv_table_file, index=False, encoding='utf-8-sig')
 
