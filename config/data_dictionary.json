@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": "1.1",
-    "generated_at": "2026-06-30T01:10:36",
+    "generated_at": "2026-06-30T18:49:01",
     "note": "SSOT - 数据字典. 字段中文来源: 脚本FIELD_MAP(ast) > DB dim表 > TODO"
   },
   "stock_kline_1m": {
@@ -2170,48 +2170,6 @@
       }
     ]
   },
-  "stock_signals_20001_20011": {
-    "cn": "股票信号数据",
-    "source_script": "1_入库/95_stock_signals_20001_20011.py",
-    "dir": "1_入库",
-    "sort": "095",
-    "schedule": "daily",
-    "mode": "increment",
-    "source": "文本(T0002)",
-    "note": "",
-    "columns": [
-      {
-        "name": "code",
-        "type": "VARCHAR",
-        "cn": "证券代码",
-        "note": ""
-      },
-      {
-        "name": "date",
-        "type": "DATE",
-        "cn": "日期（YYYYMMDD）",
-        "note": ""
-      },
-      {
-        "name": "value",
-        "type": "DOUBLE",
-        "cn": "信号值",
-        "note": ""
-      },
-      {
-        "name": "signal_code",
-        "type": "VARCHAR",
-        "cn": "信号代码",
-        "note": ""
-      },
-      {
-        "name": "signal_name",
-        "type": "VARCHAR",
-        "cn": "信号名称",
-        "note": ""
-      }
-    ]
-  },
   "dim_security_type": {
     "cn": "证券类型维表",
     "source_script": "2_计算/001_dim_security_type_sync.py",
@@ -3234,86 +3192,6 @@
       }
     ]
   },
-  "stock_gp1_46_indicators_labeled": {
-    "cn": "[VIEW] 个股GP指标 - 带字段含义",
-    "source_script": "1_入库/93_stock_gp1_46_indicators.py",
-    "is_view": true,
-    "derived_from": "stock_gp1_46_indicators",
-    "columns": [
-      {
-        "name": "date",
-        "type": "DATE",
-        "cn": "日期",
-        "note": "视图, 字段同主表"
-      },
-      {
-        "name": "code",
-        "type": "VARCHAR",
-        "cn": "代码",
-        "note": "视图, 字段同主表"
-      },
-      {
-        "name": "gp_code",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "视图, 字段同主表"
-      },
-      {
-        "name": "gp_name",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "视图, 字段同主表"
-      },
-      {
-        "name": "value_0",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "视图, 字段同主表"
-      },
-      {
-        "name": "value_1",
-        "type": "DOUBLE",
-        "cn": "TODO",
-        "note": "视图, 字段同主表"
-      },
-      {
-        "name": "value_0_name",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "视图, 字段同主表"
-      },
-      {
-        "name": "value_0_unit",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "视图, 字段同主表"
-      },
-      {
-        "name": "value_1_name",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "视图, 字段同主表"
-      },
-      {
-        "name": "value_1_unit",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "视图, 字段同主表"
-      },
-      {
-        "name": "present",
-        "type": "BOOLEAN",
-        "cn": "TODO",
-        "note": "视图, 字段同主表"
-      },
-      {
-        "name": "note",
-        "type": "VARCHAR",
-        "cn": "备注",
-        "note": "视图, 字段同主表"
-      }
-    ]
-  },
   "t_bk5_19_industry_labeled": {
     "cn": "板块BK交易数据_打行业标签",
     "source_script": "",
@@ -3552,6 +3430,86 @@
       }
     ]
   },
+  "stock_gp1_46_indicators_labeled": {
+    "cn": "[VIEW] 个股GP指标 - 带字段含义",
+    "source_script": "1_入库/93_stock_gp1_46_indicators.py",
+    "is_view": true,
+    "derived_from": "stock_gp1_46_indicators",
+    "columns": [
+      {
+        "name": "date",
+        "type": "DATE",
+        "cn": "日期",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "代码",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "gp_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "gp_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_0",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_1",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_0_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_0_unit",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_1_name",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "value_1_unit",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "present",
+        "type": "BOOLEAN",
+        "cn": "TODO",
+        "note": "视图, 字段同主表"
+      },
+      {
+        "name": "note",
+        "type": "VARCHAR",
+        "cn": "备注",
+        "note": "视图, 字段同主表"
+      }
+    ]
+  },
   "dim_88field_indicator": {
     "cn": "[配套维度表]",
     "source_script": "",
@@ -3659,6 +3617,148 @@
         "type": "BOOLEAN",
         "cn": "TODO",
         "note": "维度表, 提供枚举/字段含义"
+      }
+    ]
+  },
+  "auction_labels": {
+    "cn": "[ORPHAN-无脚本]",
+    "source_script": "",
+    "is_view": false,
+    "orphan": true,
+    "columns": [
+      {
+        "name": "hq_date",
+        "type": "DATE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "代码",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "phase",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "label",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "aux",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "confidence",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "open_pct",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "zjl_ratio",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "float_mcap",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "trap_cnt",
+        "type": "INTEGER",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "reason",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "run_ts",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      }
+    ]
+  },
+  "auction_snapshot": {
+    "cn": "[ORPHAN-无脚本]",
+    "source_script": "",
+    "is_view": false,
+    "orphan": true,
+    "columns": [
+      {
+        "name": "hq_date",
+        "type": "DATE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "代码",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "last_close",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "open_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "now_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "amount",
+        "type": "DOUBLE",
+        "cn": "成交额",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "fetch_time",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
+      },
+      {
+        "name": "source",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "孤儿表, 待登记或删除"
       }
     ]
   }

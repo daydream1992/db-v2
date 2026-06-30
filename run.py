@@ -14,6 +14,7 @@ run.py — 数据库入库统一入口（包工头）
   python run.py remove 表名             删除表
   python run.py fix 表名 [--date DATE]  补数(force=True)
   python run.py backup                  备份数据库
+  python run.py check-dup [表名]        重复巡检(全表/单表; all 入库后自动体检)
 
 元数据来源：脚本头部 @meta（优先）> tables.json（备用）
 """
@@ -168,6 +169,77 @@ def match_keyword(scripts_meta: dict, keyword: str) -> list:
 
 # ========== 命令实现 ==========
 
+def _gate_check_latest(con, table: str):
+    """检查 table 最新分区(最大日期/采集时间)有无重复。返回 (groups, excess) 或 None。
+
+    入库后体检的轻量探针: 只查最新一天的分区 → 不会对亿级大表全表 GROUP BY 而 OOM。
+    """
+    try:
+        sys.path.insert(0, str(BASE_DIR / '4_工具'))
+        from data_quality_gate import DUP_KEYS, count_dup
+    except Exception:
+        return None
+    if table not in DUP_KEYS:
+        return None
+    for col in _DATE_COLS:
+        try:
+            r = con.execute(f'SELECT MAX({col}) FROM {table}').fetchone()
+            if not (r and r[0]):
+                continue
+            ds = str(r[0])[:10]
+            if col in ('trade_time', 'fetch_time', 'snapshot_time'):
+                where = f"{col} >= TIMESTAMP '{ds} 00:00:00' AND {col} <= TIMESTAMP '{ds} 23:59:59'"
+            else:
+                where = f"{col} = DATE '{ds}'"
+            return count_dup(con, table, where=where)
+        except Exception:
+            continue
+    return None
+
+
+def _post_ingest_gate(ingested_tables: list):
+    """入库后自动体检 (兜底门禁): 对每张刚入库的表查最新分区重复。
+
+    主防线是各脚本 save_data 的 DELETE+dedup; 这里是可见的红绿灯报警。
+    """
+    if not ingested_tables:
+        return
+    logger.info(f'入库后体检 {len(ingested_tables)} 张表(最新分区)...')
+    con = duckdb.connect(str(DB_PATH), read_only=True)
+    con.execute("SET memory_limit='4GB'"); con.execute("SET threads=1")
+    issues = []
+    for t in ingested_tables:
+        try:
+            res = _gate_check_latest(con, t)
+            if res and res[1] > 0:
+                logger.error(f'  [RED] {t} 最新分区 重复键={res[0]} 超额行={res[1]}')
+                issues.append(t)
+        except Exception as ex:
+            logger.debug(f'  体检跳过 {t}: {ex}')
+    con.close()
+    if issues:
+        logger.error(f'✘ 入库后体检: {len(issues)} 张表最新分区检出重复 → {issues}')
+        logger.error('   跑 `python run.py check-dup` 看全表详情')
+    else:
+        logger.info('✔ 入库后体检: 最新分区均无重复')
+
+
+def cmd_check_dup(table: str = None):
+    """全表/单表重复巡检 (大表按日/按年分块防 OOM)。"""
+    sys.path.insert(0, str(BASE_DIR / '4_工具'))
+    from data_quality_gate import sweep
+    con = duckdb.connect(str(DB_PATH), read_only=True)
+    con.execute("SET memory_limit='8GB'"); con.execute("SET threads=1")
+    logger.info(f'=== 重复巡检 {table or "全表"} ===')
+    rows = sweep(con, table)
+    total_excess = sum(r[2] for r in rows if r[2] > 0)
+    con.close()
+    if total_excess == 0:
+        logger.info('✔ 合计超额行 = 0 (全部干净)')
+    else:
+        logger.error(f'✘ 合计超额行 = {total_excess:,}')
+
+
 def cmd_all(scripts_meta: dict, tier: str):
     """批量执行入库"""
     schedules = SCHEDULE_TIERS.get(tier, SCHEDULE_TIERS['daily'])
@@ -179,6 +251,7 @@ def cmd_all(scripts_meta: dict, tier: str):
     logger.info(f'共 {len(table_list)} 张表 (schedule={schedules})')
 
     results = []
+    done = []  # 成功入库的表 → 入库后体检
     for name in table_list:
         meta = scripts_meta.get(name, {})
         sort = meta.get('sort', '?')
@@ -194,11 +267,14 @@ def cmd_all(scripts_meta: dict, tier: str):
         try:
             ok = mod.run(force=False)
             results.append((name, 'OK' if ok else 'FAIL'))
+            if ok:
+                done.append(name)
         except Exception as e:
             logger.error(f'  ERROR: {e}')
             results.append((name, 'ERROR'))
 
     _print_summary(results)
+    _post_ingest_gate(done)  # 自动体检门禁: 入库后查最新分区重复
 
 
 def cmd_run_tables(scripts_meta: dict, keywords: list, force: bool = False):
@@ -800,7 +876,7 @@ def main():
     logger.debug(f'扫描到 {len(scripts_meta)} 个脚本')
 
     # 如果第一个参数不是已知子命令，当作关键字匹配执行
-    known_commands = {'all', 'scan', 'catalog', 'health', 'join', 'check', 'get', 'add', 'remove', 'fix', 'backup', 'integrity', 'sync-dict'}
+    known_commands = {'all', 'scan', 'catalog', 'health', 'join', 'check', 'check-dup', 'get', 'add', 'remove', 'fix', 'backup', 'integrity', 'sync-dict'}
     if len(sys.argv) > 1 and sys.argv[1] not in known_commands and not sys.argv[1].startswith('-'):
         cmd_run_tables(scripts_meta, sys.argv[1:])
         return
@@ -842,6 +918,10 @@ def main():
     # backup
     sub.add_parser('backup', help='Backup database')
 
+    # check-dup (重复巡检: 全表/单表, 大表按日按年分块)
+    p_dup = sub.add_parser('check-dup', help='Duplicate scan (all or one table)')
+    p_dup.add_argument('table', nargs='?', default=None)
+
     # integrity (一致性健康检查)
     sub.add_parser('integrity', help='Check DB/script/dict consistency')
 
@@ -879,6 +959,8 @@ def main():
         cmd_fix(args.table, scripts_meta)
     elif args.command == 'backup':
         cmd_backup()
+    elif args.command == 'check-dup':
+        cmd_check_dup(args.table)
     elif args.command == 'integrity':
         from config.check_integrity import main as integrity_main
         sys.exit(integrity_main())

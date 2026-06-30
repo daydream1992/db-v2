@@ -1,9 +1,9 @@
 # 数据字典 (自动生成)
 
-> 生成时间: 2026-06-30T01:10:36
+> 生成时间: 2026-06-30T18:49:01
 > 来源: 脚本@meta + DB DESCRIBE + 脚本FIELD_MAP(ast) + dim_*维度表
 
-## 📊 正式表 (33 个)
+## 📊 正式表 (32 个)
 
 ### ? pianpao_daily_summary
 - **中文**: [多表产物-70_pianpao_daily]
@@ -81,25 +81,6 @@
 | vol_ratio | DOUBLE | TODO | pianpao多表产物 |
 | bar_count | INTEGER | TODO | pianpao多表产物 |
 
-### ? stock_gp1_46_indicators_labeled
-- **中文**: [VIEW] 个股GP指标 - 带字段含义
-- **脚本**: `1_入库/93_stock_gp1_46_indicators.py`
-
-| 字段 | 类型 | 中文 | 备注 |
-|------|------|------|------|
-| date | DATE | 日期 | 视图, 字段同主表 |
-| code | VARCHAR | 代码 | 视图, 字段同主表 |
-| gp_code | VARCHAR | TODO | 视图, 字段同主表 |
-| gp_name | VARCHAR | TODO | 视图, 字段同主表 |
-| value_0 | DOUBLE | TODO | 视图, 字段同主表 |
-| value_1 | DOUBLE | TODO | 视图, 字段同主表 |
-| value_0_name | VARCHAR | TODO | 视图, 字段同主表 |
-| value_0_unit | VARCHAR | TODO | 视图, 字段同主表 |
-| value_1_name | VARCHAR | TODO | 视图, 字段同主表 |
-| value_1_unit | VARCHAR | TODO | 视图, 字段同主表 |
-| present | BOOLEAN | TODO | 视图, 字段同主表 |
-| note | VARCHAR | 备注 | 视图, 字段同主表 |
-
 ### ? t_bk5_19_industry_labeled
 - **中文**: 板块BK交易数据_打行业标签
 - **脚本**: ``
@@ -150,6 +131,25 @@
 | 行业二级名称 | VARCHAR | 行业二级名称 | 视图, 字段含义继承主表 |
 | 行业三级代码 | VARCHAR | 行业三级代码 | 视图, 字段含义继承主表 |
 | 行业三级名称 | VARCHAR | 行业三级名称 | 视图, 字段含义继承主表 |
+
+### ? stock_gp1_46_indicators_labeled
+- **中文**: [VIEW] 个股GP指标 - 带字段含义
+- **脚本**: `1_入库/93_stock_gp1_46_indicators.py`
+
+| 字段 | 类型 | 中文 | 备注 |
+|------|------|------|------|
+| date | DATE | 日期 | 视图, 字段同主表 |
+| code | VARCHAR | 代码 | 视图, 字段同主表 |
+| gp_code | VARCHAR | TODO | 视图, 字段同主表 |
+| gp_name | VARCHAR | TODO | 视图, 字段同主表 |
+| value_0 | DOUBLE | TODO | 视图, 字段同主表 |
+| value_1 | DOUBLE | TODO | 视图, 字段同主表 |
+| value_0_name | VARCHAR | TODO | 视图, 字段同主表 |
+| value_0_unit | VARCHAR | TODO | 视图, 字段同主表 |
+| value_1_name | VARCHAR | TODO | 视图, 字段同主表 |
+| value_1_unit | VARCHAR | TODO | 视图, 字段同主表 |
+| present | BOOLEAN | TODO | 视图, 字段同主表 |
+| note | VARCHAR | 备注 | 视图, 字段同主表 |
 
 ### ? dim_88field_indicator
 - **中文**: [配套维度表]
@@ -401,20 +401,6 @@
 | gp_name | VARCHAR | 指标名称 |  |
 | value_0 | DOUBLE | 指标值1 |  |
 | value_1 | DOUBLE | 指标值2 |  |
-
-### 095 stock_signals_20001_20011
-- **中文**: 股票信号数据
-- **脚本**: `1_入库/95_stock_signals_20001_20011.py`
-- **schedule**: daily | **mode**: increment
-- **数据源**: 文本(T0002)
-
-| 字段 | 类型 | 中文 | 备注 |
-|------|------|------|------|
-| code | VARCHAR | 证券代码 |  |
-| date | DATE | 日期（YYYYMMDD） |  |
-| value | DOUBLE | 信号值 |  |
-| signal_code | VARCHAR | 信号代码 |  |
-| signal_name | VARCHAR | 信号名称 |  |
 
 ### 101 sjb_api_plhqL2kz_88zd
 - **中文**: L2快照88字段
@@ -833,3 +819,11 @@
 | close | DOUBLE | 收盘价 |  |
 | volume | BIGINT | 成交量 |  |
 | amount | DOUBLE | 成交额 |  |
+
+
+## ⚠️ 孤儿表 (2 个, 无对应脚本)
+
+- **auction_labels** (12 字段)
+- **auction_snapshot** (9 字段)
+
+> 处理: `python config/gen_data_dict.py --check` 给出建议

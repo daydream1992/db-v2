@@ -140,9 +140,19 @@ def ensure_table(con):
 
 
 def save_data(con, df):
-    # 增量: 按 fetch_time 日期删今日旧行再插 (同日重跑覆盖)
-    con.execute(f"DELETE FROM {TABLE} WHERE CAST(fetch_time AS DATE) = CURRENT_DATE")
-    con.execute(f"INSERT INTO {TABLE} SELECT * FROM df")
+    # 去重: 自然键=(stock_code,板块名称,板块类型,fetch_time)。板块代码对指数/风格板块为'0'
+    # (get_relation 对这类板块不返回代码 → 板块代码='0'是正常特征, 不是脏数据),
+    # 故去重必须用 板块名称+板块类型, 不能用板块代码。
+    df = df.drop_duplicates(['stock_code', '板块名称', '板块类型', 'fetch_time'])
+    # 按日覆盖: 删今日旧行再插 (同日重跑幂等), 事务包裹
+    con.execute("BEGIN")
+    try:
+        con.execute(f"DELETE FROM {TABLE} WHERE CAST(fetch_time AS DATE) = CURRENT_DATE")
+        con.execute(f"INSERT INTO {TABLE} SELECT * FROM df")
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
 
 
 def run(force=False):

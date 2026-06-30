@@ -54,7 +54,10 @@ def ensure_table(con):
 
 
 def save_data(con, df):
-    """用 COPY 导入"""
+    """COPY 导入 (调用方须已按范围 DELETE 待写区间, 保证幂等)。入库前去重。"""
+    if df.empty:
+        return
+    df = df.drop_duplicates(['code', 'trade_time'])
     if df.empty:
         return
     with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp:
@@ -81,21 +84,34 @@ def run(force=False):
                     logger.info(f"  增量模式，最小日期: {min_date}")
                 else:
                     logger.info(f"  全量模式（首次入库）")
-            except:
+            except Exception:
                 pass
 
         ensure_table(con)
 
+        # 按范围覆盖 (防重复): force=清空全表; 增量=DELETE >= min_date (含重叠日重灌)。
+        # DELETE 在前、流式 COPY 在后, 同一事务包裹 → 幂等可重跑, 永不产生重复。
+        con.execute("BEGIN")
         total = 0
         file_count = 0
-        for file_path, df in fetch_data(min_date=min_date):
-            if df.empty:
-                continue
-            save_data(con, df)
-            total += len(df)
-            file_count += 1
-            if file_count % 100 == 0:
-                logger.info(f"  已处理 {file_count} 文件, {total:,} 条")
+        try:
+            if force:
+                con.execute(f"DELETE FROM {TABLE}")
+                logger.info(f"  force: 清空全表后重灌")
+            elif min_date:
+                con.execute(f"DELETE FROM {TABLE} WHERE trade_time >= TIMESTAMP '{min_date} 00:00:00'")
+            for file_path, df in fetch_data(min_date=min_date):
+                if df.empty:
+                    continue
+                save_data(con, df)
+                total += len(df)
+                file_count += 1
+                if file_count % 200 == 0:
+                    logger.info(f"  已处理 {file_count} 文件, {total:,} 条")
+            con.execute("COMMIT")
+        except Exception:
+            con.execute("ROLLBACK")
+            raise
 
         if total == 0:
             logger.info(f"○ {TABLE} 无新数据")

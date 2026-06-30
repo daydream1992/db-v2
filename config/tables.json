@@ -242,17 +242,6 @@
     "status": "implemented",
     "depends_on": ["stock_daily_kline"]
   },
-  "stock_signals_20001_20011": {
-    "cn": "股票信号数据",
-    "source": "文本(T0002)",
-    "source_detail": "T0002/signals/signals_sys_*.dat",
-    "period": "每日盘后",
-    "schedule": "daily",
-    "mode": "increment",
-    "dir": "python 1_入库/95_stock_signals_20001_20011.py",
-    "sort": 95,
-    "status": "implemented"
-  },
   "sjb_api_plhqL2kz_88zd": {
     "cn": "L2快照88字段",
     "source": "API(TQ)",

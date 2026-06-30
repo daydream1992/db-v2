@@ -114,6 +114,12 @@ def run(force=False):
         # 流式入库: read_gp_stream 每批 yield, 过滤后即写即释放, 避免1亿+行驻留内存OOM。
         # 包在事务里: DELETE+INSERT 原子, 中途异常 ROLLBACK 不丢数据。
         from tdx_reader import TdxReader
+        # 交易日集合: 过滤源二进制里的周末/假日条目 (gp 不该有非交易日数据)
+        try:
+            trading_days = {r[0] for r in con.execute(
+                "SELECT date FROM trading_calendar WHERE is_trading").fetchall()}
+        except Exception:
+            trading_days = None
         con.execute("BEGIN")
         total = 0
         try:
@@ -126,8 +132,12 @@ def run(force=False):
                     continue
                 if mode == 'overwrite':
                     batch = batch[batch['date'] >= cutoff]
-                    if batch.empty:
-                        continue
+                # 去重 (源二进制含同 date,code,gp_code 重复条目) + 仅交易日
+                batch = batch.drop_duplicates(['date', 'code', 'gp_code'])
+                if trading_days is not None:
+                    batch = batch[batch['date'].isin(trading_days)]
+                if batch.empty:
+                    continue
                 con.register('_gp_batch', batch)
                 con.execute(f"INSERT INTO {TABLE}(date,code,gp_code,gp_name,value_0,value_1) "
                             f"SELECT date,code,gp_code,gp_name,value_0,value_1 FROM _gp_batch")

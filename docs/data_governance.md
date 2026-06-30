@@ -73,6 +73,24 @@
 - **事务包裹**：大表入库用 `BEGIN/COMMIT/ROLLBACK`，中途失败不丢旧数据（见 93 脚本）
 - **列名小写下划线**，禁中文禁空格
 
+### 写入语义分类（强制：只能"覆盖"，禁止"查重后跳过"）
+
+| 语义 | 做法 | 适用 | 本项目表 |
+|------|------|------|----------|
+| 按日覆盖 | `DELETE WHERE date IN (本次dates)` 再 INSERT | 日频事实表 | daily_kline, turnover, 1m/5m kline, gp, sc, capital_info, pianpao_* |
+| 按分区覆盖 | `DELETE WHERE 分区键(如 fetch_time)` 再 INSERT | 快照表 | block_relation |
+| 全量覆盖 | `DELETE FROM` 全表 再 INSERT | 维表/小表 | dim_*, trading_calendar |
+
+> **禁止 "查重后跳过(skip-if-exists)" 增量**：又慢、会产生缺失、且无法纠正历史。所有表统一用"覆盖"语义。
+> 分钟K(080/081)等大表: DELETE 待写区间 → 流式 COPY，事务包裹，幂等可重跑。
+> block_relation 去重键含 板块名称+板块类型（板块代码对指数/风格板块为 '0'，不能单独作键）。
+
+### 入库后体检门禁（data_quality_gate）
+- **主防线**：各脚本 `save_data` 内 `drop_duplicates(自然键)` + DELETE 分区再 INSERT（结构上杜绝重复）。
+- **兜底门禁**：`run.py all` 每张表入库后自动查最新分区重复（`_post_ingest_gate`），检出打 RED。
+- **手动巡检**：`python run.py check-dup [表名]` 全表/单表（大表按日/按年分块防 OOM）。
+- 自然键登记在 `4_工具/data_quality_gate.py` 的 `DUP_KEYS`；增删表须同步维护。
+
 ### 三类对象的写权限
 | 对象 | 谁能写 | 备注 |
 |------|--------|------|
