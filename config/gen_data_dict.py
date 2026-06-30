@@ -230,7 +230,8 @@ def build_data_dict() -> dict:
                 if t in db_tables:
                     cols = get_table_columns(con, t)
                     data_dict[t] = {
-                        'cn': f'[多表产物-{script_name}]',
+                        'cn': '',
+                        'cn_label': f'[多表产物-{script_name}]',
                         'source_script': f'2_计算/{script_name}.py',
                         'is_view': t in is_view,
                         'multi_table': True,
@@ -245,7 +246,8 @@ def build_data_dict() -> dict:
                 if main in data_dict:
                     cols = get_table_columns(con, t)
                     data_dict[t] = {
-                        'cn': f'[VIEW] {data_dict[main].get("cn", "")} - 带字段含义',
+                        'cn': data_dict[main].get('cn', ''),
+                        'cn_label': '[VIEW] 带字段含义',
                         'source_script': data_dict[main].get('source_script', ''),
                         'is_view': True,
                         'derived_from': main,
@@ -270,7 +272,8 @@ def build_data_dict() -> dict:
             if t.startswith('test_') or t.startswith('tmp_'):
                 cols = get_table_columns(con, t)
                 data_dict[t] = {
-                    'cn': '[测试/临时表]',
+                    'cn': '',
+                    'cn_label': '[测试/临时表]',
                     'source_script': '',
                     'is_test': True,
                     'columns': [{'name': c['name'], 'type': c['type'], 'cn': 'TODO', 'note': '测试/临时表, 保留作参考'} for c in cols],
@@ -282,7 +285,8 @@ def build_data_dict() -> dict:
             if t.startswith('dim_') or t.endswith('_indicator'):
                 cols = get_table_columns(con, t)
                 data_dict[t] = {
-                    'cn': '[配套维度表]',
+                    'cn': '',
+                    'cn_label': '[配套维度表]',
                     'source_script': '',
                     'is_dim': True,
                     'columns': [{'name': c['name'], 'type': c['type'], 'cn': 'TODO', 'note': '维度表, 提供枚举/字段含义'} for c in cols],
@@ -298,7 +302,8 @@ def build_data_dict() -> dict:
             if t in EXTERNAL_TABLES:
                 cols = get_table_columns(con, t)
                 data_dict[t] = {
-                    'cn': '[外部子系统-竞价监控]',
+                    'cn': '',
+                    'cn_label': '[外部子系统-竞价监控]',
                     'source_script': '',
                     'is_external': True,
                     'columns': [{'name': c['name'], 'type': c['type'], 'cn': 'TODO', 'note': '外部子系统表(竞价监控), 不参与run.py治理'} for c in cols],
@@ -309,7 +314,8 @@ def build_data_dict() -> dict:
         for t in sorted(db_tables):
             cols = get_table_columns(con, t)
             data_dict[t] = {
-                'cn': '[ORPHAN-无脚本]',
+                'cn': '',
+                'cn_label': '[ORPHAN-无脚本]',
                 'source_script': '',
                 'is_view': t in is_view,
                 'orphan': True,

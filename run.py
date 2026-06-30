@@ -572,7 +572,9 @@ def cmd_catalog(scripts_meta: dict):
             cnt = -1
         label, color = _classify_type(entry, name)
         return {'label': label, 'color': color, 'sort': sort,
-                'name': name, 'cn': entry.get('cn') or meta_or_entry.get('cn', ''),
+                'name': name,
+                'cn': entry.get('cn') or meta_or_entry.get('cn', ''),
+                'cn_label': entry.get('cn_label', ''),
                 'script': script_name, 'sched': sched, 'rows': cnt}
 
     rows = []
@@ -595,17 +597,18 @@ def cmd_catalog(scripts_meta: dict):
     rows.sort(key=lambda r: (type_order.get(r['label'], 9), str(r['sort']).zfill(4)))
 
     table = Table(title=f'数据目录（共 {len(rows)} 个对象）')
-    table.add_column('类', width=6)
-    table.add_column('表名', style='cyan', width=30)
-    table.add_column('中文名', width=24)
-    table.add_column('脚本', width=30)
-    table.add_column('行数', justify='right', width=13)
+    table.add_column('类', width=6, no_wrap=True)
+    table.add_column('表名', style='cyan', min_width=20, no_wrap=True)
+    table.add_column('中文名', min_width=14)
+    table.add_column('说明', min_width=32)
+    table.add_column('脚本', min_width=14)
+    table.add_column('行数', justify='right', width=13, no_wrap=True)
     for r in rows:
         cnt = f'{r["rows"]:,}' if r['rows'] >= 0 else '?'
         type_cell = f'[{r["color"]}]{r["label"]}[/{r["color"]}]'
-        table.add_row(type_cell, r['name'], r['cn'], r['script'], cnt)
+        table.add_row(type_cell, r['name'], r['cn'] or '-', r['cn_label'] or '-', r['script'], cnt)
     Console().print(table)
-    Console().print('[dim]图例: 事实(蓝) 维度(紫) 视图(黄) 多表产物(青) 测试(灰) 孤儿(红) — 脚本名≠表名时以「表名」列为准[/dim]')
+    Console().print('[dim]图例: 事实(蓝) 维度(紫) 视图(黄) 多表产物(青) 测试(灰) 孤儿(红) — 「说明」列放类标签/视图派生/多表产物来源,「中文名」列才是表真实中文名[/dim]')
 
 
 def cmd_health(scripts_meta: dict, fix: bool = False, yes: bool = False):

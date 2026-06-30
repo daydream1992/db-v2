@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": "1.1",
-    "generated_at": "2026-06-30T20:48:32",
+    "generated_at": "2026-06-30T23:25:43",
     "note": "SSOT - 数据字典. 字段中文来源: 脚本FIELD_MAP(ast) > DB dim表 > TODO"
   },
   "stock_kline_1m": {
@@ -2873,7 +2873,8 @@
     ]
   },
   "pianpao_daily_summary": {
-    "cn": "[多表产物-70_pianpao_daily]",
+    "cn": "",
+    "cn_label": "[多表产物-70_pianpao_daily]",
     "source_script": "2_计算/70_pianpao_daily.py",
     "is_view": false,
     "multi_table": true,
@@ -2941,7 +2942,8 @@
     ]
   },
   "pianpao_intraday": {
-    "cn": "[多表产物-70_pianpao_daily]",
+    "cn": "",
+    "cn_label": "[多表产物-70_pianpao_daily]",
     "source_script": "2_计算/70_pianpao_daily.py",
     "is_view": false,
     "multi_table": true,
@@ -3063,7 +3065,8 @@
     ]
   },
   "pianpao_intraday_events": {
-    "cn": "[多表产物-70_pianpao_daily]",
+    "cn": "",
+    "cn_label": "[多表产物-70_pianpao_daily]",
     "source_script": "2_计算/70_pianpao_daily.py",
     "is_view": false,
     "multi_table": true,
@@ -3137,7 +3140,8 @@
     ]
   },
   "pianpao_intraday_periods": {
-    "cn": "[多表产物-70_pianpao_daily]",
+    "cn": "",
+    "cn_label": "[多表产物-70_pianpao_daily]",
     "source_script": "2_计算/70_pianpao_daily.py",
     "is_view": false,
     "multi_table": true,
@@ -3189,6 +3193,86 @@
         "type": "INTEGER",
         "cn": "TODO",
         "note": "pianpao多表产物"
+      }
+    ]
+  },
+  "stock_block_relation_industry_labeled": {
+    "cn": "股票板块关系_打行业归属",
+    "source_script": "",
+    "is_view": true,
+    "derived_from": "stock_block_relation",
+    "columns": [
+      {
+        "name": "stock_code",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块代码",
+        "type": "VARCHAR",
+        "cn": "板块代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块名称",
+        "type": "VARCHAR",
+        "cn": "板块名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "板块类型",
+        "type": "VARCHAR",
+        "cn": "板块类型",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "成分股数",
+        "type": "INTEGER",
+        "cn": "成分股数",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "fetch_time",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业一级代码",
+        "type": "VARCHAR",
+        "cn": "行业一级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业一级名称",
+        "type": "VARCHAR",
+        "cn": "行业一级名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业二级代码",
+        "type": "VARCHAR",
+        "cn": "行业二级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业二级名称",
+        "type": "VARCHAR",
+        "cn": "行业二级名称",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级代码",
+        "type": "VARCHAR",
+        "cn": "行业三级代码",
+        "note": "视图, 字段含义继承主表"
+      },
+      {
+        "name": "行业三级名称",
+        "type": "VARCHAR",
+        "cn": "行业三级名称",
+        "note": "视图, 字段含义继承主表"
       }
     ]
   },
@@ -3351,7 +3435,8 @@
     ]
   },
   "stock_gp1_46_indicators_labeled": {
-    "cn": "[VIEW] 个股GP指标 - 带字段含义",
+    "cn": "个股GP指标",
+    "cn_label": "[VIEW] 带字段含义",
     "source_script": "1_入库/93_stock_gp1_46_indicators.py",
     "is_view": true,
     "derived_from": "stock_gp1_46_indicators",
@@ -3430,143 +3515,9 @@
       }
     ]
   },
-  "stock_block_relation_industry_labeled": {
-    "cn": "股票板块关系_打行业归属",
-    "source_script": "",
-    "is_view": true,
-    "derived_from": "stock_block_relation",
-    "columns": [
-      {
-        "name": "stock_code",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块代码",
-        "type": "VARCHAR",
-        "cn": "板块代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块名称",
-        "type": "VARCHAR",
-        "cn": "板块名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "板块类型",
-        "type": "VARCHAR",
-        "cn": "板块类型",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "成分股数",
-        "type": "INTEGER",
-        "cn": "成分股数",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "fetch_time",
-        "type": "TIMESTAMP",
-        "cn": "TODO",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业一级代码",
-        "type": "VARCHAR",
-        "cn": "行业一级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业一级名称",
-        "type": "VARCHAR",
-        "cn": "行业一级名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业二级代码",
-        "type": "VARCHAR",
-        "cn": "行业二级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业二级名称",
-        "type": "VARCHAR",
-        "cn": "行业二级名称",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业三级代码",
-        "type": "VARCHAR",
-        "cn": "行业三级代码",
-        "note": "视图, 字段含义继承主表"
-      },
-      {
-        "name": "行业三级名称",
-        "type": "VARCHAR",
-        "cn": "行业三级名称",
-        "note": "视图, 字段含义继承主表"
-      }
-    ]
-  },
-  "dim_88field_indicator": {
-    "cn": "[配套维度表]",
-    "source_script": "",
-    "is_dim": true,
-    "columns": [
-      {
-        "name": "field_en",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
-      },
-      {
-        "name": "field_cn",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
-      },
-      {
-        "name": "category",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
-      },
-      {
-        "name": "category_cn",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
-      },
-      {
-        "name": "unit",
-        "type": "VARCHAR",
-        "cn": "单位",
-        "note": "维度表, 提供枚举/字段含义"
-      },
-      {
-        "name": "remark",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
-      },
-      {
-        "name": "source",
-        "type": "VARCHAR",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
-      },
-      {
-        "name": "created_at",
-        "type": "TIMESTAMP",
-        "cn": "TODO",
-        "note": "维度表, 提供枚举/字段含义"
-      }
-    ]
-  },
   "dim_gp_indicator": {
-    "cn": "[配套维度表]",
+    "cn": "",
+    "cn_label": "[配套维度表]",
     "source_script": "",
     "is_dim": true,
     "columns": [
@@ -3620,69 +3571,65 @@
       }
     ]
   },
-  "auction_snapshot": {
-    "cn": "[外部子系统-竞价监控]",
+  "dim_88field_indicator": {
+    "cn": "",
+    "cn_label": "[配套维度表]",
     "source_script": "",
-    "is_external": true,
+    "is_dim": true,
     "columns": [
       {
-        "name": "hq_date",
-        "type": "DATE",
-        "cn": "TODO",
-        "note": "外部子系统表(竞价监控), 不参与run.py治理"
-      },
-      {
-        "name": "code",
+        "name": "field_en",
         "type": "VARCHAR",
-        "cn": "代码",
-        "note": "外部子系统表(竞价监控), 不参与run.py治理"
-      },
-      {
-        "name": "last_close",
-        "type": "DOUBLE",
         "cn": "TODO",
-        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+        "note": "维度表, 提供枚举/字段含义"
       },
       {
-        "name": "open_price",
-        "type": "DOUBLE",
+        "name": "field_cn",
+        "type": "VARCHAR",
         "cn": "TODO",
-        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+        "note": "维度表, 提供枚举/字段含义"
       },
       {
-        "name": "now_price",
-        "type": "DOUBLE",
+        "name": "category",
+        "type": "VARCHAR",
         "cn": "TODO",
-        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+        "note": "维度表, 提供枚举/字段含义"
       },
       {
-        "name": "volume",
-        "type": "BIGINT",
-        "cn": "成交量",
-        "note": "外部子系统表(竞价监控), 不参与run.py治理"
-      },
-      {
-        "name": "amount",
-        "type": "DOUBLE",
-        "cn": "成交额",
-        "note": "外部子系统表(竞价监控), 不参与run.py治理"
-      },
-      {
-        "name": "fetch_time",
-        "type": "TIMESTAMP",
+        "name": "category_cn",
+        "type": "VARCHAR",
         "cn": "TODO",
-        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "unit",
+        "type": "VARCHAR",
+        "cn": "单位",
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "remark",
+        "type": "VARCHAR",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
       },
       {
         "name": "source",
         "type": "VARCHAR",
         "cn": "TODO",
-        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+        "note": "维度表, 提供枚举/字段含义"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "维度表, 提供枚举/字段含义"
       }
     ]
   },
   "auction_labels": {
-    "cn": "[外部子系统-竞价监控]",
+    "cn": "",
+    "cn_label": "[外部子系统-竞价监控]",
     "source_script": "",
     "is_external": true,
     "columns": [
@@ -3755,6 +3702,68 @@
       {
         "name": "run_ts",
         "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      }
+    ]
+  },
+  "auction_snapshot": {
+    "cn": "",
+    "cn_label": "[外部子系统-竞价监控]",
+    "source_script": "",
+    "is_external": true,
+    "columns": [
+      {
+        "name": "hq_date",
+        "type": "DATE",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "code",
+        "type": "VARCHAR",
+        "cn": "代码",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "last_close",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "open_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "now_price",
+        "type": "DOUBLE",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "volume",
+        "type": "BIGINT",
+        "cn": "成交量",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "amount",
+        "type": "DOUBLE",
+        "cn": "成交额",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "fetch_time",
+        "type": "TIMESTAMP",
+        "cn": "TODO",
+        "note": "外部子系统表(竞价监控), 不参与run.py治理"
+      },
+      {
+        "name": "source",
+        "type": "VARCHAR",
         "cn": "TODO",
         "note": "外部子系统表(竞价监控), 不参与run.py治理"
       }

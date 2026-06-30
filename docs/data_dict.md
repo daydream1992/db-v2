@@ -1,12 +1,12 @@
 # 数据字典 (自动生成)
 
-> 生成时间: 2026-06-30T20:48:32
+> 生成时间: 2026-06-30T23:25:43
 > 来源: 脚本@meta + DB DESCRIBE + 脚本FIELD_MAP(ast) + dim_*维度表
 
 ## 📊 正式表 (34 个)
 
 ### ? pianpao_daily_summary
-- **中文**: [多表产物-70_pianpao_daily]
+- **中文**: 
 - **脚本**: `2_计算/70_pianpao_daily.py`
 
 | 字段 | 类型 | 中文 | 备注 |
@@ -23,7 +23,7 @@
 | sector_linked | INTEGER | TODO | pianpao多表产物 |
 
 ### ? pianpao_intraday
-- **中文**: [多表产物-70_pianpao_daily]
+- **中文**: 
 - **脚本**: `2_计算/70_pianpao_daily.py`
 
 | 字段 | 类型 | 中文 | 备注 |
@@ -49,7 +49,7 @@
 | crash_vol_label | VARCHAR | TODO | pianpao多表产物 |
 
 ### ? pianpao_intraday_events
-- **中文**: [多表产物-70_pianpao_daily]
+- **中文**: 
 - **脚本**: `2_计算/70_pianpao_daily.py`
 
 | 字段 | 类型 | 中文 | 备注 |
@@ -67,7 +67,7 @@
 | volume | BIGINT | 成交量 | pianpao多表产物 |
 
 ### ? pianpao_intraday_periods
-- **中文**: [多表产物-70_pianpao_daily]
+- **中文**: 
 - **脚本**: `2_计算/70_pianpao_daily.py`
 
 | 字段 | 类型 | 中文 | 备注 |
@@ -80,6 +80,25 @@
 | max_loss | DOUBLE | TODO | pianpao多表产物 |
 | vol_ratio | DOUBLE | TODO | pianpao多表产物 |
 | bar_count | INTEGER | TODO | pianpao多表产物 |
+
+### ? stock_block_relation_industry_labeled
+- **中文**: 股票板块关系_打行业归属
+- **脚本**: ``
+
+| 字段 | 类型 | 中文 | 备注 |
+|------|------|------|------|
+| stock_code | VARCHAR | TODO | 视图, 字段含义继承主表 |
+| 板块代码 | VARCHAR | 板块代码 | 视图, 字段含义继承主表 |
+| 板块名称 | VARCHAR | 板块名称 | 视图, 字段含义继承主表 |
+| 板块类型 | VARCHAR | 板块类型 | 视图, 字段含义继承主表 |
+| 成分股数 | INTEGER | 成分股数 | 视图, 字段含义继承主表 |
+| fetch_time | TIMESTAMP | TODO | 视图, 字段含义继承主表 |
+| 行业一级代码 | VARCHAR | 行业一级代码 | 视图, 字段含义继承主表 |
+| 行业一级名称 | VARCHAR | 行业一级名称 | 视图, 字段含义继承主表 |
+| 行业二级代码 | VARCHAR | 行业二级代码 | 视图, 字段含义继承主表 |
+| 行业二级名称 | VARCHAR | 行业二级名称 | 视图, 字段含义继承主表 |
+| 行业三级代码 | VARCHAR | 行业三级代码 | 视图, 字段含义继承主表 |
+| 行业三级名称 | VARCHAR | 行业三级名称 | 视图, 字段含义继承主表 |
 
 ### ? t_bk5_19_industry_labeled
 - **中文**: 板块BK交易数据_打行业标签
@@ -114,7 +133,7 @@
 | 行业三级名称 | VARCHAR | 行业三级名称 | 视图, 字段含义继承主表 |
 
 ### ? stock_gp1_46_indicators_labeled
-- **中文**: [VIEW] 个股GP指标 - 带字段含义
+- **中文**: 个股GP指标
 - **脚本**: `1_入库/93_stock_gp1_46_indicators.py`
 
 | 字段 | 类型 | 中文 | 备注 |
@@ -132,42 +151,8 @@
 | present | BOOLEAN | TODO | 视图, 字段同主表 |
 | note | VARCHAR | 备注 | 视图, 字段同主表 |
 
-### ? stock_block_relation_industry_labeled
-- **中文**: 股票板块关系_打行业归属
-- **脚本**: ``
-
-| 字段 | 类型 | 中文 | 备注 |
-|------|------|------|------|
-| stock_code | VARCHAR | TODO | 视图, 字段含义继承主表 |
-| 板块代码 | VARCHAR | 板块代码 | 视图, 字段含义继承主表 |
-| 板块名称 | VARCHAR | 板块名称 | 视图, 字段含义继承主表 |
-| 板块类型 | VARCHAR | 板块类型 | 视图, 字段含义继承主表 |
-| 成分股数 | INTEGER | 成分股数 | 视图, 字段含义继承主表 |
-| fetch_time | TIMESTAMP | TODO | 视图, 字段含义继承主表 |
-| 行业一级代码 | VARCHAR | 行业一级代码 | 视图, 字段含义继承主表 |
-| 行业一级名称 | VARCHAR | 行业一级名称 | 视图, 字段含义继承主表 |
-| 行业二级代码 | VARCHAR | 行业二级代码 | 视图, 字段含义继承主表 |
-| 行业二级名称 | VARCHAR | 行业二级名称 | 视图, 字段含义继承主表 |
-| 行业三级代码 | VARCHAR | 行业三级代码 | 视图, 字段含义继承主表 |
-| 行业三级名称 | VARCHAR | 行业三级名称 | 视图, 字段含义继承主表 |
-
-### ? dim_88field_indicator
-- **中文**: [配套维度表]
-- **脚本**: ``
-
-| 字段 | 类型 | 中文 | 备注 |
-|------|------|------|------|
-| field_en | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| field_cn | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| category | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| category_cn | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| unit | VARCHAR | 单位 | 维度表, 提供枚举/字段含义 |
-| remark | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| source | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
-| created_at | TIMESTAMP | TODO | 维度表, 提供枚举/字段含义 |
-
 ### ? dim_gp_indicator
-- **中文**: [配套维度表]
+- **中文**: 
 - **脚本**: ``
 
 | 字段 | 类型 | 中文 | 备注 |
@@ -181,24 +166,23 @@
 | note | VARCHAR | 备注 | 维度表, 提供枚举/字段含义 |
 | present | BOOLEAN | TODO | 维度表, 提供枚举/字段含义 |
 
-### ? auction_snapshot
-- **中文**: [外部子系统-竞价监控]
+### ? dim_88field_indicator
+- **中文**: 
 - **脚本**: ``
 
 | 字段 | 类型 | 中文 | 备注 |
 |------|------|------|------|
-| hq_date | DATE | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
-| code | VARCHAR | 代码 | 外部子系统表(竞价监控), 不参与run.py治理 |
-| last_close | DOUBLE | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
-| open_price | DOUBLE | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
-| now_price | DOUBLE | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
-| volume | BIGINT | 成交量 | 外部子系统表(竞价监控), 不参与run.py治理 |
-| amount | DOUBLE | 成交额 | 外部子系统表(竞价监控), 不参与run.py治理 |
-| fetch_time | TIMESTAMP | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
-| source | VARCHAR | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
+| field_en | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| field_cn | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| category | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| category_cn | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| unit | VARCHAR | 单位 | 维度表, 提供枚举/字段含义 |
+| remark | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| source | VARCHAR | TODO | 维度表, 提供枚举/字段含义 |
+| created_at | TIMESTAMP | TODO | 维度表, 提供枚举/字段含义 |
 
 ### ? auction_labels
-- **中文**: [外部子系统-竞价监控]
+- **中文**: 
 - **脚本**: ``
 
 | 字段 | 类型 | 中文 | 备注 |
@@ -215,6 +199,22 @@
 | trap_cnt | INTEGER | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
 | reason | VARCHAR | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
 | run_ts | TIMESTAMP | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
+
+### ? auction_snapshot
+- **中文**: 
+- **脚本**: ``
+
+| 字段 | 类型 | 中文 | 备注 |
+|------|------|------|------|
+| hq_date | DATE | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
+| code | VARCHAR | 代码 | 外部子系统表(竞价监控), 不参与run.py治理 |
+| last_close | DOUBLE | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
+| open_price | DOUBLE | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
+| now_price | DOUBLE | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
+| volume | BIGINT | 成交量 | 外部子系统表(竞价监控), 不参与run.py治理 |
+| amount | DOUBLE | 成交额 | 外部子系统表(竞价监控), 不参与run.py治理 |
+| fetch_time | TIMESTAMP | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
+| source | VARCHAR | TODO | 外部子系统表(竞价监控), 不参与run.py治理 |
 
 ### 010 stock_daily_kline
 - **中文**: 股票日K线
