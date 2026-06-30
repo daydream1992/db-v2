@@ -96,7 +96,9 @@ def run(force=False):
                 con.execute(f"DELETE FROM {TABLE}")
                 logger.info(f"  force: 清空全表后重灌")
             elif min_date:
-                con.execute(f"DELETE FROM {TABLE} WHERE trade_time >= TIMESTAMP '{min_date} 00:00:00'")
+                # min_date 是 'YYYYMMDD' 8位串,转成 'YYYY-MM-DD HH:MM:SS'
+                _ts = f"{min_date[:4]}-{min_date[4:6]}-{min_date[6:8]} 00:00:00"
+                con.execute(f"DELETE FROM {TABLE} WHERE trade_time >= TIMESTAMP '{_ts}'")
             for file_path, df in fetch_data(min_date=min_date):
                 if df.empty:
                     continue
