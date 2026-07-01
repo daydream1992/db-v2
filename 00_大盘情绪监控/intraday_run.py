@@ -224,8 +224,13 @@ def main() -> int:
             except Exception as e:
                 print(f"  帧异常: {e}")
         else:
-            # 非交易时段,退出前 flush(如果是 15:00 后)
+            # 非交易时段
             hhmm = now.strftime('%H:%M')
+            # 午休(11:30 后 ~13:00 前)退出 — flush 状态后干净退,13:00 由重启脚本续接
+            if '11:30' < hhmm < '13:00':
+                print("午休,daemon 退出(13:00 重启续接 state)")
+                on_exit()
+            # 收盘 15:00 后退出
             if hhmm > '15:00':
                 print("收盘,daemon 退出")
                 on_exit()
