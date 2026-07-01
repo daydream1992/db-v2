@@ -24,3 +24,16 @@ Thumbs.db
 db/*.parquet
 output/
 logs/
+
+# 竞价监控模块(本地数据/webhook,不入库)
+竞价监控/output/
+竞价监控/reports/
+竞价监控/feishu_webhook.txt
+
+# 01实盘监控模块(本地数据/webhook,不入库)
+01实盘监控/output/
+01实盘监控/reports/
+01实盘监控/feishu_webhook.txt
+
+# 00大盘情绪监控模块(根目录JSON数据产物,不入库;*.py入库)
+00_大盘情绪监控/*.json
