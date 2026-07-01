@@ -38,55 +38,115 @@ def in_trade_window(now: dt.datetime) -> bool:
     return False
 
 
-def tick() -> None:
-    """跑一帧:3 层采集 + 状态更新 + 信号检测 + 打印"""
-    ts = dt.datetime.now().strftime('%H:%M:%S')
-    print(f"\n{'='*60}\n帧 {ts}  {state.summary()}\n{'='*60}")
+# ─── 美观打印辅助 ───
+def _fmt_top_stocks(tops: list[tuple]) -> str:
+    """涨幅前N个股 → 一行字符串。tops = [(code, name, zaf), ...]"""
+    if not tops:
+        return "     领涨 → (无数据)"
+    pieces = []
+    for code, name, zaf in tops:
+        label = f"{name} {code}" if name else code   # 无名称时只显代码
+        pieces.append(f"{label} {zaf:+.2f}%")
+    return "     领涨 → " + " / ".join(pieces)
 
-    # 大盘层
+
+def _print_block_top(title: str, top_blocks: list[dict], rev: dict, k: int = 5) -> None:
+    """打印【板块Top3】段(1级行业/概念通用)。
+       top_blocks = sec_ranked 按 btype 过滤后的切片。"""
+    print(f"\n【{title}】")
+    if not top_blocks:
+        print("  (无)")
+        return
+    for i, r in enumerate(top_blocks, 1):
+        print(f"  {'①②③④⑤'[i-1]} {r['name']}({r['code']})  "
+              f"涨停{r['zt_num']}  {r['zaf']:+.2f}%  主力{r['zjl']:.0f}万")
+        tops = sector_monitor.top_stocks_of_block(rev, r['code'], k)
+        print(_fmt_top_stocks(tops))
+
+
+def _print_ind3_top(ind3_top: list[tuple], rev: dict, k: int = 5) -> None:
+    """打印【3级行业Top3】段(按涨停家数聚合)。"""
+    print("\n【3级行业 Top3】(按涨停家数)")
+    if not ind3_top:
+        print("  (无涨停股归属)")
+        return
+    for i, (ind3, d) in enumerate(ind3_top, 1):
+        print(f"  {'①②③④⑤'[i-1]} {ind3}  涨停{d['zt_cnt']} 连板总{d['lb_sum']}  "
+              f"[{d['ind1']}/{d['ind2']}]")
+        tops = sector_monitor.top_stocks_of_ind3(rev, ind3, k)
+        print(_fmt_top_stocks(tops))
+
+
+def tick() -> None:
+    """跑一帧:大盘/板块/个股 三层采集 → 状态更新 → 信号检测 → 美观打印。
+       输出结构:大盘情绪 + 1级行业Top3 + 3级行业Top3 + 概念Top3(各带涨幅前5)。"""
+    ts = dt.datetime.now().strftime('%H:%M:%S')
+
+    # ── 大盘层:5指数 + 北向资金 + 期指基差 + 背离检测 ──
     idx = index_monitor.collect(tq)
     north = index_monitor.collect_north_money(tq)
     futures = index_monitor.collect_futures_basis(tq)
     div_sigs = index_monitor.detect_divergence(idx, north, futures)
     sh, sz = idx.get('999999.SH', {}), idx.get('399001.SZ', {})
-    for sig in div_sigs:
-        print(f"  ⚠️ {sig}")
 
-    # 板块层
+    # ── 板块层:4类板块采集 + 强度排名 + 退潮预警 ──
     sectors_all = tq.get_sector_list(list_type=0)
     sec_rows = sector_monitor.collect(tq, sectors_all)
-    # 首帧打 BlockType 标签(贵,只第一帧做)— 改用静态查表,毫秒级
-    sector_monitor.tag_block_type_static(sec_rows)
-    # 板块涨停数 → 退潮检测
+    sector_monitor.tag_block_type_static(sec_rows)            # 静态查表打类型(毫秒级)
     sec_zt_now = {r['code']: r['zt_num'] for r in sec_rows}
-    drops = state.update_sector_zt(sec_zt_now)
+    drops = state.update_sector_zt(sec_zt_now)                # 板块涨停数 → 退潮比对
     index_zaf = sh.get('zaf', 0)
     max_flow = max((abs(r['zjl']) for r in sec_rows), default=1) or 1
     sec_ranked = sector_monitor.rank(sec_rows, index_zaf, max_flow)
     mainlines = {r['code'] for r in sec_ranked if r['is_mainline']}
     retreats = [r for r in sec_ranked if sector_monitor.is_retreat(r, drops.get(r['code']))]
-    print(f"  主线板块 {len(mainlines)} 个, 退潮预警 {len(retreats)} 个")
-    for r in sec_ranked[:5]:
-        print(f"    强度Top {r['code']} 涨停{r['zt_num']} 涨幅{r['zaf']}% 主力{r['zjl']:.0f}万")
 
-    # 个股层
+    # ── 个股层:6池 + 全市场涨幅缓存 ──
     stocks = tq.get_stock_list()
-    pools = stock_monitor.collect(tq, stocks, state, ts)
+    pools, all_zaf = stock_monitor.collect(tq, stocks, state, ts)
     n_zt = len(pools['首板']) + len(pools['连板梯队'])
     n_dt = len(pools['跌停池'])
     n_zhaban = len(pools['炸板风险'])
     fbl = n_zt / (n_zt + n_zhaban) * 100 if (n_zt + n_zhaban) else 0
     max_lb = max((r['lb'] for r in pools['连板梯队']), default=0)
     udr = (sh.get('up', 0) + sz.get('up', 0)) / max(1, sh.get('down', 0) + sz.get('down', 0))
-
-    # 情绪评级
     emo = index_monitor.rate_emotion(n_zt, round(fbl, 2), max_lb, round(udr, 2))
-    print(f"  情绪: {emo['rating']}  {emo['detail']}")
-    print(f"  涨停{n_zt} 跌停{n_dt} 炸板{n_zhaban} 封板率{fbl:.1f}% 最高连板{max_lb}")
-    print(f"  连板梯队 {len(pools['连板梯队'])} / 首板 {len(pools['首板'])} / "
-          f"龙头 {len(pools['龙头'])} / 易炸 {len(pools['易炸预警'])}")
 
-    # 变盘检测(状态层)
+    # ── Top板块 + 涨幅前5(反查 all_zaf,零额外 TQ 调用)──
+    rev = sector_monitor.build_reverse_index(all_zaf)
+    ind1_top3 = [r for r in sec_ranked if r['btype'] == '行业'][:3]
+    concept_top3 = [r for r in sec_ranked if r['btype'] == '概念'][:3]
+    ind3_top3 = sector_monitor.top_industries3(pools['连板梯队'], pools['首板'])
+
+    # ── 美观打印 ──
+    print(f"\n{'='*64}")
+    print(f" 帧 {ts}  |  {state.summary()}")
+    print(f"{'='*64}")
+
+    # 大盘情绪
+    print(f"\n【大盘情绪】{emo['rating']}  |  "
+          f"涨停{n_zt} 跌停{n_dt} 炸板{n_zhaban} 封板率{fbl:.1f}% 最高连板{max_lb}")
+    print(f"  涨跌比{udr:.2f}  连板{len(pools['连板梯队'])} 首板{len(pools['首板'])} "
+          f"龙头{len(pools['龙头'])} 易炸{len(pools['易炸预警'])}  |  主线{len(mainlines)} 退潮{len(retreats)}")
+    # 北向资金(T-1)/ 期指基差(实时)— 按接口特性标注
+    if north is not None:
+        print(f"  北向 {'+' if north >= 0 else ''}{north:.1f}亿(T-1)  ", end="")
+    else:
+        print("  北向 N/A  ", end="")
+    if futures is not None:
+        print(f"期指 {'+' if futures >= 0 else ''}{futures:.1f}点({'升水' if futures >= 0 else '贴水'})")
+    else:
+        print("期指 N/A")
+    for sig in div_sigs:
+        print(f"  ⚠️ {sig}")
+
+    # 三类板块 Top3 + 涨幅前5
+    _print_block_top("1级行业 Top3", ind1_top3, rev)
+    _print_ind3_top(ind3_top3, rev)
+    _print_block_top("概念 Top3", concept_top3, rev)
+    print(f"{'='*64}")
+
+    # ── 变盘检测(状态层跨帧)+ 推帧 ──
     frame_summary = {'ts': ts, 'zt_cnt': n_zt, 'udr': round(udr, 2),
                      'fbl': round(fbl, 2), 'max_lb': max_lb}
     check_turn(frame_summary)

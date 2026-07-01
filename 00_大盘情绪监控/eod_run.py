@@ -77,7 +77,7 @@ def main() -> int:
     sec_ranked = sector_monitor.rank(sec_rows, index_zaf, max_flow)
 
     stocks = tq.get_stock_list()
-    pools = stock_monitor.collect(tq, stocks, state, '15:00:00')
+    pools, all_zaf = stock_monitor.collect(tq, stocks, state, '15:00:00')
     n_zt = len(pools['首板']) + len(pools['连板梯队'])
     n_dt = len(pools['跌停池'])
     n_zhaban = len(pools['炸板风险'])

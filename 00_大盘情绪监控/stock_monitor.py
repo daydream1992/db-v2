@@ -11,15 +11,20 @@ import _common
 from _common import TH, _f, classify_stock
 
 
-def collect(tq, codes: list[str], state, ts: str) -> dict:
-    """采集全市场,分 6 池。
+def collect(tq, codes: list[str], state, ts: str) -> tuple[dict, dict]:
+    """采集全市场,分 6 池 + 全市场涨幅缓存。
        state: StateCache(首封时间/断板跟踪)
        ts: 当前帧时间戳 'HH:MM:SS'
+       返回 (pools, all_zaf):
+         pools   — 6 个池(连板/首板/龙头/炸板/易炸/跌停)
+         all_zaf — {code: 当日涨幅%} 全市场缓存。zaf 在 get_more_info 已采,
+                   这里零额外开销记下来,供板块/三级行业的"涨幅前5股"反查
     """
     pools = {
         '连板梯队': [], '首板': [], '龙头': [],
         '炸板风险': [], '易炸预警': [], '跌停池': [],
     }
+    all_zaf: dict[str, float] = {}   # 全市场涨幅缓存(板块Top股反查用)
     cur_lb_codes = set()
     broken_from_prev = state.prev_lb_leaders  # 上帧连板股(检测断板)
 
@@ -34,6 +39,7 @@ def collect(tq, codes: list[str], state, ts: str) -> dict:
         fcb = _f(info, 'FCb')
         zjl = _f(info, 'Zjl')
         zaf = _f(info, 'ZAF')
+        all_zaf[code] = zaf                        # 缓存涨幅(板块Top股反查用)
         last_start_zt = int(_f(info, 'LastStartZT'))  # 几天前涨停(=1=昨日涨停)
         last_hz_num = int(_f(info, 'LastZTHzNum'))    # 昨日几板
 
@@ -80,7 +86,7 @@ def collect(tq, codes: list[str], state, ts: str) -> dict:
     # 更新连板断板跟踪
     state.update_lb_leaders(cur_lb_codes)
 
-    return pools
+    return pools, all_zaf
 
 
 def split_tiers(lb_pool: list[dict]) -> dict[int, list[dict]]:

@@ -153,3 +153,55 @@ def detect_industry_concept_resonance(pools_lb: list[dict], pools_sb: list[dict]
                 '概念': [f"{s[2]}" for s in con],
             })
     return res
+
+
+# ─── 板块/三级行业 → 涨幅前N个股(反查,零额外 TQ 调用)───
+def build_reverse_index(all_zaf: dict) -> dict:
+    """把全市场涨幅缓存反查成两个索引(本地 sector_meta 表,~1s/5800股):
+         block → [(zaf, code, name), ...] 该板块成份股,按涨幅降序
+         ind3  → [(zaf, code, name), ...] 该三级行业成份股,按涨幅降序
+       一次遍历 all_zaf,每只股反查它的板块归属 + 三级行业。
+       建好后,任意板块/三级行业的"涨幅前5股"都是 O(1) 切片。"""
+    import sector_meta
+    block_stocks: dict[str, list] = {}
+    ind3_stocks: dict[str, list] = {}
+    for code, zaf in all_zaf.items():
+        name = sector_meta.stock_name(code)
+        # 板块归属(一只股属多个板块,都计入)
+        for bc, _bt, _bn in sector_meta.stock_sectors(code):
+            block_stocks.setdefault(bc, []).append((zaf, code, name))
+        # 三级行业
+        _i1, _i2, i3 = sector_meta.stock_industry3(code)
+        if i3:
+            ind3_stocks.setdefault(i3, []).append((zaf, code, name))
+    # 各桶按涨幅降序(tuple 首位是 zaf)
+    for bucket in block_stocks.values():
+        bucket.sort(reverse=True)
+    for bucket in ind3_stocks.values():
+        bucket.sort(reverse=True)
+    return {'block': block_stocks, 'ind3': ind3_stocks}
+
+
+def top_stocks_of_block(rev: dict, block_code: str, k: int = 5) -> list[tuple]:
+    """板块代码 → 涨幅前 K 个股 [(code, name, zaf), ...]"""
+    return [(code, name, zaf) for zaf, code, name in rev['block'].get(block_code, [])[:k]]
+
+
+def top_stocks_of_ind3(rev: dict, ind3: str, k: int = 5) -> list[tuple]:
+    """三级行业名 → 涨幅前 K 个股 [(code, name, zaf), ...]"""
+    return [(code, name, zaf) for zaf, code, name in rev['ind3'].get(ind3, [])[:k]]
+
+
+def top_industries3(pools_lb: list[dict], pools_sb: list[dict], n: int = 3) -> list[tuple]:
+    """三级行业强度榜(按涨停家数,连板数加权):涨停股(首板+连板)按 ind3 聚合。
+       返回 [(ind3, {ind1,ind2,zt_cnt,lb_sum}), ...] TopN。涨停多=板块主线。"""
+    import sector_meta
+    agg: dict[str, dict] = {}
+    for r in pools_lb + pools_sb:
+        i1, i2, i3 = sector_meta.stock_industry3(r.get('code', ''))
+        if not i3:
+            continue
+        d = agg.setdefault(i3, {'ind1': i1, 'ind2': i2, 'zt_cnt': 0, 'lb_sum': 0})
+        d['zt_cnt'] += 1
+        d['lb_sum'] += r.get('lb', 0)
+    return sorted(agg.items(), key=lambda x: (x[1]['zt_cnt'], x[1]['lb_sum']), reverse=True)[:n]
