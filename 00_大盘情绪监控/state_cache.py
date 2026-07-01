@@ -19,12 +19,29 @@ from typing import Any
 class StateCache:
     """盘中状态中枢。daemon 进程内单例。"""
 
-    def __init__(self) -> None:
+    def __init__(self, load_from: Path | None = None) -> None:
         self.first_zt_time: dict[str, str] = {}      # code -> 'HH:MM:SS' 首封时间
         self.frame_history: list[dict] = []          # 每帧汇总(涨停数/涨跌比/封板率/时间戳)
         self.prev_lb_leaders: set[str] = set()       # 上帧连板股(检测断板)
-        self.prev_sector_zt: dict[str, int] = {}     # 板块前帧涨停数(检测退潮)
+        self.prev_sector_zt: dict[str, int] = {}     # 板块前帧涨停数(检测板块退潮)
         self.today_str: str = dt.date.today().strftime('%Y%m%d')
+        # 跨进程续接:启动时 load 当天 state.json(防午休退/崩溃丢状态)
+        if load_from:
+            self._load_from_disk(load_from)
+
+    def _load_from_disk(self, output_dir: Path) -> None:
+        """从当天 state.json 恢复(跨进程续接)。
+           prev_sector_zt 不恢复 — 板块退潮只在盘中内存判断,跨进程无意义。"""
+        path = output_dir / f"state_{self.today_str}.json"
+        if not path.exists():
+            return
+        try:
+            d = json.loads(path.read_text(encoding='utf-8'))
+            self.first_zt_time = d.get('first_zt_time', {})
+            self.frame_history = d.get('frame_history', [])
+            self.prev_lb_leaders = set(d.get('lb_leaders_final', []))
+        except Exception as e:
+            print(f"[state] 加载 {path} 失败,空起: {e}")
 
     # ─── 首封时间 ───
     def record_first_zt(self, code: str, fcamo: float, ts: str) -> None:

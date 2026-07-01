@@ -26,8 +26,12 @@ TICK_SECONDS = 300  # __TODO__(建议:300) 5 分钟一帧
 TRADE_WINDOWS = [('09:25', '11:30'), ('13:00', '15:00')]
 
 
-state = StateCache()
+state = StateCache(load_from=OUTPUT_DIR)        # 启动时 load 当天 state.json(跨进程续接)
 tq = None
+
+# 跨帧 flush 节流(每 5 分钟落盘一次,防午休/崩溃丢状态)
+LAST_FLUSH_TS: list[float] = [0.0]
+FLUSH_PERIOD = 300.0  # 5 分钟 = 300 秒
 
 
 def in_trade_window(now: dt.datetime) -> bool:
@@ -155,6 +159,16 @@ def tick() -> None:
                      'fbl': round(fbl, 2), 'max_lb': max_lb}
     check_turn(frame_summary)
     state.push_frame(frame_summary)
+
+    # ── 跨进程持久化:每 5 分钟 flush state(防午休退/崩溃丢状态)──
+    now_ts = time.time()
+    if now_ts - LAST_FLUSH_TS[0] >= FLUSH_PERIOD:
+        try:
+            path = state.flush(OUTPUT_DIR)
+            LAST_FLUSH_TS[0] = now_ts
+            print(f"  [state 已 flush → {path.name}]")
+        except Exception as e:
+            print(f"  [state flush 异常: {e}]")
 
 
 def check_turn(cur: dict) -> None:
