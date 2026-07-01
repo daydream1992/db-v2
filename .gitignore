@@ -35,5 +35,6 @@ logs/
 01实盘监控/reports/
 01实盘监控/feishu_webhook.txt
 
-# 00大盘情绪监控模块(根目录JSON数据产物,不入库;*.py入库)
+# 00大盘情绪监控模块(根目录JSON数据产物 + 飞书webhook,不入库;*.py入库)
 00_大盘情绪监控/*.json
+00_大盘情绪监控/feishu_webhook.txt

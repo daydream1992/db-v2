@@ -50,31 +50,32 @@ def _fmt_top_stocks(tops: list[tuple]) -> str:
     return "     领涨 → " + " / ".join(pieces)
 
 
-def _print_block_top(title: str, top_blocks: list[dict], rev: dict, k: int = 5) -> None:
-    """打印【板块Top3】段(1级行业/概念通用)。
-       top_blocks = sec_ranked 按 btype 过滤后的切片。"""
-    print(f"\n【{title}】")
+def _block_top_lines(title: str, top_blocks: list[dict], rev: dict, k: int = 5) -> list[str]:
+    """【板块Top3】段 → 行列表(1级行业/概念通用)。top_blocks = sec_ranked 切片。"""
+    lines = [f"\n【{title}】"]
     if not top_blocks:
-        print("  (无)")
-        return
+        lines.append("  (无)")
+        return lines
     for i, r in enumerate(top_blocks, 1):
-        print(f"  {'①②③④⑤'[i-1]} {r['name']}({r['code']})  "
-              f"涨停{r['zt_num']}  {r['zaf']:+.2f}%  主力{r['zjl']:.0f}万")
+        lines.append(f"  {'①②③④⑤'[i-1]} {r['name']}({r['code']})  "
+                     f"涨停{r['zt_num']}  {r['zaf']:+.2f}%  主力{r['zjl']:.0f}万")
         tops = sector_monitor.top_stocks_of_block(rev, r['code'], k)
-        print(_fmt_top_stocks(tops))
+        lines.append(_fmt_top_stocks(tops))
+    return lines
 
 
-def _print_ind3_top(ind3_top: list[tuple], rev: dict, k: int = 5) -> None:
-    """打印【3级行业Top3】段(按涨停家数聚合)。"""
-    print("\n【3级行业 Top3】(按涨停家数)")
+def _ind3_top_lines(ind3_top: list[tuple], rev: dict, k: int = 5) -> list[str]:
+    """【3级行业Top3】段 → 行列表(按涨停家数聚合)。"""
+    lines = ["\n【3级行业 Top3】(按涨停家数)"]
     if not ind3_top:
-        print("  (无涨停股归属)")
-        return
+        lines.append("  (无涨停股归属)")
+        return lines
     for i, (ind3, d) in enumerate(ind3_top, 1):
-        print(f"  {'①②③④⑤'[i-1]} {ind3}  涨停{d['zt_cnt']} 连板总{d['lb_sum']}  "
-              f"[{d['ind1']}/{d['ind2']}]")
+        lines.append(f"  {'①②③④⑤'[i-1]} {ind3}  涨停{d['zt_cnt']} 连板总{d['lb_sum']}  "
+                     f"[{d['ind1']}/{d['ind2']}]")
         tops = sector_monitor.top_stocks_of_ind3(rev, ind3, k)
-        print(_fmt_top_stocks(tops))
+        lines.append(_fmt_top_stocks(tops))
+    return lines
 
 
 def tick() -> None:
@@ -119,33 +120,35 @@ def tick() -> None:
     concept_top3 = [r for r in sec_ranked if r['btype'] == '概念' and 'ST' not in r['name']][:3]
     ind3_top3 = sector_monitor.top_industries3(pools['连板梯队'], pools['首板'])
 
-    # ── 美观打印 ──
-    print(f"\n{'='*64}")
-    print(f" 帧 {ts}  |  {state.summary()}")
-    print(f"{'='*64}")
-
-    # 大盘情绪
-    print(f"\n【大盘情绪】{emo['rating']}  |  "
-          f"涨停{n_zt} 跌停{n_dt} 炸板{n_zhaban} 封板率{fbl:.1f}% 最高连板{max_lb}")
-    print(f"  涨跌比{udr:.2f}  连板{len(pools['连板梯队'])} 首板{len(pools['首板'])} "
-          f"龙头{len(pools['龙头'])} 易炸{len(pools['易炸预警'])}  |  主线{len(mainlines)} 退潮{len(retreats)}")
-    # 北向资金(T-1)/ 期指基差(实时)— 按接口特性标注
-    if north is not None:
-        print(f"  北向 {'+' if north >= 0 else ''}{north:.1f}亿(T-1)  ", end="")
-    else:
-        print("  北向 N/A  ", end="")
-    if futures is not None:
-        print(f"期指 {'+' if futures >= 0 else ''}{futures:.1f}点({'升水' if futures >= 0 else '贴水'})")
-    else:
-        print("期指 N/A")
+    # ── 组装整帧文本(终端 print + 飞书推送共用)──
+    nb = f"{'+' if north >= 0 else ''}{north:.1f}亿(T-1)" if north is not None else "N/A"
+    fu = (f"{'+' if futures >= 0 else ''}{futures:.1f}点({'升水' if futures >= 0 else '贴水'})"
+          if futures is not None else "N/A")
+    lines = [
+        f"\n{'='*64}",
+        f" 帧 {ts}  |  {state.summary()}",
+        f"{'='*64}",
+        f"\n【大盘情绪】{emo['rating']}  |  涨停{n_zt} 跌停{n_dt} 炸板{n_zhaban} 封板率{fbl:.1f}% 最高连板{max_lb}",
+        f"  涨跌比{udr:.2f}  连板{len(pools['连板梯队'])} 首板{len(pools['首板'])} "
+        f"龙头{len(pools['龙头'])} 易炸{len(pools['易炸预警'])}  |  主线{len(mainlines)} 退潮{len(retreats)}",
+        f"  北向 {nb}  期指 {fu}",
+    ]
     for sig in div_sigs:
-        print(f"  ⚠️ {sig}")
+        lines.append(f"  ⚠️ {sig}")
+    lines += _block_top_lines("1级行业 Top3", ind1_top3, rev)
+    lines += _ind3_top_lines(ind3_top3, rev)
+    lines += _block_top_lines("概念 Top3", concept_top3, rev)
+    lines.append(f"{'='*64}")
 
-    # 三类板块 Top3 + 涨幅前5
-    _print_block_top("1级行业 Top3", ind1_top3, rev)
-    _print_ind3_top(ind3_top3, rev)
-    _print_block_top("概念 Top3", concept_top3, rev)
-    print(f"{'='*64}")
+    output = "\n".join(lines)
+    print(output)
+    # 推飞书(每帧一条,5分钟间隔;webhook 未配则跳过)
+    try:
+        import notify
+        if notify.push_text(output):
+            print("  [飞书已推送]")
+    except Exception as e:
+        print(f"  [飞书推送异常: {e}]")
 
     # ── 变盘检测(状态层跨帧)+ 推帧 ──
     frame_summary = {'ts': ts, 'zt_cnt': n_zt, 'udr': round(udr, 2),
