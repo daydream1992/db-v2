@@ -114,8 +114,9 @@ def tick() -> None:
 
     # ── Top板块 + 涨幅前5(反查 all_zaf,零额外 TQ 调用)──
     rev = sector_monitor.build_reverse_index(all_zaf)
-    ind1_top3 = [r for r in sec_ranked if r['btype'] == '行业'][:3]
-    concept_top3 = [r for r in sec_ranked if r['btype'] == '概念'][:3]
+    # 过滤 ST 板块(880516 等:涨停多但无主线参考价值),只在展示 Top3 时排除
+    ind1_top3 = [r for r in sec_ranked if r['btype'] == '行业' and 'ST' not in r['name']][:3]
+    concept_top3 = [r for r in sec_ranked if r['btype'] == '概念' and 'ST' not in r['name']][:3]
     ind3_top3 = sector_monitor.top_industries3(pools['连板梯队'], pools['首板'])
 
     # ── 美观打印 ──
