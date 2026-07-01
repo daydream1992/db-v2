@@ -1,6 +1,5 @@
 'use client'
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { LOGS } from '@/lib/dataops/mock-data'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -8,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Search, FileText, Radio, Pause, Play, Trash2, Activity, Loader2, CheckCircle2, XCircle, Zap, Wifi, WifiOff, Download, ArrowDownToLine, ChevronDown, ChevronRight, ChevronUp, Filter, Copy, Layers, ArrowUp, Clock, AlertTriangle, Bug, Info, ArrowDown } from 'lucide-react'
+import { Search, FileText, Radio, Pause, Play, Trash2, Activity, Loader2, CheckCircle2, XCircle, Zap, Wifi, WifiOff, Download, ArrowDownToLine, ChevronDown, ChevronRight, ChevronUp, Filter, Copy, Layers, ArrowUp, Clock, AlertTriangle, Bug, Info, ArrowDown, RefreshCw } from 'lucide-react'
 import { useLogStreamer } from '@/hooks/use-log-streamer'
 import type { LogLine } from '@/hooks/use-log-streamer'
 import { TABLES as TABLES_META } from '@/lib/dataops/mock-data'
@@ -21,14 +20,25 @@ const BUFFER_COUNT = 8
 const SCROLL_THRESHOLD = 150 // px from bottom to show scroll-to-bottom button
 
 // ── Types ──────────────────────────────────────────────────────
+type LogLevel = 'INFO' | 'WARNING' | 'ERROR' | 'SUCCESS' | 'DEBUG'
+
 interface LogItem {
   id: string
   ts: string
-  level: 'INFO' | 'WARNING' | 'ERROR' | 'DEBUG'
+  level: LogLevel
   table: string
   message: string
+  file?: string
   runId: string
   isLive?: boolean
+}
+
+// Real log line shape from GET /api/dataops?op=logs
+interface RawLogLine {
+  ts: string | null
+  level: string
+  message: string
+  file: string
 }
 
 interface LogGroup {
@@ -72,52 +82,107 @@ export function LogsView() {
   const containerHeightRef = useRef(0)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Real log lines from /api/dataops?op=logs
+  const [realLines, setRealLines] = useState<RawLogLine[]>([])
+  const [fileCount, setFileCount] = useState(0)
+  const [truncated, setTruncated] = useState(false)
+  const [logsLoading, setLogsLoading] = useState(true)
+  const [logsError, setLogsError] = useState<string | null>(null)
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null)
+
   const streamer = useLogStreamer()
   const dailyScripts = useMemo(() => TABLES_META.filter(t => t.schedule === 'daily').map((t, i) => ({
     idx: i, table: t.table, cn: t.cn,
   })), [])
-  const tables = useMemo(() => [...new Set(LOGS.map(l => l.table))].sort(), [])
 
-  // ── Assign run_ids to static logs ────────────────────────────
-  const staticLogsWithRunId = useMemo(() => {
-    const sorted = LOGS.map((l, i) => ({
+  // ── Load real log lines from backend ──────────────────────────
+  const loadLogs = useCallback(async () => {
+    setLogsLoading(true)
+    setLogsError(null)
+    try {
+      const resp = await fetch('/api/dataops?op=logs', { cache: 'no-store' })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const data = await resp.json()
+      const lines: RawLogLine[] = Array.isArray(data?.lines) ? data.lines : []
+      setRealLines(lines)
+      setFileCount(typeof data?.fileCount === 'number' ? data.fileCount : 0)
+      setTruncated(Boolean(data?.truncated))
+      setLastFetchedAt(new Date())
+    } catch (e) {
+      setLogsError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLogsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadLogs() }, [loadLogs])
+  const tables = useMemo(() => [...new Set(realLines.map(l => l.file).filter(Boolean))].sort(), [realLines])
+
+  // ── Normalize real backend lines into LogItem[] with run_ids ──
+  const staticLogsWithRunId = useMemo<LogItem[]>(() => {
+    if (realLines.length === 0) return []
+
+    // Normalize level to a known value; backend may emit INFO/WARNING/ERROR/SUCCESS/DEBUG/etc.
+    const normLevel = (raw: string): LogLevel => {
+      const u = (raw || '').toUpperCase()
+      if (u === 'ERROR') return 'ERROR'
+      if (u === 'WARNING' || u === 'WARN') return 'WARNING'
+      if (u === 'SUCCESS') return 'SUCCESS'
+      if (u === 'DEBUG') return 'DEBUG'
+      return 'INFO'
+    }
+    const safeTs = (s: string | null): string => s ?? ''
+
+    // Backend returns newest-first; reverse to ascending for run grouping.
+    const sorted = realLines.map((l, i) => ({
       ...l,
-      id: `static-${i}-${l.ts}-${l.table}`,
+      id: `real-${i}-${l.ts ?? 'nts'}-${l.file ?? 'nf'}`,
+      ts: safeTs(l.ts),
+      level: normLevel(l.level),
+      table: l.file ?? '',
+      message: l.message ?? '',
+      file: l.file ?? '',
       isLive: false,
-    }))
-    // Sort by timestamp
-    sorted.sort((a, b) => a.ts.localeCompare(b.ts))
+    })).reverse()
+    // Stable ascending sort by ts (null/empty ts sink to the top of the ascending list)
+    sorted.sort((a, b) => {
+      if (!a.ts && !b.ts) return 0
+      if (!a.ts) return -1
+      if (!b.ts) return 1
+      return a.ts.localeCompare(b.ts)
+    })
 
-    // Assign run_ids: same date prefix + same table + no time gap > 10min = same group
+    // Assign run_ids: same date prefix + same file + no time gap > 10min = same group
     let runCounter = 0
-    let prevTable = ''
+    let prevFile = ''
     let prevTs = ''
     let currentRunId = ''
 
     return sorted.map(l => {
-      const datePrefix = l.ts.slice(0, 10).replace(/-/g, '')
+      const datePrefix = (l.ts || '').slice(0, 10).replace(/-/g, '') || 'nodate'
       const timeGap = prevTs
         ? (new Date(l.ts).getTime() - new Date(prevTs).getTime()) / 60000
         : Infinity
+      const gapUsable = !isNaN(timeGap)
 
-      // New group if: different table, or gap > 10 minutes within same table
-      if (l.table !== prevTable || timeGap > 10) {
+      // New group if: different file, or gap > 10 minutes within same file
+      if (l.file !== prevFile || (gapUsable && timeGap > 10)) {
         runCounter++
         currentRunId = `run-${datePrefix}-${String(runCounter).padStart(3, '0')}`
       }
-      prevTable = l.table
+      prevFile = l.file
       prevTs = l.ts
 
       return { ...l, runId: currentRunId } as LogItem
     })
-  }, [])
+  }, [realLines])
 
   // ── Merge static + live logs ─────────────────────────────────
   const allLogs = useMemo(() => {
     const live: LogItem[] = streamer.logs.map((l, i) => ({
       id: `live-${i}-${l.timestamp}-${l.table}`,
       ts: l.timestamp,
-      level: l.level === 'SUCCESS' ? 'INFO' as const : l.level,
+      level: (l.level === 'SUCCESS' ? 'INFO' : l.level) as LogLevel,
       table: l.table ?? '',
       message: l.message,
       runId: 'live',
@@ -138,8 +203,10 @@ export function LogsView() {
 
   // ── Level stats ──────────────────────────────────────────────
   const stats = useMemo(() => {
-    const s = { ERROR: 0, WARNING: 0, INFO: 0, DEBUG: 0 }
-    allLogs.forEach(l => { s[l.level]++ })
+    const s: Record<LogLevel, number> = { ERROR: 0, WARNING: 0, INFO: 0, SUCCESS: 0, DEBUG: 0 }
+    allLogs.forEach(l => {
+      if (l.level in s) s[l.level]++
+    })
     return s
   }, [allLogs])
 
@@ -427,6 +494,7 @@ export function LogsView() {
     switch (l.level) {
       case 'ERROR': return 'border-l-[3px] border-rose-500'
       case 'WARNING': return 'border-l-[3px] border-amber-500'
+      case 'SUCCESS': return 'border-l-[3px] border-emerald-500'
       case 'INFO': return 'border-l-[3px] border-sky-500'
       case 'DEBUG': return 'border-l-[3px] border-zinc-300 dark:border-zinc-600'
       default: return 'border-l-[3px] border-zinc-200 dark:border-zinc-700'
@@ -435,7 +503,9 @@ export function LogsView() {
 
   // ── Timestamp recency check ─────────────────────────────────
   const isRecentLog = (ts: string): boolean => {
+    if (!ts) return false
     const logTime = new Date(ts).getTime()
+    if (isNaN(logTime)) return false
     const now = Date.now()
     return (now - logTime) < 60000 // within last minute
   }
@@ -443,6 +513,27 @@ export function LogsView() {
   // ── Render ───────────────────────────────────────────────────
   return (
     <div className="space-y-4">
+      {/* 真实日志加载状态 */}
+      {logsLoading && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-500">
+          <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+          <span>正在读取 logs/ 目录...</span>
+        </div>
+      )}
+      {logsError && !logsLoading && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-sm">
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+          <span className="text-amber-700 dark:text-amber-300 font-medium">日志加载失败</span>
+          <span className="text-amber-600 dark:text-amber-400">({logsError})</span>
+          <Button size="sm" variant="outline" className="ml-auto h-6 text-[11px]" onClick={loadLogs}>重试</Button>
+        </div>
+      )}
+      {truncated && !logsLoading && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 text-xs text-sky-700 dark:text-sky-300">
+          <Info className="h-3.5 w-3.5 text-sky-500 flex-shrink-0" />
+          <span>仅显示最近 500 行（共扫描 {fileCount} 个日志文件）</span>
+        </div>
+      )}
       {/* 实时状态栏 */}
       <Card className={streamer.connected ? 'border-emerald-200 dark:border-emerald-800' : 'border-zinc-200 dark:border-zinc-800'}>
         <CardContent className="p-3">
@@ -642,6 +733,17 @@ export function LogsView() {
             <Button variant="outline" size="sm" className="h-9 text-xs" onClick={handleExport} disabled={filtered.length === 0} title="导出为 .log 文件">
               <Download className="h-3.5 w-3.5 mr-1" />导出
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 text-xs"
+              onClick={loadLogs}
+              disabled={logsLoading}
+              title={lastFetchedAt ? `上次刷新: ${lastFetchedAt.toLocaleTimeString('zh-CN')}` : '重新读取日志'}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 mr-1 ${logsLoading ? 'animate-spin' : ''}`} />
+              {logsLoading ? '刷新中' : '刷新'}
+            </Button>
             <Badge variant="secondary" className="ml-auto">
               {filtered.length} / {allLogs.length}
               {liveMode && streamer.logs.length > 0 && <span className="ml-1 text-rose-500">·{streamer.logs.length} live</span>}
@@ -674,7 +776,7 @@ export function LogsView() {
                 <Badge variant="outline" className="text-zinc-500 ml-1">历史回放</Badge>
               )}
               <span className="text-[11px] text-zinc-400 font-normal ml-2">
-                {liveMode ? 'logs/run_20260625.log + 实时推送' : 'logs/run_20260625.log'}
+                {liveMode ? `logs/ (${fileCount} 文件) + 实时推送` : `logs/ (${fileCount} 文件)`}
               </span>
               <Badge variant="outline" className="text-[10px] text-zinc-500 border-zinc-300 ml-2 font-mono">
                 显示 {visibleRange.start + 1}-{visibleRange.end} / {filtered.length.toLocaleString()}
@@ -706,7 +808,7 @@ export function LogsView() {
             {filtered.length === 0 ? (
               <div className="py-10 text-center text-zinc-400">
                 <FileText className="h-8 w-8 mx-auto opacity-40 mb-2" />
-                {liveMode && streamer.connected ? '等待日志推送... 点击上方剧本触发' : '无匹配日志'}
+                {liveMode && streamer.connected ? '等待日志推送... 点击上方剧本触发' : (logsError ? '日志加载失败，点击右上角重试' : '无匹配日志')}
               </div>
             ) : (
               <div className="relative" style={{ height: totalHeight }}>
@@ -879,9 +981,11 @@ const LogRowInner = ({ log, height, top, isExpanded, isCopied, isHovered, lineNu
   const bgCls =
     l.level === 'ERROR' ? 'bg-rose-50/80 dark:bg-rose-950/30' :
     l.level === 'WARNING' ? 'bg-amber-50/80 dark:bg-amber-950/20' :
+    l.level === 'SUCCESS' ? 'bg-emerald-50/70 dark:bg-emerald-950/20' :
     isLive ? 'bg-sky-50/50 dark:bg-sky-950/20' :
     isHovered ? 'bg-zinc-50 dark:bg-zinc-800/50' :
     ''
+  const tsDisplay = l.ts ? l.ts.slice(5) : '—'
 
   return (
     <div
@@ -903,23 +1007,24 @@ const LogRowInner = ({ log, height, top, isExpanded, isCopied, isHovered, lineNu
       <span className="text-zinc-300 dark:text-zinc-600 flex-shrink-0 w-8 text-right select-none text-[10px] leading-6">{lineNumber}</span>
 
       {/* Timestamp with recency highlighting */}
-      <span className={`flex-shrink-0 w-[7.5rem] text-[11px] leading-6 ${isRecent ? 'text-sky-600 dark:text-sky-400 font-medium' : 'text-zinc-400'}`}>
-        {l.ts.slice(5)}
-        {isRecent && <span className="ml-1 inline-block h-1 w-1 rounded-full bg-sky-500 animate-pulse" />}
+      <span className={`flex-shrink-0 w-[7.5rem] text-[11px] leading-6 ${l.ts && isRecent ? 'text-sky-600 dark:text-sky-400 font-medium' : 'text-zinc-400'}`}>
+        {tsDisplay}
+        {l.ts && isRecent && <span className="ml-1 inline-block h-1 w-1 rounded-full bg-sky-500 animate-pulse" />}
       </span>
 
       {/* Level badge with icon */}
       <span className={`flex-shrink-0 w-20 font-bold text-[11px] leading-6 flex items-center gap-0.5 ${levelCls}`}>
         {l.level === 'ERROR' && <XCircle className="h-3 w-3" />}
         {l.level === 'WARNING' && <AlertTriangle className="h-3 w-3" />}
+        {l.level === 'SUCCESS' && <CheckCircle2 className="h-3 w-3" />}
         {l.level === 'INFO' && <Info className="h-3 w-3" />}
         {l.level === 'DEBUG' && <Bug className="h-3 w-3" />}
         {l.level}
         {isLive && <span className="ml-1 text-rose-500">●</span>}
       </span>
 
-      {/* Table name */}
-      <span className="text-sky-600 dark:text-sky-400 flex-shrink-0 w-40 truncate text-[11px] leading-6" title={l.table}>{l.table}</span>
+      {/* Source file name */}
+      <span className="text-sky-600 dark:text-sky-400 flex-shrink-0 w-40 truncate text-[11px] leading-6" title={l.table}>{l.table || '—'}</span>
 
       {/* Message */}
       <span className={`text-zinc-700 dark:text-zinc-300 flex-1 text-[11px] leading-6 ${!isExpanded && hasLong ? 'truncate' : ''}`}>{l.message}</span>
@@ -975,6 +1080,7 @@ function levelColorStatic(l: string): string {
   switch (l) {
     case 'ERROR': return 'text-rose-600'
     case 'WARNING': return 'text-amber-600'
+    case 'SUCCESS': return 'text-emerald-600'
     case 'INFO': return 'text-sky-600'
     case 'DEBUG': return 'text-zinc-400'
     default: return 'text-zinc-500'
@@ -985,6 +1091,7 @@ function getLevelBorderStatic(level: string): string {
   switch (level) {
     case 'ERROR': return 'border-l-[3px] border-rose-500'
     case 'WARNING': return 'border-l-[3px] border-amber-500'
+    case 'SUCCESS': return 'border-l-[3px] border-emerald-500'
     case 'INFO': return 'border-l-[3px] border-sky-500'
     case 'DEBUG': return 'border-l-[3px] border-zinc-300 dark:border-zinc-600'
     default: return 'border-l-[3px] border-zinc-200 dark:border-zinc-700'

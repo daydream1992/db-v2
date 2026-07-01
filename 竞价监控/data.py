@@ -1,253 +1,305 @@
-"""竞价监控雷达 — 数据层 (L1 + L2)
+"""竞价监控雷达 v2 — 数据层
 
-L1: safe_snapshot 单股安全获取(3 次重试 + 异常降级)
-L2: extract_features 三时刻 join + 指标计算
+架构(避免开盘掉链子):
+  盘前 prepare_preset: 动态池+DB 4表特征+置信度,落盘 preset parquet(开盘前做好)
+  开盘 fetch_open_snapshot: 9:25 后唯一实时步骤(取开盘价)
+  开盘 load_preset: 读本地 preset(零延时),merge 开盘价即可
+
+日期严谨:T-1 取"今天之前的最新交易日",不乱取;数据缺失/滞后→置信度降。
 """
 from __future__ import annotations
 
-import random
 import sys
-import time
-from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
-from typing import Sequence
+import time as _time
+from datetime import date, datetime, time as dtime
 
 import pandas as pd
 from loguru import logger
 
-# 必须在 import tqcenter 之前设 sys.path
 TQ_SYS_PATH = r"K:\txdlianghua\PYPlugins\sys"
 if TQ_SYS_PATH not in sys.path:
     sys.path.insert(0, TQ_SYS_PATH)
-
 try:
     from tqcenter import tq  # type: ignore
 except Exception as e:  # noqa: BLE001
     tq = None  # type: ignore
-    logger.warning(f"tqcenter 加载失败: {e};仅 --mock 可用")
+    logger.warning(f"tqcenter 加载失败: {e}")
+
+from config import CONFIG, THRESHOLDS, limit_up_pct
 
 
-# ============ L1: 池管理 + 安全快照 ============
-
-def load_pool(path: Path) -> list[str]:
-    """解析 pool.txt
-
-    格式:
-        # 注释行
-        <code>  # 名称
-        <code>
-
-    空行忽略
-    """
+# ============ 自选池 ============
+def load_pool(path) -> list[str]:
     if not path.exists():
-        logger.error(f"pool.txt 不存在: {path}")
         return []
-
     codes: list[str] = []
     for line in path.read_text(encoding="utf-8").splitlines():
-        s = line.strip()
-        if not s or s.startswith("#"):
-            continue
-        # 去掉行内注释
-        code = s.split("#", 1)[0].strip()
-        if code:
-            codes.append(code)
-
-    # 去重保序
-    seen: set[str] = set()
-    unique: list[str] = []
-    for c in codes:
-        if c not in seen:
-            seen.add(c)
-            unique.append(c)
-    logger.info(f"加载监控池 {len(unique)} 只: {path}")
-    return unique
+        s = line.strip().split("#", 1)[0].strip()
+        if s:
+            codes.append(s)
+    return list(dict.fromkeys(codes))
 
 
-def safe_snapshot(code: str, max_retry: int = 3, backoff_s: float = 0.2) -> dict:
-    """单股安全快照
-
-    Returns:
-        dict 字段(已转 float/int):LastClose/Open/Now/Volume/Amount 等
-        失败返回空 dict{}
-    """
+# ============ L1:开盘价快照(9:25 后,唯一实时步骤) ============
+def _safe_snapshot(code: str, max_retry: int = 3) -> dict:
     if tq is None:
         return {}
-
-    last_err: Exception | None = None
     for attempt in range(1, max_retry + 1):
         try:
-            data = tq.get_market_snapshot(stock_code=code, field_list=[])
-            if data:
-                return _normalize_snapshot(data)
-        except Exception as e:  # noqa: BLE001
-            last_err = e
-            logger.debug(f"snapshot {code} 第{attempt}次失败: {e}")
-            time.sleep(backoff_s * attempt)
-
-    logger.warning(f"snapshot {code} 重试{max_retry}次仍失败: {last_err}")
+            d = tq.get_market_snapshot(stock_code=code, field_list=[])
+            if d:  # 有返回即可(ErrorId 实际是 str "0",==0(int) 恒 False;有效性由调用方 now>0 判断)
+                return d
+        except Exception:  # noqa: BLE001
+            _time.sleep(0.2 * attempt)
     return {}
 
 
-def _normalize_snapshot(data: dict) -> dict:
-    """字段归一化:camelCase → snake_case,数值化"""
-    out: dict = {}
-    mapping = {
-        "LastClose": "last_close", "Open": "open",
-        "Now": "now", "Max": "high", "Min": "low",
-        "Volume": "volume", "NowVol": "now_vol", "Amount": "amount",
-        "Average": "avg", "Zangsu": "speed",
-    }
-    for k_src, k_dst in mapping.items():
-        v = data.get(k_src)
-        if v is None:
-            continue
-        try:
-            if k_dst in ("volume", "now_vol"):
-                out[k_dst] = int(float(v))
-            else:
-                out[k_dst] = float(v)
-        except (TypeError, ValueError):
-            continue
-    return out
-
-
-def fetch_snapshots(
-    codes: Sequence[str],
-    snapshot_at: datetime | None = None,
-    progress: bool = True,
-) -> pd.DataFrame:
-    """批量取快照(串行)
-
-    Args:
-        codes: 股票代码列表
-        snapshot_at: 采样时刻(用于日志,可空)
-        progress: 是否打印进度
-
-    Returns:
-        DataFrame cols: code, last_close, open, now, volume, amount, snapshot_at
-    """
+def fetch_open_snapshot(codes: list[str]) -> pd.DataFrame:
+    """9:25 撮合后取开盘价。返回 code/last_close/open_price/amount"""
     if tq is None:
-        raise RuntimeError("tqcenter 未加载,无法 fetch_snapshots")
-
+        raise RuntimeError("tqcenter 未加载")
     tq.initialize(__file__)
-    ts = snapshot_at or datetime.now()
     rows: list[dict] = []
     try:
         for i, code in enumerate(codes, 1):
-            snap = safe_snapshot(code)
-            if not snap:
+            d = _safe_snapshot(code)
+            if not d:
                 continue
-            snap["code"] = code
-            snap["snapshot_at"] = ts
-            rows.append(snap)
-            if progress and i % 5 == 0:
+            try:
+                last_close = float(d.get("LastClose", 0) or 0)
+                open_p = float(d.get("Open", 0) or 0)
+                now_p = float(d.get("Now", 0) or 0)
+                volume = int(float(d.get("Volume", 0) or 0))
+                amount = float(d.get("Amount", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if last_close <= 0 or open_p <= 0:
+                continue  # Open=撮合开盘价;撮合前 Open=0 跳过(实时/盘后 Open 都在)
+            rows.append({"code": code, "last_close": last_close,
+                         "open_price": open_p, "now_price": now_p,
+                         "volume": volume, "amount": amount})
+            if i % 50 == 0:
                 logger.debug(f"  snapshot {i}/{len(codes)}")
     finally:
         try:
             tq.close()
         except Exception:  # noqa: BLE001
             pass
-
+    logger.info(f"开盘快照取到 {len(rows)}/{len(codes)}")
     return pd.DataFrame(rows)
 
 
-# ============ L2: 特征提取(三时刻 join) ============
+# ============ L2:DB 多维特征(T-1) ============
+def fetch_db_features(codes: list[str], con, th: THRESHOLDS) -> pd.DataFrame:
+    """4 表 merge,全取 T-1(今天之前的最新交易日)"""
+    today_str = date.today().strftime("%Y%m%d")
+    df = pd.DataFrame({"code": codes})
 
-REQUIRED_COLS = ["code", "s1_price", "s2_price", "s3_price",
-                 "last_close", "real_vol", "amount", "pct", "trap_ratio"]
+    turn = con.execute("""
+        SELECT code, pct_chg AS yest_pct, turnover AS yest_turnover
+        FROM stock_daily_turnover
+        WHERE date = (SELECT MAX(date) FROM stock_daily_turnover WHERE date < CURRENT_DATE)
+    """).fetchdf()
+    df = df.merge(turn, on="code", how="left")
+
+    zjl = con.execute(f"""
+        SELECT code, CAST(Zjl AS DOUBLE) AS zjl
+        FROM sjb_api_plhqL2kz_88zd
+        WHERE CAST(HqDate AS VARCHAR) = (
+            SELECT MAX(CAST(HqDate AS VARCHAR)) FROM sjb_api_plhqL2kz_88zd
+            WHERE CAST(HqDate AS VARCHAR) < '{today_str}')
+    """).fetchdf()
+    df = df.merge(zjl, on="code", how="left")
+
+    cap = con.execute("""
+        SELECT code, ltgb FROM capital_info
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY code ORDER BY date DESC) = 1
+    """).fetchdf()
+    df = df.merge(cap, on="code", how="left")
+
+    piano = con.execute(f"""
+        SELECT stock_code, COUNT(*) AS trap_cnt,
+               MAX(trade_date) AS last_trap, MAX(severity) AS max_sev
+        FROM pianpao_daily
+        WHERE trap_confirmed = true
+          AND trade_date >= CURRENT_DATE - INTERVAL '{th.pianpao_recent_days} days'
+        GROUP BY stock_code
+    """).fetchdf().rename(columns={"stock_code": "code"})
+    df = df.merge(piano, on="code", how="left")
+    df["trap_cnt"] = df["trap_cnt"].fillna(0).astype(int)
+    return df
 
 
-def extract_features(
-    s1: pd.DataFrame, s2: pd.DataFrame, s3: pd.DataFrame
-) -> pd.DataFrame:
-    """三时刻 join + 计算 pct/trap_ratio/real_vol
+# ============ L3:动态池 ============
+def build_dynamic_pool(con, pool_codes: list[str]) -> list[str]:
+    df = con.execute("""
+        SELECT code, pct_chg FROM stock_daily_turnover
+        WHERE date = (SELECT MAX(date) FROM stock_daily_turnover WHERE date < CURRENT_DATE)
+    """).fetchdf()
+    limit_up: list[str] = []
+    for _, r in df.iterrows():
+        pct = r["pct_chg"]
+        if pd.isna(pct):
+            continue
+        if pct >= limit_up_pct(r["code"]) - 0.2:
+            limit_up.append(r["code"])
+    logger.info(f"昨日涨停 {len(limit_up)} 只")
+    all_codes = list(dict.fromkeys(limit_up + list(pool_codes)))
+    logger.info(f"动态池 {len(all_codes)} 只(涨停{len(limit_up)}+自选{len(pool_codes)})")
+    return all_codes
 
-    输入每张表都有: code, last_close, now(此时刻现价), volume, amount
-    输出: code, last_close, s1_price, s2_price, s3_price, real_vol, amount, pct, trap_ratio
 
-    公式:
-        real_vol = s3.volume - s1.volume   (累计增量手数)
-        pct = (s3.now - s1.last_close) / s1.last_close * 100
-        trap_ratio = s3.now / max(s2.now, 1e-9)
+# ============ L4:异常过滤 ============
+def filter_abnormal(df: pd.DataFrame) -> pd.DataFrame:
+    before = len(df)
+    out = df[df["yest_pct"].notna()].reset_index(drop=True)
+    dropped = before - len(out)
+    if dropped:
+        logger.info(f"剔除 T-1 缺失 {dropped} 只(停牌/新股)")
+    return out
+
+
+# ============ 数据新鲜度(日期严谨) ============
+def check_data_freshness(con) -> dict:
+    """检查各表最新日期 vs 期望 T-1。日期不乱取,记录实际数据日期+滞后"""
+    turn_max = con.execute(
+        "SELECT MAX(date) FROM stock_daily_turnover WHERE date < CURRENT_DATE"
+    ).fetchone()[0]
+    today_str = date.today().strftime("%Y%m%d")
+    sjb_raw = con.execute(
+        f"SELECT MAX(CAST(HqDate AS VARCHAR)) FROM sjb_api_plhqL2kz_88zd "
+        f"WHERE CAST(HqDate AS VARCHAR) < '{today_str}'"
+    ).fetchone()[0]
+
+    turn_d = turn_max.date() if hasattr(turn_max, "date") else turn_max
+    sjb_d = None
+    if sjb_raw:
+        try:
+            sjb_d = datetime.strptime(str(sjb_raw), "%Y%m%d").date()
+        except ValueError:
+            sjb_d = None
+
+    data_date = turn_d
+    lag = (date.today() - data_date).days if data_date else 99
+    consistent = bool(sjb_d and turn_d and sjb_d == turn_d)
+    return {
+        "data_date": str(data_date) if data_date else "N/A",
+        "turnover_date": str(turn_d) if turn_d else "N/A",
+        "sjb_date": str(sjb_d) if sjb_d else "N/A",
+        "lag_days": lag,
+        "consistent": consistent,
+    }
+
+
+def _row_confidence(row, fresh: dict) -> tuple[str, str]:
+    """单票置信度:字段完整性 + 数据滞后。high/medium/low + 原因"""
+    reasons: list[str] = []
+    if pd.isna(row.get("zjl")):
+        reasons.append("主力净额缺")
+    if pd.isna(row.get("yest_pct")):
+        reasons.append("昨日涨幅缺")
+    if pd.isna(row.get("ltgb")):
+        reasons.append("流通股本缺")
+    if fresh.get("lag_days", 0) >= 4:  # 周末 lag=3 正常,>=4 算滞后
+        reasons.append(f"数据滞后{fresh['lag_days']}天")
+    if not reasons:
+        return "high", ""
+    level = "low" if (len(reasons) >= 2 or fresh.get("lag_days", 0) >= 4) else "medium"
+    return level, ";".join(reasons)
+
+
+# ============ 盘前预备(开盘前做好) ============
+def prepare_preset(con, th: THRESHOLDS) -> dict:
+    """盘前预备:动态池+DB特征+置信度,落盘 preset parquet。
+
+    开盘后只需 load_preset + fetch_open_snapshot,9:25 不再依赖 DB。
     """
-    if s1.empty or s2.empty or s3.empty:
-        return pd.DataFrame(columns=REQUIRED_COLS)
+    pool = load_pool(CONFIG.pool_path)
+    codes = build_dynamic_pool(con, pool)
+    fresh = check_data_freshness(con)
+    logger.info(f"数据日期={fresh['data_date']} 滞后{fresh['lag_days']}天 "
+                f"turnover/sjb一致={fresh['consistent']}")
 
-    # 用 last_close 取 s1 的(盘前不变)
-    s1_view = s1[["code", "last_close", "now", "volume"]].rename(
-        columns={"now": "s1_price", "volume": "s1_vol"}
-    )
-    s2_view = s2[["code", "now", "volume"]].rename(
-        columns={"now": "s2_price", "volume": "s2_vol"}
-    )
-    s3_view = s3[["code", "now", "volume", "amount"]].rename(
-        columns={"now": "s3_price", "volume": "s3_vol"}
-    )
+    db_df = fetch_db_features(codes, con, th)
+    # 预计算昨日涨停(板块涨停幅度)
+    db_df["yest_limit_up"] = db_df.apply(
+        lambda r: pd.notna(r.get("yest_pct"))
+        and r["yest_pct"] >= limit_up_pct(r["code"]) - 0.2, axis=1)
+    # 置信度
+    conf = db_df.apply(lambda r: _row_confidence(r, fresh), axis=1)
+    db_df["confidence"], db_df["confidence_reason"] = zip(*conf)
+    db_df["data_date"] = fresh["data_date"]
 
-    df = s1_view.merge(s2_view, on="code", how="inner").merge(s3_view, on="code", how="inner")
-    if df.empty:
-        return pd.DataFrame(columns=REQUIRED_COLS)
+    CONFIG.output_dir.mkdir(parents=True, exist_ok=True)
+    today = date.today().strftime("%Y%m%d")
+    path = CONFIG.output_dir / f"preset_{today}.parquet"
+    db_df.to_parquet(path, index=False)
 
-    df["real_vol"] = (df["s3_vol"].fillna(0) - df["s1_vol"].fillna(0)).clip(lower=0)
-    df["amount"] = df["amount"].fillna(0.0)
-
-    last_close = pd.to_numeric(df["last_close"], errors="coerce").replace(0, pd.NA)
-    s3_price = pd.to_numeric(df["s3_price"], errors="coerce")
-    s2_price = pd.to_numeric(df["s2_price"], errors="coerce")
-    df["pct"] = ((s3_price - last_close) / last_close * 100).fillna(0.0)
-
-    s2_safe = s2_price.replace(0, pd.NA)
-    df["trap_ratio"] = (s3_price / s2_safe).fillna(1.0)
-
-    return df[REQUIRED_COLS]
+    dist = db_df["confidence"].value_counts().to_dict()
+    logger.success(f"盘前预备落盘 {path}: {len(db_df)}只 置信度{dist}")
+    return {"path": str(path), "fresh": fresh, "count": len(db_df), "confidence": dist}
 
 
-# ============ mock 数据生成(供 --mock 验证,生产环境不用) ============
-
-def mock_snapshots(
-    codes: Sequence[str], base_price: float = 50.0, seed: int = 42
-) -> pd.DataFrame:
-    """生成模拟快照,字段对齐真实 snapshot"""
-    rng = random.Random(seed)
-    rows: list[dict] = []
-    for code in codes:
-        # 模拟不同涨跌:大多数微涨,少量大涨/大跌
-        r = rng.random()
-        if r < 0.55:
-            pct = rng.uniform(-0.8, 0.8)
-        elif r < 0.80:
-            pct = rng.uniform(1.5, 4.5)    # 趋势候选
-        elif r < 0.90:
-            pct = rng.uniform(-4.5, -1.5)  # 反核候选
-        else:
-            pct = rng.uniform(0, 0)        # 平盘
-
-        last_close = base_price * rng.uniform(0.5, 1.5)
-        s1_price = last_close * (1 + rng.uniform(-0.001, 0.001))
-        s2_price = last_close * (1 + pct / 100 * rng.uniform(0.5, 1.5))
-        s3_price = last_close * (1 + pct / 100)
-        amount = rng.uniform(1_000_000, 80_000_000)
-        volume = rng.randint(100, 20_000)
-
-        rows.append({
-            "code": code,
-            "last_close": last_close,
-            "s1_price": s1_price,
-            "s2_price": s2_price,
-            "s3_price": s3_price,
-            "amount": amount,
-            "volume": volume,
-        })
-    return pd.DataFrame(rows)
+def load_preset(run_date: str | None = None) -> pd.DataFrame:
+    """开盘后读 preset(本地读取零延时)。返回 DB特征+置信度+data_date"""
+    d = run_date or date.today().strftime("%Y%m%d")
+    path = CONFIG.output_dir / f"preset_{d}.parquet"
+    if not path.exists():
+        raise FileNotFoundError(f"找不到盘前预备包 {path},请先跑 python main.py --prepare")
+    df = pd.read_parquet(path)
+    data_date = df["data_date"].iloc[0] if "data_date" in df.columns else "?"
+    logger.info(f"读盘前预备包 {path}: {len(df)}只 数据日期={data_date}")
+    return df
 
 
-def mock_features(codes: Sequence[str], seed: int = 42) -> pd.DataFrame:
-    """直接生成特征 df,跳过三时刻 join(供 --mock 验证主流程)"""
-    snaps = mock_snapshots(codes, seed=seed)
-    df = snaps.rename(columns={"volume": "real_vol"})  # mock 直接用 volume 当 real_vol
-    df["pct"] = ((df["s3_price"] - df["last_close"]) / df["last_close"] * 100)
-    df["trap_ratio"] = df["s3_price"] / df["s2_price"].replace(0, pd.NA)
-    df["trap_ratio"] = df["trap_ratio"].fillna(1.0)
-    return df[REQUIRED_COLS]
+# ============ 竞价趋势:循环采样 9:15-9:25 ============
+
+def _wait_until(target: dtime, slack_s: float = 0.5) -> None:
+    """等到目标时刻(已过立即返回)"""
+    now = datetime.now()
+    now_s = now.hour * 3600 + now.minute * 60 + now.second
+    tgt_s = target.hour * 3600 + target.minute * 60 + target.second
+    delta = tgt_s - now_s
+    if delta <= -slack_s:
+        return
+    if delta > 0:
+        logger.info(f"等待到 {target} (还差 {delta:.0f}s)")
+        _time.sleep(max(0.0, delta - slack_s))
+
+
+def fetch_price_series(codes: list[str], sample_times: tuple) -> dict:
+    """循环抓取:每个采样时刻取所有票现价。
+
+    返回 {code: [(idx, ts, price, pct), ...]}
+    撮合前 Now=0 → pct=None(拟合时忽略)
+    """
+    if tq is None:
+        raise RuntimeError("tqcenter 未加载")
+    tq.initialize(__file__)
+    series: dict[str, list] = {c: [] for c in codes}
+    try:
+        for idx, t in enumerate(sample_times):
+            _wait_until(t)
+            ts = datetime.now()
+            got = 0
+            for code in codes:
+                d = _safe_snapshot(code)
+                if not d:
+                    series[code].append((idx, ts, 0.0, None))
+                    continue
+                try:
+                    last_close = float(d.get("LastClose", 0) or 0)
+                    price = float(d.get("Now", 0) or 0)
+                except (TypeError, ValueError):
+                    last_close, price = 0.0, 0.0
+                pct = ((price - last_close) / last_close * 100) if (last_close > 0 and price > 0) else None
+                series[code].append((idx, ts, price, pct))
+                if pct is not None:
+                    got += 1
+            logger.info(f"采样 {idx + 1}/{len(sample_times)} @ {ts:%H:%M:%S} 有效 {got}/{len(codes)}")
+    finally:
+        try:
+            tq.close()
+        except Exception:  # noqa: BLE001
+            pass
+    return series

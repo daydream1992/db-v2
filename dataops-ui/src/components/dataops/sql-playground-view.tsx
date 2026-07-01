@@ -23,6 +23,52 @@ interface ExplainNode {
   color: 'sky' | 'amber' | 'emerald' | 'fuchsia'
 }
 
+// 把 DuckDB 真实 EXPLAIN 文本尽力解析成 ExplainNode 链。
+// DuckDB 计划是 box-drawing 树，这里抽取算子关键字 + ~N Rows + 表名，按出现顺序串成右倾链。
+// 解析不出来返回 null（调用方会退回「文本」视图，原文为准）。
+const PLAN_OPS = [
+  'SEQ_SCAN', 'INDEX_SCAN', 'COLUMN_DATA_SCAN', 'TABLE_SCAN', 'BITSET',
+  'FILTER', 'PROJECTION', 'HASH_GROUP_BY', 'PERFECT_HASH_GROUP_BY', 'UNGROUPED_AGGREGATE',
+  'HASH_JOIN', 'NESTED_LOOP_JOIN', 'PIECEWISE_MERGE_JOIN', 'CROSS_PRODUCT', 'BLOCKWISE_NL_JOIN',
+  'ORDER_BY', 'TOP_N', 'LIMIT', 'DISTINCT', 'WINDOW', 'VALUES_SCAN', 'EMPTY_RESULT',
+  'UNION', 'RECURSIVE_CTE', 'CTE_SCAN', 'SAMPLE', 'PIVOT',
+]
+const PLAN_OP_RE = new RegExp(`\\b(${PLAN_OPS.join('|')})\\b`)
+
+function parseDuckdbPlan(text: string): { totalCost: number; root: ExplainNode } | null {
+  const lines = text.split('\n')
+  const nodes: ExplainNode[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(PLAN_OP_RE)
+    if (!m) continue
+    const op = m[1]
+    let rows = 0
+    let table: string | undefined
+    for (let j = i + 1; j < Math.min(lines.length, i + 8); j++) {
+      const rm = lines[j].match(/~\s*([\d.,]+)\s*rows/i)
+      if (rm && !rows) rows = Math.round(parseFloat(rm[1].replace(/[,.]/g, '')) || 0)
+      if (!table) {
+        const tm = lines[j].match(/^\W*([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*|[a-z_][a-z0-9_]*)\W*$/i)
+        if (tm && !/rows|probe|build|operator|estimated/i.test(tm[1])) table = tm[1]
+      }
+    }
+    const color: ExplainNode['color'] =
+      /SCAN|CTE/.test(op) ? 'sky' :
+      /JOIN|CROSS|MERGE|UNION/.test(op) ? 'amber' :
+      /AGGREGATE|GROUP|WINDOW|DISTINCT/.test(op) ? 'emerald' :
+      /ORDER|TOP|LIMIT|SAMPLE|PIVOT/.test(op) ? 'fuchsia' : 'sky'
+    nodes.push({ operation: op, table, estimatedRows: rows, estimatedCost: rows, children: [], color })
+  }
+  if (!nodes.length) return null
+  // 按出现顺序串成右倾链（首个为 root）
+  for (let k = 1; k < nodes.length; k++) {
+    let leaf = nodes[0]
+    while (leaf.children.length) leaf = leaf.children[0]
+    leaf.children.push(nodes[k])
+  }
+  return { totalCost: nodes.reduce((s, n) => s + n.estimatedCost, 0), root: nodes[0] }
+}
+
 // 多 Tab 查询状态
 interface QueryTab {
   id: string
@@ -656,6 +702,7 @@ export function SqlPlaygroundView() {
   const [compareLeftId, setCompareLeftId] = useState<string>('')
   const [compareRightId, setCompareRightId] = useState<string>('')
   const [explainResult, setExplainResult] = useState<{ totalCost: number; root: ExplainNode } | null>(null)
+  const [explainRawText, setExplainRawText] = useState<string | null>(null)
   const [explainViewMode, setExplainViewMode] = useState<'tree' | 'raw'>('tree')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const tabCounter = useRef(1)
@@ -670,40 +717,73 @@ export function SqlPlaygroundView() {
     setTabs(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
   }
 
-  const run = () => {
+  const run = async () => {
     if (!activeTab.sql.trim()) return
     setExplainResult(null)
+    setExplainRawText(null)
     const tabId = activeTab.id
+    const sql = activeTab.sql
     updateTab(tabId, { running: true, result: null, durationMs: null, sortCol: null, sortDir: null, page: 0 })
-    setTimeout(() => {
-      const r = mockExecute(activeTab.sql)
-      const ms = Math.floor(Math.random() * 200) + 30
+    try {
+      const resp = await fetch('/api/sql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok || data.error) throw new Error(data.error || `HTTP ${resp.status}`)
+      const r: QueryResult = { columns: data.columns || [], rows: data.rows || [], rowsAffected: data.rowCount ?? 0 }
+      const ms = data.elapsedMs ?? 0
       updateTab(tabId, { result: r, durationMs: ms, running: false })
       setHistory(prev => [{
         id: `h${Date.now()}`,
-        sql: activeTab.sql.length > 80 ? activeTab.sql.slice(0, 80) + '...' : activeTab.sql,
+        sql: sql.length > 80 ? sql.slice(0, 80) + '...' : sql,
         ts: new Date().toLocaleString('zh-CN', { hour12: false }),
         rows: r.rowsAffected,
         durationMs: ms,
         ok: true,
       }, ...prev].slice(0, 20))
-    }, 500 + Math.random() * 400)
+    } catch (e: any) {
+      updateTab(tabId, {
+        running: false,
+        result: { columns: ['查询失败（真实 DuckDB）'], rows: [[e.message || String(e)]], rowsAffected: 0 },
+      })
+    }
   }
 
-  const runExplain = () => {
+  const runExplain = async () => {
     if (!activeTab.sql.trim()) return
     const sql = activeTab.sql
-    const explainSql = sql.trim().toLowerCase().startsWith('select') ? `EXPLAIN ${sql}` : sql
     // Clear normal result
     updateTab(activeTab.id, { result: null, durationMs: null, sortCol: null, sortDir: null, page: 0 })
     setExplainResult(null)
-    // Simulate brief loading
+    setExplainRawText(null)
     updateTab(activeTab.id, { running: true })
-    setTimeout(() => {
-      const plan = mockExplainPlan(explainSql)
-      setExplainResult(plan)
+    try {
+      const resp = await fetch('/api/sql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql, explain: true }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok || data.error) throw new Error(data.error || `HTTP ${resp.status}`)
+      const text: string = data.explainText || ''
+      setExplainRawText(text)
+      const parsed = parseDuckdbPlan(text)
+      if (parsed) {
+        setExplainResult(parsed)
+        setExplainViewMode('tree')
+      } else {
+        setExplainResult(null)
+        setExplainViewMode('raw')
+      }
+    } catch (e: any) {
+      setExplainRawText(`EXPLAIN 失败：${e.message || String(e)}`)
+      setExplainResult(null)
+      setExplainViewMode('raw')
+    } finally {
       updateTab(activeTab.id, { running: false })
-    }, 300 + Math.random() * 200)
+    }
   }
 
   // Tab 操作
@@ -1100,7 +1180,7 @@ export function SqlPlaygroundView() {
           </CardHeader>
           <CardContent className="p-0 flex-1 min-h-0">
             <ScrollArea className="h-full">
-              {!result && !explainResult && !running && (
+              {!result && !explainResult && !explainRawText && !running && (
                 <div className="h-full flex flex-col items-center justify-center text-zinc-400 text-sm py-16 gap-2">
                   <Terminal className="h-8 w-8 opacity-40" />
                   <div>点击「执行」运行 SQL 或「EXPLAIN」查看计划</div>
@@ -1113,13 +1193,13 @@ export function SqlPlaygroundView() {
                   <div>执行中...</div>
                 </div>
               )}
-              {explainResult && !running && (
+              {(explainResult || explainRawText) && !running && (
                 <div className="p-4">
                   {/* Header with toggle */}
                   <div className="flex items-center gap-2 mb-4 pb-3 border-b border-zinc-200 dark:border-zinc-700">
                     <Activity className="h-4 w-4 text-amber-500" />
                     <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">EXPLAIN 计划</span>
-                    <Badge variant="outline" className="text-[10px] ml-2 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">总代价: {explainResult.totalCost.toLocaleString()}</Badge>
+                    {explainResult && <Badge variant="outline" className="text-[10px] ml-2 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">总代价: {explainResult.totalCost.toLocaleString()}</Badge>}
                     {/* View mode toggle */}
                     <div className="ml-auto flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
                       <button
@@ -1139,7 +1219,7 @@ export function SqlPlaygroundView() {
                     </div>
                   </div>
                   {/* Tree view */}
-                  {explainViewMode === 'tree' && (
+                  {explainViewMode === 'tree' && explainResult && (
                     <>
                       <ExplainSvgTree root={explainResult.root} totalCost={explainResult.totalCost} />
                       {/* Legend */}
@@ -1154,7 +1234,7 @@ export function SqlPlaygroundView() {
                   {/* Raw text view */}
                   {explainViewMode === 'raw' && (
                     <pre className="text-xs font-mono text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 whitespace-pre-wrap overflow-x-auto">
-                      {explainToRawText(explainResult.root)}
+                      {explainRawText ?? (explainResult ? explainToRawText(explainResult.root) : '')}
                     </pre>
                   )}
                 </div>

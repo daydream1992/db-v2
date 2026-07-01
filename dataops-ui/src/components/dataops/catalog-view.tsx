@@ -779,6 +779,23 @@ function formatRowsComma(n: number): string {
   return n.toLocaleString()
 }
 
+// Real DuckDB catalog row (from GET /api/dataops?op=catalog)
+interface CatalogRow {
+  table: string
+  rows: number
+  columnCount: number
+  dateCol: string | null
+  maxDate: string | null
+  exists: boolean
+}
+type CatalogMap = Map<string, { rows: number; columnCount: number; dateCol: string | null; maxDate: string | null }>
+
+// Format a freshness date nicely (date-only, strip timestamp if present)
+function formatMaxDate(s: string | null): string {
+  if (!s) return '—'
+  return s.length > 10 ? s.slice(0, 10) : s
+}
+
 export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string) => void; onRunTable?: (t: string) => void }) {
   const [search, setSearch] = useState('')
   const [dirFilter, setDirFilter] = useState<string>('all')
@@ -789,28 +806,59 @@ export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string
   const [expandedDepGraph, setExpandedDepGraph] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list')
 
+  // Real DuckDB catalog data (rows / columnCount / maxDate / dateCol).
+  // Falls back to mock TABLES values while loading or on error.
+  const [catalogMap, setCatalogMap] = useState<CatalogMap | null>(null)
+  const [catalogError, setCatalogError] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/dataops?op=catalog', { cache: 'no-store' })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<{ tables: CatalogRow[] }> })
+      .then(data => {
+        if (cancelled) return
+        const m: CatalogMap = new Map()
+        for (const row of data.tables || []) {
+          m.set(row.table, { rows: row.rows, columnCount: row.columnCount, dateCol: row.dateCol, maxDate: row.maxDate })
+        }
+        setCatalogMap(m)
+      })
+      .catch(() => { if (!cancelled) setCatalogError(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Merge mock metadata (cn/dir/schedule/type/sort/...) with real DuckDB facts.
+  const merged: TableMeta[] = useMemo(() => {
+    if (!catalogMap) return TABLES
+    return TABLES.map(t => {
+      const real = catalogMap.get(t.table)
+      if (!real) return t
+      return { ...t, rows: real.rows, maxDate: real.maxDate }
+    })
+  }, [catalogMap])
+
   // Compute counts for filter badges
   const counts = useMemo(() => {
-    const dirCounts: Record<string, number> = { all: TABLES.length }
-    const healthCounts: Record<string, number> = { all: TABLES.length }
-    TABLES.forEach(t => {
+    const dirCounts: Record<string, number> = { all: merged.length }
+    const healthCounts: Record<string, number> = { all: merged.length }
+    merged.forEach(t => {
       dirCounts[t.dir] = (dirCounts[t.dir] || 0) + 1
       healthCounts[t.health] = (healthCounts[t.health] || 0) + 1
     })
     return { dir: dirCounts, health: healthCounts }
-  }, [])
+  }, [merged])
 
   // Statistics for the header
   const stats = useMemo(() => {
-    const greenCount = TABLES.filter(t => t.health === 'green').length
-    const yellowCount = TABLES.filter(t => t.health === 'yellow').length
-    const redCount = TABLES.filter(t => t.health === 'red').length
-    const totalRows = TABLES.reduce((sum, t) => sum + t.rows, 0)
-    return { greenCount, yellowCount, redCount, totalRows, total: TABLES.length }
-  }, [])
+    const greenCount = merged.filter(t => t.health === 'green').length
+    const yellowCount = merged.filter(t => t.health === 'yellow').length
+    const redCount = merged.filter(t => t.health === 'red').length
+    const totalRows = merged.reduce((sum, t) => sum + t.rows, 0)
+    return { greenCount, yellowCount, redCount, totalRows, total: merged.length }
+  }, [merged])
 
   const filtered = useMemo(() => {
-    const result = TABLES.filter(t => {
+    const result = merged.filter(t => {
       if (search && !t.table.toLowerCase().includes(search.toLowerCase()) && !t.cn.includes(search)) return false
       if (dirFilter !== 'all' && t.dir !== dirFilter) return false
       if (healthFilter !== 'all' && t.health !== healthFilter) return false
@@ -828,7 +876,7 @@ export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string
       return a.sort.localeCompare(b.sort)
     })
     return result
-  }, [search, dirFilter, healthFilter, sortBy])
+  }, [merged, search, dirFilter, healthFilter, sortBy])
 
   const toggleRow = (tableName: string) => {
     setExpandedRow(prev => prev === tableName ? null : tableName)
@@ -1054,7 +1102,7 @@ export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string
                         {/* Row count with commas */}
                         <div className="text-right font-mono text-zinc-600 dark:text-zinc-400 text-[11px]" title={formatRowsComma(t.rows)}>{formatRows(t.rows)}</div>
                         {/* Freshness / max date */}
-                        <div className={`font-mono text-[11px] ${freshnessClass(t.freshness)}`}>{t.maxDate || '—'}</div>
+                        <div className={`font-mono text-[11px] ${freshnessClass(t.freshness)}`} title={t.maxDate || undefined}>{formatMaxDate(t.maxDate)}</div>
                         {/* Status pill */}
                         <div className="flex items-center justify-center">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${statusPillClass(t.health)}`}>
@@ -1114,7 +1162,7 @@ export function CatalogView({ onNavigate, onRunTable }: { onNavigate: (v: string
                             </div>
                             <div className="rounded-lg bg-white dark:bg-zinc-800/60 p-2.5">
                               <div className="text-[10px] text-zinc-400 mb-0.5">最新日期</div>
-                              <div className={`font-mono text-sm font-semibold ${freshnessClass(t.freshness)}`}>{t.maxDate || '—'}</div>
+                              <div className={`font-mono text-sm font-semibold ${freshnessClass(t.freshness)}`} title={t.maxDate || undefined}>{formatMaxDate(t.maxDate)}</div>
                             </div>
                             <div className="rounded-lg bg-white dark:bg-zinc-800/60 p-2.5">
                               <div className="text-[10px] text-zinc-400 mb-0.5">调度</div>
@@ -1273,7 +1321,7 @@ function TableDetail({ table, onNavigate, onRunTable }: { table: TableMeta; onNa
               </div>
               <div>
                 <div className="text-[11px] text-zinc-500">最新日期</div>
-                <div className={`text-sm font-mono ${freshnessClass(table.freshness)}`}>{table.maxDate || '—'}</div>
+                <div className={`text-sm font-mono ${freshnessClass(table.freshness)}`} title={table.maxDate || undefined}>{formatMaxDate(table.maxDate)}</div>
               </div>
               <div>
                 <div className="text-[11px] text-zinc-500">新鲜度</div>

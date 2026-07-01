@@ -12,12 +12,14 @@ import { GitBranch, ArrowDown, ArrowUp, Box, Search, Maximize2, ZoomIn, ZoomOut,
 import { formatRows, healthColorClass, typeBadgeClass, healthTextColorClass } from '@/lib/dataops/styles'
 
 // ─── Types ──────────────────────────────────────────────────────────
+type NodeType = 'external' | 'table' | 'script'
+
 interface GraphNode {
   id: string
   label: string
   x: number
   y: number
-  type: 'external' | 'table'
+  type: NodeType
   health: string
   dir?: string
   meta?: TableMeta
@@ -26,8 +28,20 @@ interface GraphNode {
 interface GraphEdge {
   from: string
   to: string
-  type: 'internal' | 'external'
+  // writes: script produces table (solid)
+  // reads:  script consumes table (dashed)
+  // internal: mock-derived dependency (solid)
+  // external: external data source (dashed)
+  type: 'internal' | 'external' | 'writes' | 'reads'
   label: string
+}
+
+interface RealLineageNode { id: string; label: string; group: 'table' | 'script' }
+interface RealLineageEdge { from: string; to: string; type: 'writes' | 'reads' }
+interface RealLineagePayload {
+  nodes: RealLineageNode[]
+  edges: RealLineageEdge[]
+  note?: string
 }
 
 interface LineageViewProps {
@@ -53,6 +67,97 @@ function getEdgeLabel(fromId: string, toId: string, edgeType: 'internal' | 'exte
     if (toMeta.dir === '2_计算') return 'SQL派生'
   }
   return 'SQL依赖'
+}
+
+// ─── Mock-derived graph builder (fallback when backend fetch fails) ──
+function buildMockGraph(): { nodes: GraphNode[]; edges: GraphEdge[]; externalNodes: string[] } {
+  const ns: GraphNode[] = []
+  const es: GraphEdge[] = []
+  const extIds: string[] = []
+
+  const extSet = new Set<string>()
+  TABLES.forEach(t => t.sourceDeps.forEach(d => extSet.add(d)))
+  const extList = Array.from(extSet)
+  extList.forEach(id => extIds.push(id))
+
+  extList.forEach((id, i) => {
+    ns.push({
+      id, label: id.length > 18 ? id.slice(0, 17) + '…' : id,
+      x: 60 + i * 150, y: 60, type: 'external', health: 'external',
+    })
+  })
+
+  TABLES.forEach(t => {
+    ns.push({
+      id: t.table, label: t.table,
+      x: 0, y: 0, type: 'table', health: t.health,
+      dir: t.dir, meta: t,
+    })
+  })
+
+  TABLES.forEach(t => {
+    t.sourceDeps.forEach(src => {
+      es.push({ from: src, to: t.table, type: 'external', label: '数据源' })
+    })
+  })
+
+  TABLES.forEach(t => {
+    t.dependsOn.forEach(dep => {
+      const label = getEdgeLabel(dep, t.table, 'internal')
+      es.push({ from: dep, to: t.table, type: 'internal', label })
+    })
+  })
+
+  return { nodes: ns, edges: es, externalNodes: extIds }
+}
+
+// ─── Real backend graph builder ─────────────────────────────────────
+// Maps backend {nodes:[{id,label,group}], edges:[{from,to,type}]} into
+// the renderer's GraphNode/GraphEdge shape. Table nodes are enriched with
+// mock TableMeta (health/rows/dir/cn) when a matching mock table exists,
+// so tooltips and health borders keep working. Script nodes get a distinct
+// style. Edge type 'writes' (solid) vs 'reads' (dashed).
+function buildRealGraph(payload: RealLineagePayload): { nodes: GraphNode[]; edges: GraphEdge[]; externalNodes: string[]; isReal: true } {
+  const ns: GraphNode[] = []
+  const es: GraphEdge[] = []
+  const metaByTable = new Map<string, TableMeta>()
+  TABLES.forEach(t => metaByTable.set(t.table, t))
+
+  payload.nodes.forEach(n => {
+    if (n.group === 'table') {
+      const meta = metaByTable.get(n.id)
+      ns.push({
+        id: n.id,
+        label: n.label || n.id,
+        x: 0, y: 0,
+        type: 'table',
+        health: meta?.health ?? 'gray',
+        dir: meta?.dir,
+        meta,
+      })
+    } else {
+      // script node — strip the "script:" prefix for display
+      const raw = n.id.startsWith('script:') ? n.id.slice('script:'.length) : n.id
+      ns.push({
+        id: n.id,
+        label: n.label || raw,
+        x: 0, y: 0,
+        type: 'script',
+        health: 'script',
+      })
+    }
+  })
+
+  payload.edges.forEach(e => {
+    es.push({
+      from: e.from,
+      to: e.to,
+      type: e.type === 'writes' ? 'writes' : 'reads',
+      label: e.type === 'writes' ? '写入' : '读取',
+    })
+  })
+
+  return { nodes: ns, edges: es, externalNodes: [], isReal: true }
 }
 
 // ─── Topological Sort (DAG) Layout ──────────────────────────────────
@@ -335,47 +440,45 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
   const viewW = 2400
   const viewH = 1200
 
-  // ─── Build nodes & edges from TABLES ────────────────────────────────
-  const { nodes, edges, externalNodes } = useMemo(() => {
-    const ns: GraphNode[] = []
-    const es: GraphEdge[] = []
-    const extIds: string[] = []
+  // ─── Fetch real lineage from backend (fallback to mock-derived graph) ──
+  const [realLineage, setRealLineage] = useState<RealLineagePayload | null>(null)
+  const [lineageLoading, setLineageLoading] = useState(true)
+  const [lineageError, setLineageError] = useState<string | null>(null)
 
-    const extSet = new Set<string>()
-    TABLES.forEach(t => t.sourceDeps.forEach(d => extSet.add(d)))
-    const extList = Array.from(extSet)
-    extList.forEach(id => extIds.push(id))
-
-    extList.forEach((id, i) => {
-      ns.push({
-        id, label: id.length > 18 ? id.slice(0, 17) + '…' : id,
-        x: 60 + i * 150, y: 60, type: 'external', health: 'external',
+  useEffect(() => {
+    let cancelled = false
+    setLineageLoading(true)
+    setLineageError(null)
+    fetch('/api/dataops?op=lineage', { cache: 'no-store' })
+      .then(async resp => {
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        return resp.json() as Promise<RealLineagePayload>
       })
-    })
-
-    TABLES.forEach(t => {
-      ns.push({
-        id: t.table, label: t.table,
-        x: 0, y: 0, type: 'table', health: t.health,
-        dir: t.dir, meta: t,
+      .then(data => {
+        if (cancelled) return
+        if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+          throw new Error('lineage payload missing nodes/edges')
+        }
+        setRealLineage(data)
       })
-    })
-
-    TABLES.forEach(t => {
-      t.sourceDeps.forEach(src => {
-        es.push({ from: src, to: t.table, type: 'external', label: '数据源' })
+      .catch(e => {
+        if (cancelled) return
+        setLineageError(e instanceof Error ? e.message : String(e))
       })
-    })
-
-    TABLES.forEach(t => {
-      t.dependsOn.forEach(dep => {
-        const label = getEdgeLabel(dep, t.table, 'internal')
-        es.push({ from: dep, to: t.table, type: 'internal', label })
-      })
-    })
-
-    return { nodes: ns, edges: es, externalNodes: extIds }
+      .finally(() => { if (!cancelled) setLineageLoading(false) })
+    return () => { cancelled = true }
   }, [])
+
+  const lineageNote = realLineage?.note ?? null
+
+  // ─── Build nodes & edges ─────────────────────────────────────────────
+  // Real backend graph when available; otherwise fall back to the mock-derived graph.
+  const { nodes, edges, externalNodes, isReal } = useMemo(() => {
+    if (realLineage) {
+      return buildRealGraph(realLineage)
+    }
+    return { ...buildMockGraph(), isReal: false }
+  }, [realLineage])
 
   // ─── Layout computation ─────────────────────────────────────────────
   const layouts = useMemo(() => ({
@@ -485,33 +588,42 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
   // ─── Highlight logic ────────────────────────────────────────────────
   const upstream = useMemo(() => {
     const set = new Set<string>()
-    const collect = (table: string, d: number) => {
+    // Build reverse adjacency from the actual edges (works for real + mock graphs).
+    const reverse = new Map<string, string[]>()
+    edges.forEach(e => {
+      if (!reverse.has(e.to)) reverse.set(e.to, [])
+      reverse.get(e.to)!.push(e.from)
+    })
+    const collect = (id: string, d: number) => {
       if (d <= 0) return
-      const t = TABLES.find(x => x.table === table)
-      if (!t) return
-      for (const dep of t.dependsOn) {
-        set.add(dep)
-        collect(dep, d - 1)
+      for (const prev of (reverse.get(id) || [])) {
+        if (set.has(prev)) continue
+        set.add(prev)
+        collect(prev, d - 1)
       }
     }
     collect(focus, depth)
     return set
-  }, [focus, depth])
+  }, [focus, depth, edges])
 
   const downstream = useMemo(() => {
     const set = new Set<string>()
-    const collect = (table: string, d: number) => {
+    const forward = new Map<string, string[]>()
+    edges.forEach(e => {
+      if (!forward.has(e.from)) forward.set(e.from, [])
+      forward.get(e.from)!.push(e.to)
+    })
+    const collect = (id: string, d: number) => {
       if (d <= 0) return
-      for (const t of TABLES) {
-        if (t.dependsOn.includes(table)) {
-          set.add(t.table)
-          collect(t.table, d - 1)
-        }
+      for (const next of (forward.get(id) || [])) {
+        if (set.has(next)) continue
+        set.add(next)
+        collect(next, d - 1)
       }
     }
     collect(focus, depth)
     return set
-  }, [focus, depth])
+  }, [focus, depth, edges])
 
   const highlightSet = useMemo(() => {
     const s = new Set<string>([focus])
@@ -550,8 +662,11 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
   // ─── Node click: navigate to catalog or set focus ──────────────────
   const onNodeClick = useCallback((id: string) => {
     const node = nodeById.get(id)
-    if (node?.type === 'table') {
-      setSelectedNode(prev => prev === id ? null : id)
+    if (!node) return
+    // Select/toggle any real-graph node (table or script).
+    setSelectedNode(prev => prev === id ? null : id)
+    // Focus + catalog navigation only for table nodes (script nodes have no catalog entry).
+    if (node.type === 'table') {
       setFocus(id)
       if (onNavigate) onNavigate('catalog', id)
     }
@@ -698,20 +813,23 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
     }
   }, [zoom, nodeOverrides, focus, depthFilteredNodes])
 
-  // ─── Node grouping by dir ──────────────────────────────────────────
+  // ─── Node grouping by dir/type ─────────────────────────────────────
   const dirGroups = useMemo(() => {
     const groups: { dir: string; color: string; bgColor: string; nodes: string[] }[] = [
       { dir: '外部数据源', color: '#7dd3fc', bgColor: 'rgba(125,211,252,0.06)', nodes: [] },
+      { dir: '脚本', color: '#a78bfa', bgColor: 'rgba(167,139,250,0.06)', nodes: [] },
       { dir: '1_入库', color: '#34d399', bgColor: 'rgba(52,211,153,0.06)', nodes: [] },
       { dir: '2_计算', color: '#f59e0b', bgColor: 'rgba(245,158,11,0.06)', nodes: [] },
     ]
     nodes.forEach(n => {
       if (n.type === 'external') {
         groups[0].nodes.push(n.id)
-      } else if (n.dir === '1_入库') {
+      } else if (n.type === 'script') {
         groups[1].nodes.push(n.id)
-      } else if (n.dir === '2_计算' || n.dir === '3_策略' || n.dir === '4_工具') {
+      } else if (n.dir === '1_入库') {
         groups[2].nodes.push(n.id)
+      } else if (n.dir === '2_计算' || n.dir === '3_策略' || n.dir === '4_工具') {
+        groups[3].nodes.push(n.id)
       }
     })
     return groups
@@ -907,6 +1025,25 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
               <Badge variant="outline" className="ml-2 text-[10px]">
                 {depthFilteredNodes ? depthFilteredNodes.size : nodes.length} 节点 · {edges.length} 边
               </Badge>
+              {isReal ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="secondary" className="ml-1 text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 cursor-help">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> 实时源码扫描
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">{lineageNote ?? '静态扫描源码字符串/FROM/JOIN，尽力而为，可能漏报动态表名'}</TooltipContent>
+                </Tooltip>
+              ) : lineageError ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="secondary" className="ml-1 text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 cursor-help">
+                      离线 Mock 图谱
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">后端血缘加载失败，已回退示例图：{lineageError}</TooltipContent>
+                </Tooltip>
+              ) : null}
               {useDepthFilter && (
                 <Badge className="ml-1 text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
                   <Filter className="h-2.5 w-2.5 mr-1" />
@@ -1024,7 +1161,9 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
                   const labelY = midY
 
                   // Edge color logic
-                  let edgeColor = edge.type === 'external' ? '#7dd3fc' : '#94a3b8'
+                  // reads = dashed (consumer), writes/external = solid variants
+                  const isDashed = edge.type === 'reads' || edge.type === 'external'
+                  let edgeColor = edge.type === 'external' ? '#7dd3fc' : edge.type === 'reads' ? '#a78bfa' : '#94a3b8'
                   let edgeWidth = 1.5
                   let arrowId = edge.type === 'external' ? 'arrow-external' : 'arrow-internal'
 
@@ -1045,7 +1184,7 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
                         fill="none"
                         stroke={edgeColor}
                         strokeWidth={edgeWidth}
-                        strokeDasharray={edge.type === 'external' ? '4 3' : 'none'}
+                        strokeDasharray={isDashed ? '4 3' : 'none'}
                         opacity={isEdgeDim ? 0.1 : 1}
                         markerEnd={`url(#${arrowId})`}
                         style={{ transition: 'opacity 0.2s, stroke 0.2s, stroke-width 0.2s' }}
@@ -1093,18 +1232,19 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
                   const isNodeDim = isDimmed(node.id)
                   const isFocus = focus === node.id
                   const isExt = node.type === 'external'
+                  const isScript = node.type === 'script'
                   const isDrag = dragging === node.id
                   const isSelected = selectedNode === node.id
                   const isSearchMatch = searchQuery.trim() !== '' && (node.label.toLowerCase().includes(searchQuery.toLowerCase()) || node.id.toLowerCase().includes(searchQuery.toLowerCase()))
                   const pos = getNodePos(node)
 
-                  // Node fill colors
-                  const fill = isExt ? '#f0f9ff' : node.health === 'green' ? '#f0fdf4' : node.health === 'red' ? '#fef2f2' : node.health === 'yellow' ? '#fffbeb' : '#f4f4f5'
-                  const stroke = isExt ? '#7dd3fc' : healthBorderSVG(node.health)
-                  const labelColor = isExt ? '#0369a1' : node.health === 'green' ? '#166534' : node.health === 'red' ? '#991b1b' : node.health === 'yellow' ? '#854d0e' : '#52525b'
+                  // Node fill colors (script nodes styled distinctly from tables/external)
+                  const fill = isExt ? '#f0f9ff' : isScript ? '#faf5ff' : node.health === 'green' ? '#f0fdf4' : node.health === 'red' ? '#fef2f2' : node.health === 'yellow' ? '#fffbeb' : '#f4f4f5'
+                  const stroke = isExt ? '#7dd3fc' : isScript ? '#a78bfa' : healthBorderSVG(node.health)
+                  const labelColor = isExt ? '#0369a1' : isScript ? '#6b21a8' : node.health === 'green' ? '#166534' : node.health === 'red' ? '#991b1b' : node.health === 'yellow' ? '#854d0e' : '#52525b'
 
                   // Border width based on health
-                  const healthBorderWidth = isExt ? 1 : node.health === 'green' ? 2 : node.health === 'red' ? 2.5 : node.health === 'yellow' ? 2 : 1
+                  const healthBorderWidth = isExt || isScript ? 1 : node.health === 'green' ? 2 : node.health === 'red' ? 2.5 : node.health === 'yellow' ? 2 : 1
 
                   return (
                     <motion.g
@@ -1149,12 +1289,17 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
                         style={{ filter: isDrag ? 'drop-shadow(0 4px 8px rgba(0,0,0,0.18))' : isSelected ? 'drop-shadow(0 2px 6px rgba(245,158,11,0.3))' : isHL ? 'drop-shadow(0 2px 4px rgba(217,70,239,0.2))' : 'none', transition: 'stroke 0.2s, stroke-width 0.2s, filter 0.2s' }}
                       />
 
-                      {/* Table icon (left side) - SVG path */}
+                      {/* Table/script/external icon (left side) - SVG path */}
                       {isExt ? (
                         <g transform="translate(8, 14) scale(0.55)" opacity={0.6}>
                           <path d="M3 3h18v18H3z" fill="none" stroke="#7dd3fc" strokeWidth={2} />
                           <path d="M3 9h18M3 15h18M9 3v18" fill="none" stroke="#7dd3fc" strokeWidth={1.5} />
                           <path d="M17 1l4 4M17 5l4-4" stroke="#38bdf8" strokeWidth={2} strokeLinecap="round" />
+                        </g>
+                      ) : isScript ? (
+                        <g transform="translate(8, 16) scale(0.5)" opacity={0.6}>
+                          <path d="M8 6L2 12l6 6" fill="none" stroke="#a78bfa" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M16 6l6 6-6 6" fill="none" stroke="#a78bfa" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
                         </g>
                       ) : (
                         <g transform="translate(8, 14) scale(0.55)" opacity={0.5}>
@@ -1170,11 +1315,11 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
 
                       {/* Sub-label: dir or type */}
                       <text x={NW / 2 + 6} y={38} textAnchor="middle" style={{ fontSize: 9, fill: '#9ca3af' }}>
-                        {isExt ? '外部数据源' : node.dir || ''}
+                        {isExt ? '外部数据源' : isScript ? '脚本' : node.dir || ''}
                       </text>
 
-                      {/* Row count badge (right side) */}
-                      {!isExt && node.meta && (
+                      {/* Row count badge (right side) — tables only */}
+                      {!isExt && !isScript && node.meta && (
                         <>
                           <rect
                             x={NW - 48}
@@ -1198,8 +1343,8 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
                         </>
                       )}
 
-                      {/* Health dot (top-right) */}
-                      {!isExt && (
+                      {/* Health dot (top-right) — tables only */}
+                      {!isExt && !isScript && (
                         <circle
                           cx={NW - 10}
                           cy={10}
@@ -1209,8 +1354,8 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
                         />
                       )}
 
-                      {/* Navigate indicator */}
-                      {!isExt && isHL && (
+                      {/* Navigate indicator — tables only */}
+                      {!isExt && !isScript && isHL && (
                         <text x={NW - 10} y={NH - 6} textAnchor="middle" style={{ fontSize: 8, fill: '#d946ef' }}>
                           →
                         </text>
@@ -1222,7 +1367,7 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
 
               {/* ─── Hover Tooltip (HTML overlay) ──────────────────── */}
               <AnimatePresence>
-                {hoveredNode && hoveredMeta && (
+                {hoveredNode && (hoveredMeta ? (
                   <motion.div
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -1270,7 +1415,35 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
                       </div>
                     </div>
                   </motion.div>
-                )}
+                ) : hoveredNode.type === 'script' ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    transition={{ duration: 0.12 }}
+                    className="absolute top-3 left-3 w-64 bg-white/95 dark:bg-zinc-900/95 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl p-3 backdrop-blur-sm pointer-events-none z-20"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Box className="h-4 w-4 text-violet-500 shrink-0" />
+                      <span className="font-mono text-xs font-semibold truncate">{hoveredNode.id}</span>
+                    </div>
+                    <div className="text-xs text-zinc-600 dark:text-zinc-400 mb-2">入库 / 计算脚本</div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                      <div className="flex justify-between col-span-1">
+                        <span className="text-zinc-400">类型</span>
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 text-violet-600">script</Badge>
+                      </div>
+                      <div className="flex justify-between col-span-1">
+                        <span className="text-zinc-400">写入表</span>
+                        <span className="font-mono">{edges.filter(e => e.type === 'writes' && e.from === hoveredNode.id).length}</span>
+                      </div>
+                      <div className="flex justify-between col-span-1">
+                        <span className="text-zinc-400">读取表</span>
+                        <span className="font-mono">{edges.filter(e => e.type === 'reads' && e.from === hoveredNode.id).length}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : null)}
               </AnimatePresence>
 
               {/* ─── Minimap overlay ──────────────────────────────── */}
@@ -1374,16 +1547,20 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
                     <span className="h-3.5 w-6 rounded border-2 border-dashed border-sky-300 bg-sky-50 dark:bg-sky-950 shrink-0" />
                     <span className="text-zinc-600 dark:text-zinc-400">外部数据源</span>
                   </div>
+                  <div className="flex items-center gap-2 text-[10px]">
+                    <span className="h-3.5 w-6 rounded border-2 border-violet-400 bg-violet-50 dark:bg-violet-950 shrink-0" />
+                    <span className="text-zinc-600 dark:text-zinc-400">脚本 (script)</span>
+                  </div>
 
                   {/* Edge types */}
                   <div className="text-[9px] text-zinc-400 font-medium uppercase tracking-wider mt-1.5 mb-0.5">边类型</div>
                   <div className="flex items-center gap-2 text-[10px]">
                     <span className="h-0.5 w-6 bg-zinc-400 shrink-0" />
-                    <span className="text-zinc-600 dark:text-zinc-400">依赖 (内部)</span>
+                    <span className="text-zinc-600 dark:text-zinc-400">写入 (writes)</span>
                   </div>
                   <div className="flex items-center gap-2 text-[10px]">
-                    <span className="h-0.5 w-6 bg-sky-400 shrink-0" style={{ borderTop: '2px dashed #38bdf8', height: 0 }} />
-                    <span className="text-zinc-600 dark:text-zinc-400">数据源 (外部)</span>
+                    <span className="w-6 shrink-0" style={{ borderTop: '2px dashed #a78bfa', height: 0 }} />
+                    <span className="text-zinc-600 dark:text-zinc-400">读取 (reads)</span>
                   </div>
                   <div className="flex items-center gap-2 text-[10px]">
                     <span className="h-0.5 w-6 bg-fuchsia-500 shrink-0" />
@@ -1396,7 +1573,7 @@ export default function LineageView({ onNavigate }: LineageViewProps) {
                 </div>
                 {/* Help text */}
                 <div className="px-3 py-1.5 border-t border-zinc-100 dark:border-zinc-800 text-[9px] text-zinc-400 text-center">
-                  拖拽平移 · 滚轮缩放 · 点击选中
+                  {lineageNote ?? '拖拽平移 · 滚轮缩放 · 点击选中'}
                 </div>
               </div>
 

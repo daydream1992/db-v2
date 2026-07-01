@@ -15,6 +15,7 @@
 5. 禁止跳过 git commit
 6. 禁止编造表名/列名，必须先 DESCRIBE 确认再写
 7. 增删表后必须更新脚本头部的 @meta
+8. 禁止随意存放代码/脚本文件（.py/.ipynb/.sql 等）— 不清楚该存哪个目录就问，确认后再保存。
 
 ## 🗂️ 数据治理规范（强制）
 
@@ -65,9 +66,21 @@
 7. **TDX 二进制日期解析禁止慢路径** — `pd.to_datetime(dict=)` / `pd.to_datetime(U10+format)` 对 uint32 数组走 `array_strptime` 慢路径，10M 行 14s + OOM 风险。一律用 `4_工具/tdx_reader.py` 的 `uint32_yyyymmdd_to_dt64()` 或 `lc5_date_minutes_to_dt64()`（见 `docs/TDX二进制日期解析性能陷阱.md`）
 
 ## 目录结构
-1_入库/   ← 采集入库（sort编号，fetch_data无参数）
-2_计算/   ← SQL派生（sort编号，fetch_data传con）
-3_策略/ 4_工具/ config/ output/ archive/ logs/ reports/ legacy/
+
+| 目录 | 用途 | 允许内容 |
+|------|------|----------|
+| `1_入库/` | 采集入库脚本（sort 编号，fetch_data 无参数） | `{NNN}_{table}.py` |
+| `2_计算/` | SQL 派生脚本（sort 编号，fetch_data 传 con） | `{NNN}_{table}.py` |
+| `3_策略/` | 预留 | — |
+| `4_工具/` | 通用工具（tdx_reader、pianpao_engine、可复用验收脚本） | `{name}.py`（无下划线前缀） |
+| `config/` | 模板、表注册、字典生成器 | `template_*.py` `gen_*.py` `*.json` |
+| `output/` | 数据导出物 | `.csv` `.xlsx` `.parquet` |
+| `archive/` | 过期/弃用/一次性脚本 | `_temp_{name}_{YYYYMMDD}.py`（日期戳清晰标注一次性） |
+| `logs/` | 运行时日志输出 | `.log` 文本日志，**禁止 .py** |
+| `reports/` | 报告 | `.md` `.html` |
+| `legacy/` | 旧代码，**禁止 import** | — |
+
+> **代码存放决策树**：可复用的工具/验收 → `4_工具/`；一次性的（仅供特定日期跑） → `archive/_temp_*.py`；属于业务脚本 → `1_入库/` 或 `2_计算/`；拿不准 → **问用户**。
 
 ## 分类规则
 - source含API/爬虫/TDX/文件 → 1_入库

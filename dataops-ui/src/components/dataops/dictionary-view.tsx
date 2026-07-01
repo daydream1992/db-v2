@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { TABLES, ColumnDef } from '@/lib/dataops/mock-data'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -68,6 +68,42 @@ export function DictionaryView() {
   const [topTab, setTopTab] = useState<TopTab>('fields')
   const [diffFilter, setDiffFilter] = useState<DiffKind | 'all'>('all')
   const [diffTableFilter, setDiffTableFilter] = useState<string>('all')
+
+  // Real DuckDB dictionary: Map<table, {name,type,nullable}[]>.
+  // nullable from DuckDB is "YES"/"NO". Falls back to mock columns while loading.
+  type RealCol = { name: string; type: string; nullable: string }
+  const [dictMap, setDictMap] = useState<Map<string, RealCol[]> | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/dataops?op=dictionary', { cache: 'no-store' })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<{ tables: { table: string; columns: RealCol[] }[] }> })
+      .then(data => {
+        if (cancelled) return
+        const m = new Map<string, RealCol[]>()
+        for (const t of data.tables || []) m.set(t.table, t.columns || [])
+        setDictMap(m)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  // Build the effective columns for a table: real DuckDB name/type/nullable,
+  // merged with mock Chinese descriptions (by column name) when available.
+  const columnsFor = useCallback((tableName: string): ColumnDef[] => {
+    const real = dictMap?.get(tableName)
+    if (!real) {
+      return TABLES.find(t => t.table === tableName)?.columns ?? []
+    }
+    const mockCols = TABLES.find(t => t.table === tableName)?.columns ?? []
+    const mockByName = new Map(mockCols.map(c => [c.name, c.cn]))
+    return real.map(rc => ({
+      name: rc.name,
+      type: rc.type,
+      cn: mockByName.get(rc.name) ?? '',
+      nullable: rc.nullable !== 'NO',
+    }))
+  }, [dictMap])
 
   const filteredTables = useMemo(() => {
     return TABLES.filter(t =>

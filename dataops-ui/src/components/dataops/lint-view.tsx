@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { LINT_RULES, LintLevel } from '@/lib/dataops/mock-data'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -7,9 +7,43 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Progress } from '@/components/ui/progress'
-import { CheckCircle2, XCircle, ListChecks, Wrench, TrendingUp, Grid3x3, Filter, Download, Play, Loader2, ChevronDown, ChevronRight, Shield, FileCode2, Hash, AlignLeft } from 'lucide-react'
+import { CheckCircle2, XCircle, ListChecks, TrendingUp, Grid3x3, Filter, Download, Play, Loader2, ChevronDown, ChevronRight, Shield, FileCode2, Hash, AlignLeft, AlertTriangle, FileWarning } from 'lucide-react'
 import { lintLevelClass } from '@/lib/dataops/styles'
 import { toast } from 'sonner'
+
+// Backend lint violation shape (GET /api/dataops?op=lint)
+interface BackendViolation {
+  rule: string
+  severity: 'RED' | 'YELLOW'
+  file: string | null
+  table: string | null
+  line: number | null
+  message: string
+}
+interface BackendLintData {
+  violations: BackendViolation[]
+  rulesChecked: number
+  rulesTotal: number
+  scriptCount: number
+}
+
+// A rendered violation cell — table for grouping, plus original fields for detail display
+interface RenderedViolation {
+  table: string
+  detail: string
+  file: string | null
+  line: number | null
+  raw: BackendViolation
+}
+
+// Catalog rule merged with real violations (violations are from the backend, not mock)
+interface MergedRule {
+  id: string
+  name: string
+  level: LintLevel
+  description: string
+  rendered: RenderedViolation[]
+}
 
 // Rule categories derived from rule IDs
 const RULE_CATEGORIES: Record<string, { label: string; icon: typeof Shield; color: string }> = {
@@ -45,10 +79,12 @@ export function LintView() {
   const [filter, setFilter] = useState<'all' | LintLevel>('all')
   const [matrixRule, setMatrixRule] = useState<string | null>(null)
   const [matrixTable, setMatrixTable] = useState<string | null>(null)
-  const [lintRunning, setLintRunning] = useState(false)
-  const [lintProgress, setLintProgress] = useState(0)
-  const [lintResults, setLintResults] = useState<LINT_RULES | null>(null)
   const [expandedRules, setExpandedRules] = useState<Set<string>>(() => new Set())
+
+  // Real lint snapshot from backend op=lint
+  const [lintData, setLintData] = useState<BackendLintData | null>(null)
+  const [lintLoading, setLintLoading] = useState(true)
+  const [lintError, setLintError] = useState<string | null>(null)
 
   const toggleExpand = useCallback((ruleId: string) => {
     setExpandedRules(prev => {
@@ -59,29 +95,100 @@ export function LintView() {
     })
   }, [])
 
-  const stats = useMemo(() => {
-    const rules = lintResults || LINT_RULES
-    const red = rules.filter(r => r.level === 'RED')
-    const yellow = rules.filter(r => r.level === 'YELLOW')
-    const blue = rules.filter(r => r.level === 'BLUE')
-    const totalViolations = rules.reduce((s, r) => s + r.violations.length, 0)
-    const passing = rules.filter(r => r.violations.length === 0).length
-    return {
-      red: red.length, yellow: yellow.length, blue: blue.length,
-      totalRules: rules.length, passing,
-      passRate: Math.round((passing / rules.length) * 100),
-      totalViolations,
-      redViolations: red.reduce((s, r) => s + r.violations.length, 0),
-      yellowViolations: yellow.reduce((s, r) => s + r.violations.length, 0),
-      blueViolations: blue.reduce((s, r) => s + r.violations.length, 0),
+  // Load real violations on mount
+  const loadLint = useCallback(async () => {
+    setLintLoading(true)
+    setLintError(null)
+    try {
+      const resp = await fetch('/api/dataops?op=lint', { cache: 'no-store' })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const data = await resp.json()
+      setLintData({
+        violations: Array.isArray(data?.violations) ? data.violations : [],
+        rulesChecked: Number(data?.rulesChecked) || 0,
+        rulesTotal: Number(data?.rulesTotal) || 0,
+        scriptCount: Number(data?.scriptCount) || 0,
+      })
+    } catch (e) {
+      setLintError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLintLoading(false)
     }
-  }, [lintResults])
+  }, [])
 
-  const rules = lintResults || LINT_RULES
+  useEffect(() => { loadLint() }, [loadLint])
+
+  // Merge the 12-rule catalog (reference metadata) with real violations.
+  // Real violations are bucketed under their rule id; any rule id not in the
+  // catalog (e.g. "META") is appended as a synthetic catalog entry so it still renders.
+  const rules: MergedRule[] = useMemo(() => {
+    const byRule = new Map<string, BackendViolation[]>()
+    for (const v of lintData?.violations ?? []) {
+      const arr = byRule.get(v.rule)
+      if (arr) arr.push(v)
+      else byRule.set(v.rule, [v])
+    }
+
+    const toRendered = (vs: BackendViolation[]): RenderedViolation[] =>
+      vs.map(v => ({
+        table: v.table || v.file || '(全局)',
+        detail: v.message,
+        file: v.file,
+        line: v.line,
+        raw: v,
+      }))
+
+    // Catalog rules with real violations attached (mock violations discarded)
+    const merged: MergedRule[] = LINT_RULES.map(r => {
+      const real = byRule.get(r.id) ?? []
+      byRule.delete(r.id) // mark consumed
+      return { id: r.id, name: r.name, level: r.level, description: r.description, rendered: toRendered(real) }
+    })
+
+    // Append synthetic catalog entries for rule ids absent from the catalog (e.g. META)
+    const ruleLevel = (ruleId: string): LintLevel => {
+      const seen = lintData?.violations.find(v => v.rule === ruleId)
+      if (seen?.severity === 'RED') return 'RED'
+      return 'YELLOW'
+    }
+    const ruleName = (ruleId: string): string =>
+      ruleId === 'META' ? '@meta 声明缺失' : `规则 ${ruleId}`
+    const ruleDesc = (ruleId: string): string =>
+      ruleId === 'META' ? '脚本必须声明 # @meta table= 元数据' : `由 linter 报告的 ${ruleId} 违规`
+
+    for (const [ruleId, vs] of byRule) {
+      merged.push({
+        id: ruleId,
+        name: ruleName(ruleId),
+        level: ruleLevel(ruleId),
+        description: ruleDesc(ruleId),
+        rendered: toRendered(vs),
+      })
+    }
+
+    return merged
+  }, [lintData])
+
+  const stats = useMemo(() => {
+    const redRules = rules.filter(r => r.level === 'RED')
+    const yellowRules = rules.filter(r => r.level === 'YELLOW')
+    const blueRules = rules.filter(r => r.level === 'BLUE')
+    const totalViolations = rules.reduce((s, r) => s + r.rendered.length, 0)
+    const redViolations = rules.reduce((s, r) => s + (r.level === 'RED' ? r.rendered.length : 0), 0)
+    const yellowViolations = rules.reduce((s, r) => s + (r.level === 'YELLOW' ? r.rendered.length : 0), 0)
+    const blueViolations = rules.reduce((s, r) => s + (r.level === 'BLUE' ? r.rendered.length : 0), 0)
+    const passing = rules.filter(r => r.rendered.length === 0).length
+    return {
+      red: redRules.length, yellow: yellowRules.length, blue: blueRules.length,
+      totalRules: rules.length, passing,
+      passRate: rules.length ? Math.round((passing / rules.length) * 100) : 0,
+      totalViolations, redViolations, yellowViolations, blueViolations,
+    }
+  }, [rules])
 
   // Group rules by category
   const rulesByCategory = useMemo(() => {
-    const grouped = new Map<string, typeof rules>()
+    const grouped = new Map<string, MergedRule[]>()
     rules.forEach(r => {
       const cat = getRuleCategory(r.id)
       if (!grouped.has(cat)) grouped.set(cat, [])
@@ -93,7 +200,7 @@ export function LintView() {
   // 矩阵数据：规则 × 表 的违规数
   const { matrixTables, matrix } = useMemo(() => {
     const tableSet = new Set<string>()
-    rules.forEach(r => r.violations.forEach(v => tableSet.add(v.table)))
+    rules.forEach(r => r.rendered.forEach(v => tableSet.add(v.table)))
     const tables = Array.from(tableSet).sort((a, b) => {
       const aIsMeta = a.startsWith('(')
       const bIsMeta = b.startsWith('(')
@@ -105,7 +212,7 @@ export function LintView() {
     rules.forEach(r => {
       m[r.id] = {}
       tables.forEach(t => { m[r.id][t] = 0 })
-      r.violations.forEach(v => { m[r.id][v.table] = (m[r.id][v.table] || 0) + 1 })
+      r.rendered.forEach(v => { m[r.id][v.table] = (m[r.id][v.table] || 0) + 1 })
     })
     return { matrixTables: tables, matrix: m }
   }, [rules])
@@ -124,9 +231,9 @@ export function LintView() {
   }
 
   const filtered = (() => {
-    let r = filter === 'all' ? rules : rules.filter(r => r.level === filter)
+    let r = filter === 'all' ? rules : rules.filter(rr => rr.level === filter)
     if (matrixRule) r = r.filter(rr => rr.id === matrixRule)
-    if (matrixTable) r = r.filter(rr => rr.violations.some(v => v.table === matrixTable))
+    if (matrixTable) r = r.filter(rr => rr.rendered.some(v => v.table === matrixTable))
     return r
   })()
 
@@ -149,28 +256,14 @@ export function LintView() {
     }
   }, [])
 
-  // 运行 lint（模拟客户端检查）
+  // 重新运行 lint（拉取最新真实数据）
   const handleRunLint = useCallback(async () => {
-    setLintRunning(true)
-    setLintProgress(0)
-    setLintResults(null)
-
-    const totalSteps = LINT_RULES.length
-    const newResults: typeof LINT_RULES = []
-
-    for (let i = 0; i < totalSteps; i++) {
-      await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 100))
-      newResults.push({ ...LINT_RULES[i] })
-      setLintProgress(Math.round(((i + 1) / totalSteps) * 100))
-    }
-
-    setLintResults(newResults)
-    setLintRunning(false)
-
-    const totalViolations = newResults.reduce((s, r) => s + r.violations.length, 0)
-    const passing = newResults.filter(r => r.violations.length === 0).length
-    toast.success(`Lint 完成: ${passing}/${totalSteps} 规则通过，${totalViolations} 处违规`)
-  }, [])
+    const prev = lintData
+    await loadLint()
+    const total = prev?.violations.length ?? 0
+    const scripts = prev?.scriptCount ?? 0
+    toast.success(`Lint 完成: 已扫描 ${scripts} 个脚本，检出 ${total} 处违规`)
+  }, [loadLint, lintData])
 
   return (
     <div className="space-y-4">
@@ -187,41 +280,50 @@ export function LintView() {
         </Button>
         <Button
           size="sm"
-          variant={lintRunning ? 'secondary' : 'default'}
+          variant={lintLoading ? 'secondary' : 'default'}
           className="h-8 text-xs gap-1.5"
           onClick={handleRunLint}
-          disabled={lintRunning}
+          disabled={lintLoading}
         >
-          {lintRunning ? (
+          {lintLoading ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
             <Play className="h-3.5 w-3.5" />
           )}
-          {lintRunning ? '检查中...' : '运行 Lint'}
+          {lintLoading ? '检查中...' : '运行 Lint'}
         </Button>
-        {lintResults && !lintRunning && (
+        {!lintLoading && lintData && !lintError && (
           <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300">
-            <CheckCircle2 className="h-3 w-3 mr-0.5" />上次检查完成
+            <CheckCircle2 className="h-3 w-3 mr-0.5" />扫描完成
+          </Badge>
+        )}
+        {lintData && !lintLoading && !lintError && (
+          <Badge variant="outline" className="text-[10px] text-zinc-500">
+            {lintData.rulesChecked}/{lintData.rulesTotal} 规则机检 · {lintData.scriptCount} 脚本
           </Badge>
         )}
       </div>
 
-      {/* Lint 运行进度 */}
-      {lintRunning && (
+      {/* Loading 状态 */}
+      {lintLoading && !lintData && (
         <Card>
           <CardContent className="p-3">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-600 dark:text-zinc-400 flex items-center gap-1.5">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-500" />
-                  正在运行 lint 检查...
-                </span>
-                <span className="font-mono text-sky-600">{lintProgress}%</span>
-              </div>
-              <Progress value={lintProgress} className="h-2" />
-              <div className="text-[10px] text-zinc-400">
-                已检查 {Math.round(lintProgress / 100 * LINT_RULES.length)} / {LINT_RULES.length} 条规则
-              </div>
+            <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-500" />
+              正在扫描脚本并运行 lint 检查...
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error 状态 */}
+      {lintError && (
+        <Card className="border-rose-300 dark:border-rose-800">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 text-xs text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span>lint 数据加载失败: {lintError}</span>
+              <button onClick={loadLint} className="ml-auto text-sky-600 hover:underline">重试</button>
             </div>
           </CardContent>
         </Card>
@@ -231,37 +333,37 @@ export function LintView() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card>
           <CardContent className="p-3">
-            <div className="text-[11px] text-zinc-400">规则总数</div>
-            <div className="text-2xl font-semibold">{stats.totalRules}</div>
-            <div className="text-[10px] text-emerald-600 flex items-center gap-1"><TrendingUp className="h-3 w-3" />通过率 {stats.passRate}%</div>
+            <div className="text-[11px] text-zinc-400">违规总数</div>
+            <div className="text-2xl font-semibold">{stats.totalViolations}</div>
+            <div className="text-[10px] text-emerald-600 flex items-center gap-1"><TrendingUp className="h-3 w-3" />{stats.passing}/{stats.totalRules} 规则通过</div>
           </CardContent>
         </Card>
         <Card className="border-rose-200 dark:border-rose-900/50">
           <CardContent className="p-3">
             <div className="text-[11px] text-zinc-400 flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-500" />RED 阻断</div>
-            <div className="text-2xl font-semibold text-rose-600">{stats.red}</div>
-            <div className="text-[10px] text-zinc-400">{stats.redViolations} 处违规</div>
+            <div className="text-2xl font-semibold text-rose-600">{stats.redViolations}</div>
+            <div className="text-[10px] text-zinc-400">{stats.red} 条 RED 规则</div>
           </CardContent>
         </Card>
         <Card className="border-amber-200 dark:border-amber-900/50">
           <CardContent className="p-3">
             <div className="text-[11px] text-zinc-400 flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" />YELLOW 警告</div>
-            <div className="text-2xl font-semibold text-amber-600">{stats.yellow}</div>
-            <div className="text-[10px] text-zinc-400">{stats.yellowViolations} 处违规</div>
-          </CardContent>
-        </Card>
-        <Card className="border-sky-200 dark:border-sky-900/50">
-          <CardContent className="p-3">
-            <div className="text-[11px] text-zinc-400 flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-sky-400" />BLUE 建议</div>
-            <div className="text-2xl font-semibold text-sky-600">{stats.blue}</div>
-            <div className="text-[10px] text-zinc-400">{stats.blueViolations} 处违规</div>
+            <div className="text-2xl font-semibold text-amber-600">{stats.yellowViolations}</div>
+            <div className="text-[10px] text-zinc-400">{stats.yellow} 条 YELLOW 规则</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3">
-            <div className="text-[11px] text-zinc-400">已通过规则</div>
-            <div className="text-2xl font-semibold text-emerald-600">{stats.passing}</div>
-            <div className="text-[10px] text-zinc-400">{stats.totalViolations} 处待修</div>
+            <div className="text-[11px] text-zinc-400">规则机检覆盖</div>
+            <div className="text-2xl font-semibold text-sky-600">{lintData ? `${lintData.rulesChecked}/${lintData.rulesTotal}` : '—'}</div>
+            <div className="text-[10px] text-zinc-400">12 条中已机器校验</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <div className="text-[11px] text-zinc-400">扫描脚本数</div>
+            <div className="text-2xl font-semibold">{lintData?.scriptCount ?? '—'}</div>
+            <div className="text-[10px] text-zinc-400">{lintData ? `${stats.totalViolations} 处待修` : '待扫描'}</div>
           </CardContent>
         </Card>
       </div>
@@ -324,7 +426,7 @@ export function LintView() {
                 </thead>
                 <tbody>
                   {rules.map(rule => {
-                    const rowTotal = rule.violations.length
+                    const rowTotal = rule.rendered.length
                     const isRowActive = matrixRule === rule.id
                     return (
                       <tr key={rule.id} className={isRowActive ? 'bg-fuchsia-50/50 dark:bg-fuchsia-950/20' : ''}>
@@ -422,22 +524,23 @@ export function LintView() {
               <Badge variant="secondary" className="text-[10px]">{catFiltered.length} 规则</Badge>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {catFiltered.map((rule, ruleIdx) => {
+              {catFiltered.map((rule) => {
+                const rv = rule.rendered
                 const isExpanded = expandedRules.has(rule.id)
                 const severityBorder = rule.level === 'RED' ? 'border-l-4 border-l-rose-400 dark:border-l-rose-600' : rule.level === 'YELLOW' ? 'border-l-4 border-l-amber-400 dark:border-l-amber-600' : 'border-l-4 border-l-sky-400 dark:border-l-sky-600'
                 return (
-                  <Card key={rule.id} className={`${rule.violations.length === 0 ? 'opacity-80' : ''} ${severityBorder}`}>
+                  <Card key={rule.id} className={`${rv.length === 0 ? 'opacity-80' : ''} ${severityBorder}`}>
                     <CardHeader className="pb-2">
                       <div className="flex items-center gap-2">
                         <SeverityBadge level={rule.level} />
                         <CardTitle className="text-sm font-mono">{rule.id}</CardTitle>
                         <span className="text-sm font-medium">{rule.name}</span>
-                        {rule.violations.length === 0 ? (
+                        {rv.length === 0 ? (
                           <Badge variant="outline" className="ml-auto text-[10px] text-emerald-600 border-emerald-300"><CheckCircle2 className="h-3 w-3 mr-0.5" />通过</Badge>
                         ) : (
-                          <Badge variant="outline" className="ml-auto text-[10px] text-rose-600 border-rose-300"><XCircle className="h-3 w-3 mr-0.5" />{rule.violations.length} 违规</Badge>
+                          <Badge variant="outline" className="ml-auto text-[10px] text-rose-600 border-rose-300"><XCircle className="h-3 w-3 mr-0.5" />{rv.length} 违规</Badge>
                         )}
-                        {rule.violations.length > 0 && (
+                        {rv.length > 0 && (
                           <button onClick={() => toggleExpand(rule.id)} className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                             {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-zinc-500" /> : <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />}
                           </button>
@@ -445,34 +548,35 @@ export function LintView() {
                       </div>
                       <p className="text-xs text-zinc-500 mt-1">{rule.description}</p>
                     </CardHeader>
-                    {rule.violations.length > 0 && isExpanded && (
+                    {rv.length > 0 && isExpanded && (
                       <CardContent className="pt-0">
                         <ScrollArea className="max-h-44">
                           <div className="space-y-1.5">
-                            {rule.violations.map((v, i) => (
+                            {rv.map((v, i) => (
                               <div key={i} className={`p-2 rounded border border-zinc-200 dark:border-zinc-700 text-xs ${i % 2 === 0 ? 'bg-zinc-50 dark:bg-zinc-900/40' : 'bg-white dark:bg-zinc-800/40'}`}>
-                                <div className="flex items-center gap-2 mb-1">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
                                   <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">{v.table}</span>
+                                  {v.file && v.file !== v.table && (
+                                    <span className="font-mono text-[10px] text-zinc-400 flex items-center gap-0.5">
+                                      <FileWarning className="h-3 w-3" />{v.file}{v.line != null ? `:${v.line}` : ''}
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="text-zinc-600 dark:text-zinc-400 mb-1">{v.detail}</div>
-                                <div className="text-[11px] text-emerald-700 dark:text-emerald-400 flex items-start gap-1">
-                                  <Wrench className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                                  <span>{v.fix}</span>
-                                </div>
                               </div>
                             ))}
                           </div>
                         </ScrollArea>
                       </CardContent>
                     )}
-                    {rule.violations.length > 0 && !isExpanded && (
+                    {rv.length > 0 && !isExpanded && (
                       <CardContent className="pt-0">
                         <button
                           onClick={() => toggleExpand(rule.id)}
                           className="text-[11px] text-sky-600 hover:text-sky-700 dark:text-sky-400 flex items-center gap-1"
                         >
                           <ChevronRight className="h-3 w-3" />
-                          展开查看 {rule.violations.length} 处违规
+                          展开查看 {rv.length} 处违规
                         </button>
                       </CardContent>
                     )}
@@ -491,8 +595,8 @@ export function LintView() {
             <ListChecks className="h-4 w-4 mt-0.5 flex-shrink-0 text-zinc-400" />
             <div>
               <strong className="text-zinc-700 dark:text-zinc-300">lint engine 说明：</strong>
-              所有规则可由 <code className="font-mono text-sky-600">python lint_engine.py</code> 执行，挂 git pre-commit + CI 强制。
-              RED 阻断合并、YELLOW 提示、BLUE 仅建议。规则集可扩展，目标：把"靠人记的规范"变成"机器校验的契约"。
+              违规由后端 <code className="font-mono text-sky-600">/api/dataops?op=lint</code> 实时扫描脚本得出（{lintData?.scriptCount ?? '—'} 个脚本，{lintData?.rulesChecked ?? '—'}/{lintData?.rulesTotal ?? 12} 条规则机检）。
+              上方规则目录为参考元数据；RED 阻断合并、YELLOW 提示。规则集可扩展，目标：把"靠人记的规范"变成"机器校验的契约"。
               点击「导出 Python linter」可下载完整的 lint_engine.py 脚本，在本地或 CI 中运行。
             </div>
           </div>

@@ -24,6 +24,9 @@ DB_PATH = r'K:\DB数据库_v2\db\profit_radar.duckdb'
 TABLE = 'market_sc1_42'
 MODE = 'increment'
 SCHEDULE = 'daily'
+# 今天盘前占位判断阈值: 凌晨跑时.dat已塞今天少量占位indicator(1~3条), 近期完整交易日38~44条
+# 仅用于判断"今天"是否完整; 历史日day_data低是数据源特性(早期SC指标逐年上线)不视为脏
+MIN_DAY_ROWS = 20
 
 
 def _clean_field(s: str) -> str:
@@ -95,6 +98,9 @@ def fetch_data():
     # 过滤未来日期（数据文件含回测填充数据）
     today = int(datetime.now().strftime('%Y%m%d'))
     dates = dates[dates <= today]
+    # 今天的盘前占位检查: 条数不足近期正常水平则不入库今天(日历未更新到今天时由run()日历过滤兜底)
+    if (dates == today).any() and int((data['date'] == today).sum()) < MIN_DAY_ROWS:
+        dates = dates[dates != today]
 
     rows = []
     for d in dates:
@@ -158,6 +164,16 @@ def run(force=False):
         if df.empty:
             logger.warning(f"○ {TABLE} 数据为空，跳过")
             return True
+        # 交易日历过滤: 只保留交易日(is_trading), 排除周末/节假日脏占位
+        # (.dat对每个非交易日都塞1~3条占位indicator, 必须靠日历剔除; 历史低条数交易日有效保留)
+        try:
+            open_dates = {r[0] for r in con.execute(
+                "SELECT date FROM trading_calendar WHERE is_trading").fetchall()}
+            before = len(df)
+            df = df[df['date'].isin(open_dates)].reset_index(drop=True)
+            logger.info(f"○ 交易日历过滤 {before}→{len(df)} (排除{before-len(df)}个非交易日占位)")
+        except Exception as e:
+            logger.warning(f"交易日历过滤失败,回退全量: {e}")
         save_data(con, df)
         logger.info(f"✔ {TABLE} 入库完成，共 {len(df)} 条")
         return True

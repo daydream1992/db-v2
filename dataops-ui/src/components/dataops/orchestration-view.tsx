@@ -1,6 +1,60 @@
 'use client'
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { PIPELINE_RUNS, SCHEDULES, TABLES, PipelineRun, isTradingDay, getLastTradingDay, TRADING_CALENDAR } from '@/lib/dataops/mock-data'
+import { PIPELINE_RUNS, TABLES, PipelineRun, isTradingDay, getLastTradingDay, TRADING_CALENDAR } from '@/lib/dataops/mock-data'
+
+// ─── Real orchestration metadata from /api/dataops?op=orchestration ───
+// Static DAG structure / schedules / last-data-dates are REAL.
+// Run history / Gantt / trigger animations stay MOCK (no real run records exist).
+interface OrchestrationScript {
+  file: string
+  table: string | null
+  cn: string | null
+  dir: string
+  sort: string
+  schedule: string
+  mode: string
+  source: string
+  lastDataDate: string | null
+}
+interface OrchestrationResponse {
+  scripts: OrchestrationScript[]
+  note?: string
+}
+
+function useOrchestration() {
+  const [scripts, setScripts] = useState<OrchestrationScript[]>([])
+  const [note, setNote] = useState<string>('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const resp = await fetch('/api/dataops?op=orchestration', { cache: 'no-store' })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const data: OrchestrationResponse = await resp.json()
+      setScripts(data?.scripts ?? [])
+      setNote(data?.note ?? '')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // Sort by dir then numeric sort. Scripts with null table sink to the end within their dir.
+  const sorted = useMemo(() => {
+    return [...scripts].sort((a, b) => {
+      if (a.dir !== b.dir) return a.dir.localeCompare(b.dir)
+      return (a.sort || '').localeCompare(b.sort || '', undefined, { numeric: true })
+    })
+  }, [scripts])
+
+  return { scripts: sorted, note, loading, error, reload: load }
+}
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -1251,21 +1305,65 @@ function HistoryView({ onRunTable, onOpenDetail, logStreamer }: { onRunTable?: (
 }
 
 function DagView() {
-  // 改进的 DAG：显示节点 + 连线 + 健康度 + 详情
+  // 改进的 DAG：节点 + 连线 + 健康度 + 详情。
+  // 分层 + 节点列表均来自 /api/dataops?op=orchestration 的真实脚本元数据。
+  const { scripts, note, loading, error } = useOrchestration()
   const [hovered, setHovered] = useState<string | null>(null)
   const [allExpanded, setAllExpanded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const layers: { name: string; desc: string; tables: string[] }[] = [
-    { name: '外部数据源', desc: 'TQ API / TDX 二进制 / 文本', tables: ['TQ API', 'TDX .day', 'TDX .lc5', 'TDX .lc1', 'TDX gpsz', 'TDX signals'] },
-    { name: 'L1 基础入库', desc: '17 个采集脚本，外部源 → DuckDB', tables: ['trading_calendar', 'stock_daily_kline', 'stock_kline_5m', 'stock_kline_1m', 'capital_info', 'stock_financial_data', 'sjb_api_plhqL2kz_88zd', 'stock_block_relation', 'market_sc1_42', 'stock_gp1_46_indicators', 'stock_signals_20001_20011', 'stock_industry_3level'] },
-    { name: 'L2 派生计算', desc: '9 个 SQL 派生脚本', tables: ['stock_kline_15m', 'stock_kline_30m', 'stock_kline_60m', 'stock_kline_weekly', 'stock_kline_monthly', 'stock_daily_turnover', 'dim_security_type', 'dim_industry_code', 'pianpao_daily'] },
-    { name: 'L3 聚合视图', desc: '多表产物 / 汇总', tables: ['pianpao_daily_summary', 'dim_gp_indicator'] },
+  // Map dir → (layerName, layerDesc). 1_入库=L1, 2_计算=L2, others map generically.
+  const layerMeta: { name: string; desc: string }[] = [
+    { name: '外部数据源', desc: 'TQ API / TDX 二进制 / 文本' },
+    { name: 'L1 基础入库', desc: '采集脚本，外部源 → DuckDB' },
+    { name: 'L2 派生计算', desc: 'SQL 派生脚本' },
+    { name: 'L3 聚合视图', desc: '多表产物 / 汇总' },
   ]
+  const dirToLayer = (dir: string): number => {
+    if (dir.startsWith('1')) return 1
+    if (dir.startsWith('2')) return 2
+    if (dir.startsWith('3')) return 3
+    return 1
+  }
+
+  // External source nodes (static, illustrative — sources come from script.source values).
+  const externalSources = useMemo(() => {
+    const srcs = new Set<string>()
+    scripts.forEach(s => { if (s.source) srcs.add(s.source) })
+    return Array.from(srcs).slice(0, 8)
+  }, [scripts])
+
+  const layers = useMemo(() => {
+    const buckets: Record<number, OrchestrationScript[]> = {}
+    scripts.forEach(s => {
+      const li = dirToLayer(s.dir)
+      ;(buckets[li] ??= []).push(s)
+    })
+    const present = Array.from(new Set(scripts.map(s => dirToLayer(s.dir)))).sort()
+    const built: { name: string; desc: string; tables: string[] }[] = [
+      { name: layerMeta[0].name, desc: layerMeta[0].desc, tables: externalSources.length ? externalSources : ['TQ API', 'TDX .day', 'TDX .lc5'] },
+    ]
+    present.forEach(li => {
+      built.push({
+        name: layerMeta[li]?.name ?? `L${li}`,
+        desc: layerMeta[li]?.desc ?? '',
+        tables: (buckets[li] ?? []).map(s => s.table || s.file),
+      })
+    })
+    return built
+  }, [scripts, externalSources])
+
   const healthOf = (name: string) => TABLES.find(t => t.table === name)?.health || 'external'
 
   // Total node count
   const totalNodes = layers.reduce((acc, l) => acc + l.tables.length, 0)
+
+  // script lookup by table (for source/schedule/cn on hover)
+  const scriptByTable = useMemo(() => {
+    const m = new Map<string, OrchestrationScript>()
+    scripts.forEach(s => { if (s.table) m.set(s.table, s) })
+    return m
+  }, [scripts])
 
   // Health indicator for node
   const healthIndicator = (health: string) => {
@@ -1284,6 +1382,16 @@ function DagView() {
     }
   }
 
+  if (loading) {
+    return (
+      <Card ref={containerRef}>
+        <CardContent className="p-6 flex items-center gap-2 text-sm text-zinc-500">
+          <Loader2 className="h-4 w-4 animate-spin" /> 正在加载真实调度/分层元数据...
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card ref={containerRef}>
       <CardHeader className="pb-3">
@@ -1292,6 +1400,7 @@ function DagView() {
             <GitBranch className="h-4 w-4 text-fuchsia-500" />
             DAG 依赖图（拓扑分层 · 可悬停查看）
             <Badge variant="secondary" className="ml-2 text-[10px]">{totalNodes} 节点</Badge>
+            <Badge variant="outline" className="ml-1 text-[10px] text-emerald-600 border-emerald-300">真实元数据</Badge>
           </CardTitle>
           <div className="flex items-center gap-2">
             <TooltipProvider>
@@ -1316,6 +1425,11 @@ function DagView() {
             </TooltipProvider>
           </div>
         </div>
+        {error && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="h-3.5 w-3.5" /> DAG 元数据加载失败 ({error})，显示空分层。
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         <div className="space-y-1">
@@ -1334,6 +1448,7 @@ function DagView() {
                     const isExternal = h === 'external'
                     const isHovered = hovered === t
                     const healthInd = healthIndicator(h)
+                    const meta = scriptByTable.get(t)
                     return (
                       <div
                         key={t}
@@ -1346,7 +1461,9 @@ function DagView() {
                           isExternal ? 'border-dashed border-sky-300 bg-sky-50 dark:bg-sky-950/30 dark:border-sky-800 text-sky-700 dark:text-sky-300' :
                           'border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 text-amber-700 dark:text-amber-300'
                         } ${isHovered ? 'scale-105 shadow-md ring-2 ring-offset-1 ring-zinc-300 dark:ring-zinc-600' : ''}`}
-                        title={isExternal ? `外部源: ${t}` : `${t} (${TABLES.find(x => x.table === t)?.cn || ''})`}
+                        title={isExternal
+                          ? `外部源: ${t}`
+                          : `${t}${meta?.cn ? ' · ' + meta.cn : ''}${meta?.schedule ? ' · ' + meta.schedule : ''}${meta?.mode ? ' · ' + meta.mode : ''}${meta?.source ? ' · ' + meta.source : ''}${meta?.lastDataDate ? ' · 最近数据: ' + meta.lastDataDate : ''}`}
                       >
                         {/* Health indicator dot */}
                         <span className={`absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full ring-1 ${healthInd.dot} ${isHovered ? healthInd.ring : 'ring-white dark:ring-zinc-900'}`} />
@@ -1381,19 +1498,27 @@ function DagView() {
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded border border-dashed border-sky-300 bg-sky-50" /> 外部数据源</span>
           <span className="ml-auto text-zinc-400">悬停节点查看详情 · 拓扑排序自动决定执行顺序</span>
         </div>
+        {note && (
+          <div className="mt-2 text-[10px] text-zinc-400 italic">{note}</div>
+        )}
       </CardContent>
     </Card>
   )
 }
 
 function SchedulesView({ wsConnected }: { wsConnected: boolean }) {
+  // 调度计划改为真实脚本元数据：table / cn / dir / sort / schedule / mode / source / lastDataDate。
+  const { scripts, note, loading, error, reload } = useOrchestration()
+
   return (
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <Calendar className="h-4 w-4 text-fuchsia-500" />
-            调度计划 (schedules.yaml)
+            调度计划（脚本元数据）
+            <Badge variant="secondary" className="ml-2 text-[10px]">{scripts.length} 脚本</Badge>
+            <Badge variant="outline" className="ml-1 text-[10px] text-emerald-600 border-emerald-300">真实元数据</Badge>
           </CardTitle>
           {/* 连接状态指示器 */}
           <div className="flex items-center gap-1.5 text-xs">
@@ -1412,35 +1537,68 @@ function SchedulesView({ wsConnected }: { wsConnected: boolean }) {
             )}
           </div>
         </div>
+        {error && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="h-3.5 w-3.5" /> 加载失败 ({error})。
+            <Button size="sm" variant="outline" className="ml-auto h-6 text-[11px]" onClick={reload}>重试</Button>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border overflow-hidden">
-          <div className="grid grid-cols-[140px_140px_80px_160px_100px_80px] gap-2 px-3 py-2 text-[11px] font-medium text-zinc-500 bg-zinc-50 dark:bg-zinc-900/50">
-            <div>名称</div><div>cron</div><div>层</div><div>下次执行</div><div>上次</div><div className="text-center">表数</div>
+        {loading ? (
+          <div className="py-10 flex items-center justify-center gap-2 text-sm text-zinc-500">
+            <Loader2 className="h-4 w-4 animate-spin" /> 加载脚本元数据...
           </div>
-          {SCHEDULES.map(s => (
-            <div key={s.name} className="grid grid-cols-[140px_140px_80px_160px_100px_80px] gap-2 px-3 py-2.5 text-xs items-center border-t hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
-              <div className="font-mono font-medium">{s.name}</div>
-              <div className="font-mono text-zinc-500">{s.cron}</div>
-              <div><Badge variant="outline" className="text-[10px]">{s.tier}</Badge></div>
-              <div className="font-mono text-zinc-600 dark:text-zinc-400">{s.nextRun}</div>
-              <div className="flex items-center gap-1">
-                {s.lastStatus === 'success' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
-                {s.lastStatus === 'failed' && <XCircle className="h-3.5 w-3.5 text-rose-500" />}
-                {!s.lastStatus && <Clock className="h-3.5 w-3.5 text-zinc-400" />}
-                <span className="text-[11px] text-zinc-500">{s.lastStatus || '—'}</span>
+        ) : (
+          <>
+            <div className="rounded-md border overflow-hidden">
+              <div className="grid grid-cols-[56px_1fr_1fr_90px_90px_90px_120px] gap-2 px-3 py-2 text-[11px] font-medium text-zinc-500 bg-zinc-50 dark:bg-zinc-900/50">
+                <div>sort</div><div>表名</div><div>中文名</div><div>调度</div><div>模式</div><div>层</div><div>最近数据日期</div>
               </div>
-              <div className="text-center font-mono">{s.tables}</div>
+              {scripts.map(s => (
+                <div key={s.file} className="grid grid-cols-[56px_1fr_1fr_90px_90px_90px_120px] gap-2 px-3 py-2.5 text-xs items-center border-t hover:bg-zinc-50 dark:hover:bg-zinc-900/40" title={`${s.file} · source=${s.source}`}>
+                  <div className="font-mono text-zinc-400">{s.sort}</div>
+                  <div className="font-mono font-medium truncate" title={s.table ?? s.file}>{s.table ?? <span className="text-zinc-400 italic">（无表）</span>}</div>
+                  <div className="text-zinc-500 truncate" title={s.cn ?? ''}>{s.cn ?? '—'}</div>
+                  <div><Badge variant="outline" className="text-[10px]">{s.schedule}</Badge></div>
+                  <div className="font-mono text-zinc-500 text-[11px]">{s.mode}</div>
+                  <div><Badge variant="outline" className="text-[10px] text-sky-600 border-sky-300">{s.dir}</Badge></div>
+                  <div className="flex items-center gap-1">
+                    {s.lastDataDate ? (
+                      <>
+                        <span className={`h-1.5 w-1.5 rounded-full ${isStale(s.lastDataDate) ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                        <span className="font-mono text-[11px] text-zinc-600 dark:text-zinc-400">{s.lastDataDate}</span>
+                      </>
+                    ) : (
+                      <span className="text-zinc-400">—</span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="mt-3 p-3 rounded-md bg-zinc-50 dark:bg-zinc-900/50 text-xs text-zinc-500">
-          <strong className="text-zinc-700 dark:text-zinc-300">说明：</strong>调度器读取 <code className="font-mono text-sky-600">config/registry/schedules.yaml</code>，按拓扑排序执行同层表。
-          支持 cron / systemd timer / 手动 <code className="font-mono text-sky-600">python run.py all</code> 三种触发方式。
-        </div>
+            <div className="mt-3 p-3 rounded-md bg-zinc-50 dark:bg-zinc-900/50 text-xs text-zinc-500">
+              <strong className="text-zinc-700 dark:text-zinc-300">说明：</strong>调度计划来自脚本头部 <code className="font-mono text-sky-600">@meta</code>（schedule / mode / source），
+              「最近数据日期」为该表 <code className="font-mono text-sky-600">MAX(date)</code> 的代理，<strong>非真实运行时间戳</strong>。
+              支持 cron / systemd timer / 手动 <code className="font-mono text-sky-600">python run.py all</code> 三种触发方式。
+              {note && <span className="block mt-1 italic text-zinc-400">{note}</span>}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   )
+}
+
+// lastDataDate 临近今天 → 视为新鲜；否则标橙提示数据偏旧（仅用于状态点着色，不代表真实运行）。
+function isStale(dateStr: string): boolean {
+  // 兼容 "2026-06-26" 与 "20260626" 两种格式
+  const normalized = dateStr.length === 8 && /^\d{8}$/.test(dateStr)
+    ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+    : dateStr
+  const d = new Date(normalized)
+  if (isNaN(d.getTime())) return false
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000)
+  return days > 3
 }
 
 // ─── 日志级别颜色映射 ───

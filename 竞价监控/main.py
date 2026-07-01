@@ -1,268 +1,451 @@
 #!/usr/bin/env python3
-"""竞价监控雷达 — 主入口 (L4 编排)
+"""竞价监控雷达 v2 — 开盘决策辅助 — 主入口
+
+三模式:
+  python main.py --prepare   # 盘前预备(任意时间,落盘 preset,DB 侧全做好)
+  python main.py             # 9:25 初筛(读 preset + 取开盘价 + 计算 + 推送)
+  python main.py --confirm   # 9:31 修正(9:30 现价对比开盘,跌破3%降级)
+
+9:25 后只做"取开盘价 + 计算"一步,DB 侧盘前已预备,避免开盘掉链子。
 
 @meta table=auction_monitor cn=竞价监控雷达 dir=竞价监控 sort=005
-@meta schedule=realtime mode=monitor source=tqcenter+snapshot
-
-执行流程:
-  1. 解析参数 + 加载 config/pool
-  2. 等待三时刻 → 各取一次 snapshot
-  3. extract_features 三时刻 join
-  4. engine.score_all 评分
-  5. 输出三件套:终端 rich.Table + reports/*.md + output/*.parquet
-  6. notify.push_feishu 推送(桩,失败不阻塞)
+@meta schedule=realtime mode=monitor source=tqcenter+snapshot+db
 """
 from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, time
+import time as _time
+from datetime import datetime, time as dtime
 from pathlib import Path
 
+import duckdb
 import pandas as pd
 from loguru import logger
 from rich.console import Console
 from rich.table import Table
 
 import data
+import db
+import engine
 import notify
-from config import CONFIG, THRESHOLDS
-from engine import score_all
+from config import CONFIG, LABELS
+from engine import label_cn, label_all, merge_open_db
 
-# ============ 路径 & 全局 ============
 console = Console()
-BASE_DIR = CONFIG.base_dir
-OUTPUT_DIR = CONFIG.output_dir
-REPORT_DIR = CONFIG.report_dir
-POOL_PATH = CONFIG.pool_path
 
+CONF_COLOR = {"high": "green", "medium": "yellow", "low": "red"}
 
-# ============ 参数解析 ============
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        description="竞价监控雷达 (A 股集合竞价实时评分)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""示例:
-  python main.py                       # 等待 09:15/09:20/09:25 三时刻实盘跑
-  python main.py --mock                # 跳过等待,用 mock 数据演示
-  python main.py --no-wait             # 不等时刻,立即取一次(测试用)
-  python main.py --pool mypool.txt     # 自定义监控池
-  python main.py --top 10              # 只显示 TOP 10
-""",
-    )
-    p.add_argument("--mock", action="store_true", help="用 mock 数据,不连 tqcenter")
-    p.add_argument("--no-wait", action="store_true", help="不等待三时刻,立即采样")
-    p.add_argument("--pool", type=Path, default=POOL_PATH, help="监控池文件")
-    p.add_argument("--top", type=int, default=CONFIG.top_n, help="显示 TOP N")
+    p = argparse.ArgumentParser(description="竞价监控雷达 v2 - 开盘决策辅助")
+    p.add_argument("--prepare", action="store_true", help="盘前预备(落盘 preset)")
+    p.add_argument("--confirm", action="store_true", help="9:31 修正模式")
+    p.add_argument("--fix", action="store_true", help="盘后修复(补缺失snapshot+重跑标签)")
+    p.add_argument("--no-wait", action="store_true", help="不等待,立即跑(测试)")
+    p.add_argument("--pool", type=Path, default=CONFIG.pool_path)
+    p.add_argument("--top", type=int, default=CONFIG.top_n)
     return p.parse_args()
 
 
-# ============ 时序 ============
-
-def wait_until(target: time, slack_s: float = 0.5) -> None:
-    """等到目标时刻(早到则 sleep;已过则立即返回)
-
-    使用 datetime.now().time() 而非 time.time(),避免时钟跳变感知不到。
-    """
-    now_t = datetime.now().time()
-    now_s = (now_t.hour * 3600 + now_t.minute * 60 + now_t.second
-             + now_t.microsecond / 1e6)
-    tgt_s = (target.hour * 3600 + target.minute * 60 + target.second)
+def wait_until(target: dtime, slack_s: float = 0.5) -> None:
+    now = datetime.now()
+    now_s = now.hour * 3600 + now.minute * 60 + now.second
+    tgt_s = target.hour * 3600 + target.minute * 60 + target.second
     delta = tgt_s - now_s
     if delta <= -slack_s:
-        return  # 已过
-    if delta > 0:
-        logger.info(f"等待到 {target} (还差 {delta:.1f}s)")
-        import time as _t
-        _t.sleep(max(0.0, delta - slack_s))
-
-
-# ============ 输出:终端 ============
-
-def render_table(df: pd.DataFrame, top_n: int) -> None:
-    """rich.Table 渲染 TOP N"""
-    if df.empty:
-        console.print("[yellow]无评分结果[/yellow]")
         return
+    if delta > 0:
+        logger.info(f"等待到 {target} (还差 {delta:.0f}s)")
+        _time.sleep(max(0.0, delta - slack_s))
 
-    tbl = Table(title=f"竞价监控 TOP {top_n}", show_lines=False)
-    tbl.add_column("RK", style="cyan", width=3, justify="right")
-    tbl.add_column("CODE", style="magenta", width=11)
-    tbl.add_column("SCORE", style="bold green", width=6, justify="right")
-    tbl.add_column("MODE", width=8)
-    tbl.add_column("PCT%", width=7, justify="right")
-    tbl.add_column("TRAP", width=6, justify="right")
-    tbl.add_column("VOL(手)", width=10, justify="right")
-    tbl.add_column("AMT(万)", width=10, justify="right")
-    tbl.add_column("REASON", width=20)
 
-    for i, row in df.head(top_n).iterrows():
-        mode_color = {"trend": "green", "dip": "blue", "weak": "yellow", "anomaly": "red"}.get(
-            row.get("mode", ""), "white"
-        )
+# ============ 输出辅助 ============
+
+def _zjl_pct(r) -> str:
+    v = r.get("zjl_ratio")
+    return f"{v*100:+.2f}" if pd.notna(v) else "-"
+
+
+def _mcap_yi(r) -> str:
+    v = r.get("float_mcap")
+    return f"{v/1e8:.1f}" if pd.notna(v) else "-"
+
+
+def _conf_tag(conf: str) -> str:
+    color = CONF_COLOR.get(conf or "", "white")
+    short = {"high": "高", "medium": "中", "low": "低"}.get(conf, conf or "")
+    return f"[{color}]{short}[/{color}]"
+
+
+def render_table(df: pd.DataFrame, top_n: int, title: str) -> None:
+    if df.empty:
+        console.print("[yellow]无结果[/yellow]")
+        return
+    tbl = Table(title=title, show_lines=False)
+    for col, w, j in [("RK", 3, "right"), ("CODE", 11, "left"), ("标签", 16, "left"),
+                      ("PCT%", 7, "right"), ("昨%", 6, "right"), ("主力%", 7, "right"),
+                      ("市值亿", 7, "right"), ("惯骗", 4, "right"), ("置信", 4, "right"),
+                      ("原因", 30, "left")]:
+        tbl.add_column(col, width=w, justify=j)
+    for i, r in df.head(top_n).iterrows():
+        lab = LABELS.get(r.get("label"))
+        color = lab.color if lab else "white"
+        tag = lab.cn if lab else str(r.get("label", ""))
+        if r.get("aux") and r["aux"] in LABELS:
+            tag += f"+{LABELS[r['aux']].cn}"
+        yest = r.get("yest_pct")
         tbl.add_row(
-            str(i + 1),
-            str(row.get("code", "")),
-            f"{row.get('score', 0):.1f}",
-            f"[{mode_color}]{row.get('mode', '')}[/{mode_color}]",
-            f"{row.get('pct', 0):+.2f}",
-            f"{row.get('trap_ratio', 1):.3f}",
-            f"{int(row.get('real_vol', 0)):,}",
-            f"{float(row.get('amount', 0)) / 10000:,.1f}",
-            str(row.get("reason", "")),
+            str(i + 1), str(r["code"]), f"[{color}]{tag}[/{color}]",
+            f"{r['open_pct']:+.2f}",
+            f"{yest:+.1f}" if pd.notna(yest) else "-",
+            _zjl_pct(r), _mcap_yi(r),
+            str(int(r.get("trap_cnt", 0) or 0)),
+            _conf_tag(r.get("confidence", "high")),
+            str(r.get("reason", "")),
         )
     console.print(tbl)
 
 
-# ============ 输出:MD 报告 ============
-
-def write_md_report(df: pd.DataFrame, top_n: int, market_open: bool, run_ts: datetime) -> Path:
-    """写 reports/auction_monitor_YYYYMMDD_HHMMSS.md"""
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+def write_md(df: pd.DataFrame, top_n: int, run_ts: datetime, phase: str) -> Path:
+    CONFIG.report_dir.mkdir(parents=True, exist_ok=True)
     stamp = run_ts.strftime("%Y%m%d_%H%M%S")
-    path = REPORT_DIR / f"auction_monitor_{stamp}.md"
-
-    lines: list[str] = []
-    lines.append(f"# 竞价监控报告 - {run_ts.strftime('%Y-%m-%d %H:%M:%S')}")
-    lines.append("")
-    if not market_open:
-        lines.append("> [WARN] 市场未开盘,所有股票 mode=anomaly")
-        lines.append("")
-    lines.append(f"## 评分汇总")
+    path = CONFIG.report_dir / f"auction_{phase}_{stamp}.md"
+    data_date = df["data_date"].iloc[0] if (not df.empty and "data_date" in df.columns) else "?"
+    lines = [f"# 竞价监控 {phase} - {run_ts:%Y-%m-%d %H:%M:%S}",
+             f"(T-1 数据日期: {data_date})", ""]
     if not df.empty:
-        mode_counts = df["mode"].value_counts().to_dict()
-        lines.append(f"- 总数: {len(df)}")
-        for m in ("trend", "dip", "weak", "anomaly"):
-            lines.append(f"- {m}: {mode_counts.get(m, 0)}")
-    lines.append("")
-
+        lines.append("## 标签分布")
+        for k in ["strong_continue", "dip_buy", "trap_warning", "fund_diverge", "nuclear", "neutral"]:
+            n = int((df["label"] == k).sum())
+            if n:
+                lines.append(f"- {label_cn(k)}: {n}")
+        lines.append("")
+        lines.append("## 置信度分布")
+        for k in ["high", "medium", "low"]:
+            n = int((df.get("confidence", pd.Series()) == k).sum())
+            if n:
+                lines.append(f"- {k}: {n}")
+        lines.append("")
     lines.append(f"## TOP {top_n}")
     lines.append("")
+    lines.append("| RK | CODE | 标签 | PCT% | 昨% | 主力% | 市值亿 | 惯骗 | 置信 | 原因 |")
+    lines.append("|---:|------|------|-----:|-----:|------:|------:|-----:|------|")
     if not df.empty:
-        lines.append("| RK | CODE | SCORE | MODE | PCT% | TRAP | VOL(手) | AMT(万) | REASON |")
-        lines.append("|---:|------|------:|------|-----:|-----:|--------:|--------:|--------|")
-        for i, row in df.head(top_n).iterrows():
+        for i, r in df.head(top_n).iterrows():
+            yest = r.get("yest_pct")
             lines.append(
-                f"| {i+1} | {row.get('code','')} | {row.get('score',0):.1f} | "
-                f"{row.get('mode','')} | {row.get('pct',0):+.2f} | "
-                f"{row.get('trap_ratio',1):.3f} | {int(row.get('real_vol',0)):,} | "
-                f"{float(row.get('amount',0))/10000:,.1f} | {row.get('reason','')} |"
+                f"| {i+1} | {r['code']} | {label_cn(r.get('label'))} | "
+                f"{r['open_pct']:+.2f} | {f'{yest:+.1f}' if pd.notna(yest) else '-'} | "
+                f"{_zjl_pct(r)} | {_mcap_yi(r)} | {int(r.get('trap_cnt',0) or 0)} | "
+                f"{r.get('confidence','high')} | {r.get('reason','')} |"
             )
-    else:
-        lines.append("无数据")
-    lines.append("")
-
     path.write_text("\n".join(lines), encoding="utf-8")
-    logger.info(f"MD 报告: {path}")
+    logger.info(f"MD: {path}")
     return path
 
 
-# ============ 输出:parquet ============
-
-def write_parquet(df: pd.DataFrame, run_ts: datetime) -> Path | None:
-    """写 output/auction_monitor_YYYYMMDD.parquet (同日覆盖)"""
+def write_parquet(df: pd.DataFrame, run_ts: datetime, phase: str) -> Path | None:
     if df.empty:
-        logger.warning("数据为空,跳过 parquet")
         return None
-
-    try:
-        import pyarrow  # noqa: F401
-    except ImportError:
-        logger.warning("pyarrow 未安装,跳过 parquet")
-        return None
-
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG.output_dir.mkdir(parents=True, exist_ok=True)
     day = run_ts.strftime("%Y%m%d")
-    path = OUTPUT_DIR / f"auction_monitor_{day}.parquet"
+    path = CONFIG.output_dir / f"auction_{phase}_{day}.parquet"
     out = df.copy()
     out.insert(0, "run_ts", run_ts)
-    out.to_parquet(path, index=False, engine="pyarrow")
-    logger.info(f"parquet 落盘: {path} ({len(out)} 行)")
+    out.to_parquet(path, index=False)
+    logger.info(f"parquet: {path} ({len(out)} 行)")
     return path
 
 
-# ============ 主流程 ============
+def write_xlsx(df: pd.DataFrame, top_n: int, run_ts: datetime, phase: str) -> Path | None:
+    """表格输出到 report_dir(xlsx,给人看,飞书之外本地留存)"""
+    if df.empty:
+        return None
+    CONFIG.report_dir.mkdir(parents=True, exist_ok=True)
+    stamp = run_ts.strftime("%Y%m%d_%H%M%S")
+    path = CONFIG.report_dir / f"auction_{phase}_{stamp}.xlsx"
+    out = df.copy()
+    out.insert(0, "RK", range(1, len(out) + 1))
+    if "label" in out.columns:
+        out["标签"] = out["label"].apply(label_cn)
+    if "zjl_ratio" in out.columns:
+        out["主力占比%"] = pd.to_numeric(out["zjl_ratio"], errors="coerce") * 100
+    if "float_mcap" in out.columns:
+        out["流通市值(亿)"] = pd.to_numeric(out["float_mcap"], errors="coerce") / 1e8
+    keep = ["RK", "code", "标签", "open_pct", "yest_pct", "主力占比%", "流通市值(亿)",
+            "trap_cnt", "confidence", "reason"]
+    out = out[[c for c in keep if c in out.columns]].rename(columns={
+        "code": "代码", "open_pct": "开盘%", "yest_pct": "昨涨%",
+        "trap_cnt": "惯骗次数", "confidence": "置信度", "reason": "原因"})
+    out.to_excel(path, index=False)
+    logger.info(f"xlsx: {path}")
+    return path
 
-def run(args: argparse.Namespace) -> int:
-    run_ts = datetime.now()
 
-    # 1. 加载监控池
-    codes = data.load_pool(args.pool)
-    if not codes:
-        logger.error("监控池为空,退出")
-        return 1
+def _feishu_rows(df: pd.DataFrame, top_n: int) -> list[dict]:
+    rows = []
+    for _, r in df.head(top_n).iterrows():
+        conf_mark = {"high": "", "medium": "⚠", "low": "‼"}.get(r.get("confidence", "high"), "")
+        rows.append({
+            "code": r["code"], "label_cn": label_cn(r.get("label")),
+            "aux_cn": label_cn(r["aux"]) if r.get("aux") else "",
+            "reason": f"{r.get('reason','')}{conf_mark}",
+        })
+    return rows
 
-    market_open = True  # 默认市场开盘,后面会判断
 
-    # 2. 决定数据源
-    if args.mock:
-        logger.info("[MOCK] 使用模拟数据,跳过 tqcenter")
-        features = data.mock_features(codes)
-    else:
-        # 等待三时刻
-        if not args.no_wait:
-            for label, t in zip(("s1", "s2", "s3"), CONFIG.sampling.all()):
-                wait_until(t)
-                logger.info(f"取 {label} 快照 @ {datetime.now().strftime('%H:%M:%S')}")
+# ============ 阶段0:盘前预备 ============
 
-        # 三时刻快照
-        try:
-            snap_t1 = data.fetch_snapshots(codes, snapshot_at=run_ts)
-            if not args.no_wait:
-                wait_until(CONFIG.sampling.s2)
-                snap_t2 = data.fetch_snapshots(codes, snapshot_at=run_ts)
-                wait_until(CONFIG.sampling.s3)
-                snap_t3 = data.fetch_snapshots(codes, snapshot_at=run_ts)
-            else:
-                # no-wait 模式:同一时刻三份相同(实际意义弱,仅测试连通性)
-                snap_t1 = data.fetch_snapshots(codes, snapshot_at=run_ts)
-                snap_t2 = snap_t1.copy()
-                snap_t3 = snap_t1.copy()
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"取快照失败: {e}")
-            return 1
+def run_prepare(args, th) -> int:
+    logger.info("=== 盘前预备 ===")
+    con = duckdb.connect(str(CONFIG.db_path), read_only=True)
+    try:
+        report = data.prepare_preset(con, th)
+    finally:
+        con.close()
 
-        if snap_t1.empty:
-            logger.error("快照全空(可能市场未开盘/网络问题),退出")
-            return 0
-
-        # 3. 特征提取
-        features = data.extract_features(snap_t1, snap_t2, snap_t3)
-        if features.empty:
-            logger.error("三时刻 join 后无数据,退出")
-            return 0
-
-        # 检测市场是否开盘(所有 s3_price == last_close 视为未开盘)
-        if (features["s3_price"] == features["last_close"]).all():
-            market_open = False
-            logger.warning("s3_price 全部等于昨收,疑似市场未开盘")
-
-    # 4. 评分
-    scored = score_all(features, CONFIG.thresholds)
-    logger.info(f"评分完成 {len(scored)} 行")
-
-    # 5. 输出三件套
-    render_table(scored, args.top)
-    write_md_report(scored, args.top, market_open, run_ts)
-    write_parquet(scored, run_ts)
-
-    # 6. 飞书推送(桩,失败不阻塞)
-    if CONFIG.feishu_webhook:
-        top_rows = scored.head(args.top).to_dict("records")
-        try:
-            notify.push_feishu(top_rows, webhook_url=CONFIG.feishu_webhook)
-        except NotImplementedError as e:
-            logger.warning(f"飞书推送未实现: {e}")
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"飞书推送异常: {e}")
-    else:
-        logger.info("未配置飞书 webhook(在 CONFIG.feishu_webhook 填入可启用推送)")
-
-    logger.success(f"[OK] 完成 {run_ts.strftime('%H:%M:%S')}")
+    f = report["fresh"]
+    console.print(f"[green]盘前预备完成[/green]: {report['count']} 只")
+    console.print(f"  数据日期={f['data_date']} 滞后{f['lag_days']}天 "
+                  f"turnover/sjb一致={f['consistent']}")
+    console.print(f"  置信度分布={report['confidence']}")
+    console.print(f"  落盘={report['path']}")
+    if f["lag_days"] >= 4 or not f["consistent"]:
+        console.print("[yellow]⚠ 数据滞后或表日期不一致,9:25 结果置信度会降[/yellow]")
+    logger.success("[OK] 盘前预备完成,9:25 后跑 python main.py 即可")
     return 0
 
 
-if __name__ == "__main__":
+# ============ 阶段1:9:25 初筛(读 preset + 取开盘价) ============
+
+def run_initial(args, th) -> int:
+    run_ts = datetime.now()
+    if not args.no_wait:
+        wait_until(CONFIG.schedule.initial_wait)
+
+    try:
+        preset = data.load_preset()
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        return 1
+
+    # 唯一实时步骤:取开盘价(全空重试,应对撮合价推送延迟)
+    codes = preset["code"].tolist()
+    open_df = pd.DataFrame()
+    for attempt in range(1, 4):
+        open_df = data.fetch_open_snapshot(codes)
+        if not open_df.empty:
+            break
+        logger.warning(f"开盘快照空(撮合价可能未到),5秒后重试 {attempt}/3")
+        _time.sleep(5)
+    if open_df.empty:
+        logger.error("开盘快照重试3次仍空(未到9:25 / 市场未开盘 / tqcenter故障)")
+        return 0
+
+    # 入表持久化(失败可盘后 --fix 修复)
+    con_rw = db.connect()
+    try:
+        db.ensure_tables(con_rw)
+        db.save_snapshot(con_rw, open_df, source="live")
+        df = merge_open_db(open_df, preset)
+        df = data.filter_abnormal(df)
+        df = label_all(df, th)
+        db.save_labels(con_rw, df, phase="initial")
+    finally:
+        con_rw.close()
+    logger.info(f"初筛打标 {len(df)} 只")
+
+    render_table(df, args.top, f"竞价初筛 {run_ts:%H:%M}")
+    write_md(df, args.top, run_ts, "initial")
+    write_xlsx(df, args.top, run_ts, "initial")
+    write_parquet(df, run_ts, "initial")
+    notify.push_feishu(_feishu_rows(df, args.top), CONFIG.feishu_webhook,
+                       title=f"竞价初筛 {run_ts:%H:%M}")
+    logger.success(f"[OK] 初筛完成 {run_ts:%H:%M:%S}")
+    return 0
+
+
+# ============ 阶段2:9:31 修正 ============
+
+def run_confirm(args, th) -> int:
+    run_ts = datetime.now()
+    if not args.no_wait:
+        wait_until(CONFIG.schedule.confirm_wait)
+
+    day = run_ts.strftime("%Y%m%d")
+    initial_path = CONFIG.output_dir / f"auction_initial_{day}.parquet"
+    if not initial_path.exists():
+        logger.error(f"找不到当日初筛 {initial_path},无法修正")
+        return 1
+    initial = pd.read_parquet(initial_path)
+    strong = initial[initial["label"] == "strong_continue"].copy()
+    if strong.empty:
+        console.print("[yellow]初筛无强势延续票,无需9:31修正[/yellow]")
+        return 0
+
+    logger.info(f"9:30 后取 {len(strong)} 只强势延续票现价")
+    now_df = data.fetch_open_snapshot(strong["code"].tolist())
+    if now_df.empty:
+        logger.error("现价快照空")
+        return 1
+
+    cmp = strong.merge(
+        now_df[["code", "now_price"]].rename(columns={"now_price": "current_price"}),  # 9:31现价,避初筛now_price冲突
+        on="code", how="left",
+    )
+    cmp["drop_pct"] = (cmp["current_price"] - cmp["open_price"]) / cmp["open_price"] * 100
+    mask_down = cmp["drop_pct"] < th.confirm_drop_pct
+    cmp.loc[mask_down, "label"] = "downgraded"
+    cmp.loc[mask_down, "reason"] = cmp.loc[mask_down].apply(
+        lambda r: f"9:30跌破{r['drop_pct']:+.1f}%·降级({r['open_price']:.2f}→{r['current_price']:.2f})", axis=1)
+
+    down_n = int(mask_down.sum())
+    logger.warning(f"强势延续票 {down_n}/{len(cmp)} 只跌破开盘{th.confirm_drop_pct}% 降级")
+
+    con_rw = db.connect()
+    try:
+        db.ensure_tables(con_rw)
+        db.save_labels(con_rw, cmp, phase="confirm")
+    finally:
+        con_rw.close()
+
+    title = f"竞价修正 {run_ts:%H:%M} (降级{down_n}/{len(cmp)})"
+    render_table(cmp, len(cmp), title)
+    write_md(cmp, len(cmp), run_ts, "confirm")
+    write_xlsx(cmp, len(cmp), run_ts, "confirm")
+    notify.push_feishu(_feishu_rows(cmp, len(cmp)), CONFIG.feishu_webhook, title=title)
+    logger.success(f"[OK] 修正完成 {run_ts:%H:%M:%S}")
+    return 0
+
+
+def run_fix(args, th) -> int:
+    """盘后修复:补缺失 snapshot(snapshot.Open 开盘价)+ 重跑标签"""
+    logger.info("=== 盘后修复 ===")
+    try:
+        preset = data.load_preset()
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        return 1
+    con_rw = db.connect()
+    try:
+        db.ensure_tables(con_rw)
+        missing = db.get_missing_codes(con_rw, preset["code"].tolist())
+        if missing:
+            logger.info(f"缺失 {len(missing)} 只,调 snapshot.Open 补")
+            open_df = data.fetch_open_snapshot(missing)
+            if not open_df.empty:
+                db.save_snapshot(con_rw, open_df, source="fix")
+        snap = db.load_snapshot(con_rw)
+        if snap.empty:
+            logger.error("当日无 snapshot,无法修复")
+            return 1
+        df = merge_open_db(snap, preset)
+        df = data.filter_abnormal(df)
+        df = label_all(df, th)
+        db.save_labels(con_rw, df, phase="initial")  # 覆盖 initial
+    finally:
+        con_rw.close()
+
+    run_ts = datetime.now()
+    render_table(df, args.top, f"竞价修复 {run_ts:%H:%M}")
+    write_md(df, args.top, run_ts, "fix")
+    write_xlsx(df, args.top, run_ts, "fix")
+    notify.push_feishu(_feishu_rows(df, args.top), CONFIG.feishu_webhook,
+                       title=f"竞价修复 {run_ts:%H:%M}")
+    logger.success(f"[OK] 修复完成 {run_ts:%H:%M:%S}")
+    return 0
+
+
+def render_strong(df: pd.DataFrame, top_n: int, title: str) -> None:
+    """简约输出:强势排序 + 线性解读(高风险已剔除,不显示)"""
+    if df.empty:
+        console.print("[yellow]无强势股(高风险剔除后无足够强势候选)[/yellow]")
+        return
+    tbl = Table(title=title, show_lines=False)
+    for col, w, j in [("RK", 3, "right"), ("CODE", 11, "left"), ("涨幅%", 7, "right"),
+                      ("斜率", 6, "right"), ("解读", 42, "left")]:
+        tbl.add_column(col, width=w, justify=j)
+    for i, r in df.head(top_n).iterrows():
+        tbl.add_row(str(i + 1), str(r["code"]),
+                    f"{r['last_pct']:+.2f}", f"{r['slope']:+.2f}", str(r["interp"]))
+    console.print(tbl)
+
+
+def _strong_rows(df: pd.DataFrame, top_n: int) -> list[dict]:
+    """飞书简约:涨幅作 label,解读作 reason"""
+    rows = []
+    for _, r in df.head(top_n).iterrows():
+        rows.append({"code": r["code"], "label_cn": f"{r['last_pct']:+.1f}%",
+                     "aux_cn": "", "reason": r["interp"]})
+    return rows
+
+
+def write_strong_md(df: pd.DataFrame, top_n: int, run_ts: datetime) -> Path:
+    CONFIG.report_dir.mkdir(parents=True, exist_ok=True)
+    stamp = run_ts.strftime("%Y%m%d_%H%M%S")
+    path = CONFIG.report_dir / f"auction_strong_{stamp}.md"
+    lines = [f"# 竞价强势排序 - {run_ts:%Y-%m-%d %H:%M:%S}", "",
+             f"高风险已剔除(惯骗≥3/资金背离/流通<20亿),按线性斜率降序。", ""]
+    if df.empty:
+        lines.append("无强势候选。")
+    else:
+        lines.append("| RK | CODE | 涨幅% | 斜率 | R² | 解读 |")
+        lines.append("|---:|------|------:|-----:|---:|------|")
+        for i, r in df.head(top_n).iterrows():
+            lines.append(f"| {i+1} | {r['code']} | {r['last_pct']:+.2f} | "
+                         f"{r['slope']:+.2f} | {r['r2']:.2f} | {r['interp']} |")
+    path.write_text("\n".join(lines), encoding="utf-8")
+    logger.info(f"MD: {path}")
+    return path
+
+
+def run_trend(args, th) -> int:
+    """竞价趋势:9:15-9:25 每2分钟采样 → 线性拟合 → 强势排序(高风险剔除)→ 简约输出"""
+    run_ts = datetime.now()
+    try:
+        preset = data.load_preset()
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        return 1
+    codes = preset["code"].tolist()
+    sample_times = CONFIG.trend.sample_times
+    logger.info(f"=== 竞价趋势: {len(codes)}只 × {len(sample_times)}点(9:15-9:25 每2分钟)===")
+
+    series = data.fetch_price_series(codes, sample_times)
+    df = engine.rank_strong(series, preset, CONFIG.trend)
+    logger.info(f"强势候选 {len(df)} 只(高风险已剔除)")
+
+    title = f"竞价强势 {datetime.now():%H:%M} TOP{min(args.top, len(df))}"
+    render_strong(df, args.top, title)
+    if not df.empty:
+        write_strong_md(df, args.top, run_ts)
+        out = df.copy()
+        out.insert(0, "run_ts", run_ts)
+        CONFIG.output_dir.mkdir(parents=True, exist_ok=True)
+        out.to_parquet(CONFIG.output_dir / f"auction_strong_{run_ts:%Y%m%d}.parquet", index=False)
+        con_rw = db.connect()
+        try:
+            db.ensure_tables(con_rw)
+            db.save_labels(con_rw, out, phase="trend")
+        finally:
+            con_rw.close()
+        notify.push_feishu(_strong_rows(df, args.top), CONFIG.feishu_webhook, title=title)
+    logger.success(f"[OK] 竞价趋势完成 {datetime.now():%H:%M:%S}")
+    return 0
+
+
+def main() -> int:
     args = parse_args()
-    sys.exit(run(args))
+    th = CONFIG.thresholds
+    if args.fix:
+        return run_fix(args, th)
+    if args.prepare:
+        return run_prepare(args, th)
+    if args.confirm:
+        return run_confirm(args, th)
+    return run_trend(args, th)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -70,7 +70,50 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
   const [runningElapsed, setRunningElapsed] = useState(0)
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set())
 
-  const totalTables = TABLES.length
+  // 真实 catalog 数据 (来自 DuckDB)
+  type CatalogRow = { table: string; rows: number; columnCount: number; dateCol: string | null; maxDate: string | null; exists: boolean }
+  type CatalogResp = { tables: CatalogRow[] }
+  const [catalog, setCatalog] = useState<CatalogRow[] | null>(null)
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setCatalogLoading(true)
+    fetch('/api/dataops?op=catalog')
+      .then(async r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const data = (await r.json()) as CatalogResp
+        if (cancelled) return
+        setCatalog(data.tables ?? [])
+        setCatalogError(null)
+      })
+      .catch(e => {
+        if (cancelled) return
+        setCatalogError(e?.message || '加载目录失败')
+      })
+      .finally(() => { if (!cancelled) setCatalogLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  // 真实聚合 KPI
+  // stale 判定: maxDate 为空 OR rows===0 OR (daily 表且 maxDate 早于 2 天前)
+  const realKpis = useMemo(() => {
+    const tables = catalog ?? []
+    const totalTables = tables.length
+    const totalRows = tables.reduce((s, t) => s + (t.rows || 0), 0)
+    const twoDaysAgoMs = Date.now() - 2 * 86400_000
+    let stale = 0
+    for (const t of tables) {
+      if (!t.exists || (t.rows ?? 0) === 0 || !t.maxDate) { stale++; continue }
+      const ms = Date.parse(t.maxDate)
+      if (!Number.isNaN(ms) && ms < twoDaysAgoMs) stale++
+    }
+    const fresh = Math.max(0, totalTables - stale)
+    return { totalTables, totalRows, stale, fresh }
+  }, [catalog])
+
+  // 旧 mock 派生量保留 (其余 UI 仍依赖)
   const greenTables = TABLES.filter(t => t.health === 'green').length
   const redTables = TABLES.filter(t => t.health === 'red').length
   const yellowTables = TABLES.filter(t => t.health === 'yellow').length
@@ -81,7 +124,6 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
   const successRate = todayRuns.length > 0
     ? Math.round((todayRuns.filter(r => r.status === 'success').length / todayRuns.length) * 100)
     : 0
-  const totalRows = TABLES.reduce((s, t) => s + t.rows, 0)
   const runningRun = PIPELINE_RUNS.find(r => r.status === 'running')
   const todayStat = DAILY_STATS[DAILY_STATS.length - 1]
 
@@ -176,7 +218,7 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
 
     // ─── Section 1: KPI Cards ───
     const kpis = [
-      { label: '数据表总数', value: totalTables.toString(), sub: `${greenTables} 健康 · ${redTables} 异常`, color: '#0ea5e9' },
+      { label: '数据表总数', value: realKpis.totalTables.toString(), sub: `${realKpis.fresh} 健康 · ${realKpis.stale} 异常`, color: '#0ea5e9' },
       { label: `${rangeLabel}执行成功率`, value: `${rangeRate}%`, sub: `${rangeSuccess}/${rangeTotal} 成功`, color: '#10b981' },
       { label: `${rangeLabel}入库行数`, value: formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0)), sub: `日均 ${formatRows(scaledIngest.reduce((s, d) => s + d.rows, 0) / (scaledIngest.filter(d => d.rows > 0).length || 1))}`, color: '#d946ef' },
       { label: '待处理告警', value: ALERTS.length.toString(), sub: `${ALERTS.filter(a => a.level === 'red').length} 红 · ${ALERTS.filter(a => a.level === 'yellow').length} 黄`, color: '#f43f5e' },
@@ -526,8 +568,12 @@ export function DashboardView({ onNavigate }: { onNavigate: (v: string) => void 
         <KpiCard
           icon={<Database className="h-5 w-5" />}
           label="数据表总数"
-          value={totalTables.toString()}
-          sub={`${greenTables} 健康 · ${redTables} 异常 · ${yellowTables} 待查`}
+          value={catalogLoading ? '…' : realKpis.totalTables.toString()}
+          sub={
+            catalogError ? '加载失败'
+            : catalogLoading ? '加载中…'
+            : `${realKpis.fresh} 健康 · ${realKpis.stale} 异常 · ${yellowTables} 待查`
+          }
           tone="sky"
           trend={{ value: 2, direction: 'up' }}
           spark={<Sparkline data={[20, 22, 22, 23, 25, 25, 26]} color="sky" />}

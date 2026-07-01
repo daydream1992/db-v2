@@ -30,6 +30,48 @@ import {
 
 type HealthStatus = 'green' | 'yellow' | 'red' | 'white'
 
+// Real health snapshot from /api/dataops?op=health (one entry per table)
+interface HealthEntry {
+  rows: number
+  maxDate: string | null
+  dateCol: string | null
+}
+type HealthMap = Map<string, HealthEntry>
+
+// Compute staleness in trading days between maxDate and the last trading day.
+// Returns NaN if maxDate cannot be parsed.
+function tradingDaysStale(maxDate: string | null): number {
+  if (!maxDate) return NaN
+  const md = new Date(maxDate)
+  if (isNaN(md.getTime())) return NaN
+  // Walk calendar days from maxDate (exclusive) up to today, counting trading days (Mon-Fri).
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const cursor = new Date(md)
+  cursor.setHours(0, 0, 0, 0)
+  let staleTradingDays = 0
+  // Guard against infinite loop / future maxDate
+  let guard = 0
+  while (cursor.getTime() < today.getTime() && guard < 1000) {
+    cursor.setDate(cursor.getDate() + 1)
+    const dow = cursor.getDay()
+    if (dow >= 1 && dow <= 5) staleTradingDays++
+    guard++
+  }
+  return staleTradingDays
+}
+
+// Calendar-day difference (today - maxDate), regardless of trading days.
+function calendarDaysStale(maxDate: string | null): number {
+  if (!maxDate) return NaN
+  const md = new Date(maxDate)
+  if (isNaN(md.getTime())) return NaN
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  md.setHours(0, 0, 0, 0)
+  return Math.floor((today.getTime() - md.getTime()) / 86400000)
+}
+
 // Local table health override for mock force-retry
 interface HealthOverride {
   [table: string]: HealthStatus
@@ -107,6 +149,34 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
   const [refreshing, setRefreshing] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
+  // Real health snapshot from DuckDB (rows / maxDate / dateCol per table)
+  const [healthMap, setHealthMap] = useState<HealthMap>(new Map())
+  const [healthLoading, setHealthLoading] = useState(true)
+  const [healthError, setHealthError] = useState<string | null>(null)
+
+  // Load real health once on mount; keep page usable on error (falls back to mock).
+  const loadHealth = useCallback(async () => {
+    setHealthLoading(true)
+    setHealthError(null)
+    try {
+      const resp = await fetch('/api/dataops?op=health', { cache: 'no-store' })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const data = await resp.json()
+      const tables: Array<{ table: string; rows: number; maxDate: string | null; dateCol: string | null }> = data?.tables ?? []
+      const next = new Map<string, HealthEntry>()
+      for (const t of tables) {
+        next.set(t.table, { rows: t.rows ?? 0, maxDate: t.maxDate ?? null, dateCol: t.dateCol ?? null })
+      }
+      setHealthMap(next)
+    } catch (e) {
+      setHealthError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setHealthLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadHealth() }, [loadHealth])
+
   // C5: Batch remediation state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [showBatchDialog, setShowBatchDialog] = useState(false)
@@ -119,10 +189,65 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
   const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const getHealth = useCallback((table: string): HealthStatus => {
+    // Manual override wins (force-retry / batch remediation simulation)
     if (healthOverrides[table]) return healthOverrides[table]
-    const t = TABLES.find(x => x.table === table)
-    return t?.health ?? 'white'
-  }, [healthOverrides])
+    const meta = TABLES.find(x => x.table === table)
+    if (!meta) return 'white'
+    // Schedule (cn/dir/etc.) still comes from mock metadata — not in DuckDB.
+    if (meta.schedule === 'once') return 'white'
+
+    const real = healthMap.get(table)
+    // Use real snapshot when available; otherwise fall back to mock maxDate/rows
+    // so the page still renders meaningfully before load.
+    const rows = real ? real.rows : meta.rows
+    const maxDate = real ? real.maxDate : meta.maxDate
+
+    // No data at all → red
+    if (!rows || rows === 0) return 'red'
+
+    if (meta.schedule === 'daily') {
+      const stale = tradingDaysStale(maxDate)
+      if (isNaN(stale)) return 'red' // has rows but no usable date → can't verify freshness
+      // On a trading day, any staleness past the last trading day is red.
+      // On non-trading days, a stale daily table is at most yellow.
+      if (isTodayTradingDay) {
+        if (stale >= 2) return 'red'
+        if (stale >= 1) return 'yellow'
+        return 'green'
+      } else {
+        // Non-trading day: never red for daily staleness
+        if (stale >= 2) return 'yellow'
+        if (stale >= 1) return 'yellow'
+        return 'green'
+      }
+    }
+
+    if (meta.schedule === 'weekly') {
+      const days = calendarDaysStale(maxDate)
+      if (isNaN(days)) return 'red'
+      if (days > 7) return 'red'
+      if (days > 3) return 'yellow'
+      return 'green'
+    }
+
+    if (meta.schedule === 'monthly') {
+      const days = calendarDaysStale(maxDate)
+      if (isNaN(days)) return 'red'
+      if (days > 31) return 'red'
+      if (days > 10) return 'yellow'
+      return 'green'
+    }
+
+    return 'green'
+  }, [healthOverrides, healthMap, isTodayTradingDay])
+
+  // Real rows with mock fallback (used wherever t.rows is displayed)
+  const getRows = useCallback((table: string): number => {
+    const real = healthMap.get(table)
+    if (real) return real.rows
+    const meta = TABLES.find(x => x.table === table)
+    return meta?.rows ?? 0
+  }, [healthMap])
 
   const redTables = TABLES.filter(t => getHealth(t.table) === 'red')
   const yellowTables = TABLES.filter(t => getHealth(t.table) === 'yellow')
@@ -197,15 +322,18 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
     setShowConfirmDialog(true)
   }
 
-  // 刷新健康度
-  const handleRefreshHealth = () => {
+  // 刷新健康度 (re-fetch real snapshot from DuckDB)
+  const handleRefreshHealth = async () => {
     setRefreshing(true)
-    setTimeout(() => {
-      setRefreshing(false)
-      toast.success('健康度已刷新', {
-        description: `当前评分 ${healthScore}% · ${greenTables.length} 健康 / ${redTables.length} 异常 / ${yellowTables.length} 待查`,
-      })
-    }, 1500)
+    await loadHealth()
+    setRefreshing(false)
+    if (healthError) {
+      toast.error('健康度刷新失败', { description: healthError })
+      return
+    }
+    toast.success('健康度已刷新', {
+      description: `当前评分 ${healthScore}% · ${greenTables.length} 健康 / ${redTables.length} 异常 / ${yellowTables.length} 待查`,
+    })
   }
 
   // ── Topological sort for dependency ordering ────────────────
@@ -451,6 +579,22 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
 
   return (
     <div className="space-y-5">
+      {/* 加载中 / 错误提示 (real health snapshot) */}
+      {healthLoading && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-500">
+          <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+          <span>正在从 DuckDB 加载真实健康度快照...</span>
+        </div>
+      )}
+      {healthError && !healthLoading && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-sm">
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+          <span className="text-amber-700 dark:text-amber-300 font-medium">健康度实时加载失败</span>
+          <span className="text-amber-600 dark:text-amber-400">({healthError})，已降级使用 mock 数据。</span>
+          <Button size="sm" variant="outline" className="ml-auto h-6 text-[11px]" onClick={loadHealth}>重试</Button>
+        </div>
+      )}
+
       {/* 非交易日提示 */}
       {!isTodayTradingDay && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 text-sm">
@@ -796,7 +940,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                         <div className="text-[10px] text-zinc-400 truncate">{t.cn}</div>
                       </div>
                       <div>
-                        <div className="text-[11px] text-zinc-500">{t.rows > 0 ? `${(t.rows / 10000).toFixed(1)}万行` : '0行'}</div>
+                        <div className="text-[11px] text-zinc-500">{getRows(row.table) > 0 ? `${(getRows(row.table) / 10000).toFixed(1)}万行` : '0行'}</div>
                         <div className={`text-[11px] font-medium ${freshnessClass(t.freshness)}`}>{t.freshness}</div>
                       </div>
                       {row.days.map(d => (
@@ -835,7 +979,7 @@ export function HealthView({ onRunTable }: { onRunTable?: (t: string) => void })
                           </div>
                           <div>
                             <div className="text-[10px] text-zinc-400 mb-0.5">行数</div>
-                            <div className="text-sm font-mono font-medium">{t.rows.toLocaleString()}</div>
+                            <div className="text-sm font-mono font-medium">{getRows(t.table).toLocaleString()}</div>
                           </div>
                           <div>
                             <div className="text-[10px] text-zinc-400 mb-0.5">新鲜度</div>

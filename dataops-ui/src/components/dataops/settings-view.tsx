@@ -202,6 +202,59 @@ export function SettingsView() {
   const [activeTab, setActiveTab] = useState('general')
   const dirty = isDirty(state, savedState)
 
+  // 连接测试状态
+  const [connectionTesting, setConnectionTesting] = useState(false)
+
+  // 挂载时加载真实 DuckDB 版本与文件大小 (op=dbinfo)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/dataops?op=dbinfo')
+      .then(async r => {
+        if (!r.ok) return
+        const data = await r.json()
+        if (cancelled) return
+        setState(prev => ({
+          ...prev,
+          duckdbVersion: data?.version ?? prev.duckdbVersion,
+          dbFileSize: typeof data?.fileSizeBytes === 'number'
+            ? `${(data.fileSizeBytes / 1e9).toFixed(1)}GB`
+            : prev.dbFileSize,
+        }))
+      })
+      .catch(() => { /* 静默: 失败时保留默认值 */ })
+    return () => { cancelled = true }
+  }, [])
+
+  // 真实连接测试
+  const handleTestConnection = async () => {
+    setConnectionTesting(true)
+    const t0 = Date.now()
+    try {
+      const res = await fetch('/api/dataops?op=dbinfo')
+      const latency = Date.now() - t0
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      if (!data?.openOk) throw new Error('数据库未打开')
+      const version = data.version ?? 'unknown'
+      const gb = typeof data.fileSizeBytes === 'number' ? (data.fileSizeBytes / 1e9).toFixed(1) : '?'
+      // 同步刷新状态里的版本/大小
+      setState(prev => ({
+        ...prev,
+        duckdbVersion: version,
+        dbFileSize: typeof data.fileSizeBytes === 'number' ? `${gb}GB` : prev.dbFileSize,
+      }))
+      toast.success('连接测试成功', {
+        description: `延迟 ${latency}ms · DuckDB ${version} · ${gb}GB`,
+      })
+    } catch (e) {
+      toast.error('连接测试失败', {
+        description: e instanceof Error ? e.message : '无法连接数据库',
+      })
+    } finally {
+      setConnectionTesting(false)
+    }
+  }
+
   // ── Config Management State ─────────────────────────────────
   type ConfigRow = {
     tableName: string
@@ -997,8 +1050,9 @@ export function SettingsView() {
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse" />已连接
                 </Badge>
                 <span className="text-xs text-zinc-500">DuckDB {state.duckdbVersion} · 文件大小 {state.dbFileSize}</span>
-                <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => toast.success('连接测试成功', { description: '延迟 12ms · DuckDB 0.10.2' })}>
-                  <Activity className="h-3 w-3 mr-1" />测试连接
+                <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={handleTestConnection} disabled={connectionTesting}>
+                  {connectionTesting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Activity className="h-3 w-3 mr-1" />}
+                  测试连接
                 </Button>
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => toast.success('已触发立即备份', { description: `备份至 ${state.backupDir}\\profit_radar_20260625.duckdb` })}>
                   <Cloud className="h-3 w-3 mr-1" />立即备份
