@@ -14,7 +14,7 @@ def collect(tq) -> dict[str, dict]:
     """采集 5 指数:snapshot(涨跌家数+Max) + more_info(涨幅/主力/动量/开盘金额)"""
     out = {}
     for code in _common.INDEX_CODES:
-        row = {'code': code}
+        row = {'code': code, 'name': _common.INDEX_NAMES.get(code, code)}
         try:
             snap = tq.get_market_snapshot(stock_code=code, field_list=[])
             row['up'] = int(_f(snap, 'UpHome'))
@@ -106,20 +106,21 @@ def detect_divergence(idx: dict, north: float | None, futures: float | None) -> 
     sigs = []
     for code, r in idx.items():
         zaf = r['zaf']
+        nm = r.get('name', code)            # 指数中文名(背离信号显示用)
         if zaf <= TH.DIV_INDEX_UP:
             continue  # 没涨不判背离
         # 价宽背离:涨但涨跌比低
         udr = r['up'] / r['down'] if r['down'] > 0 else 999
         if udr < TH.DIV_BREADTH_LOW:
-            sigs.append(f"{code} 价宽背离:涨{zaf}%但涨跌比{udr:.2f}")
+            sigs.append(f"{nm} 价宽背离:涨{zaf}%但涨跌比{udr:.2f}")
         # 价资背离:涨但主力流出
         if r['zjl'] < TH.DIV_FLOW_OUT:
-            sigs.append(f"{code} 价资背离:涨{zaf}%但主力净流出{r['zjl']:.0f}万")
+            sigs.append(f"{nm} 价资背离:涨{zaf}%但主力净流出{abs(r['zjl']):.0f}万")
         # 价量背离:涨但成交额较昨缩
         if r['cjje_pre1'] > 0:
             shrink = 1 - (r['amount'] / r['cjje_pre1']) if r['cjje_pre1'] > 0 else 0
             if shrink > TH.DIV_VOL_SHRINK:
-                sigs.append(f"{code} 价量背离:涨{zaf}%但成交较昨缩{shrink*100:.0f}%")
+                sigs.append(f"{nm} 价量背离:涨{zaf}%但成交较昨缩{shrink*100:.0f}%")
     # 北向隐性背离(T-1 数据,参考性):净流出
     if north is not None and north < TH.DIV_FLOW_OUT:
         sigs.append(f"北向背离:净流出{abs(north):.1f}亿(指数坚挺但外资撤退,T-1)")
